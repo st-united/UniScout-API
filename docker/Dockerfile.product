@@ -1,0 +1,16 @@
+# 1. Build
+FROM node:16.18.0-alpine
+# Set working directory
+WORKDIR /app
+#
+COPY package*.json /app/
+# Same as npm install
+RUN npm install --force
+
+RUN apk update && apk upgrade && apk add --no-cache bash git openjpeg-tools
+
+COPY . .
+
+RUN npm run build
+
+CMD [ "node", "dist/main.js" ]

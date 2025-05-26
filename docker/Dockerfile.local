@@ -1,0 +1,11 @@
+FROM node:16.18.0-alpine
+
+WORKDIR /app
+
+COPY package*.json /app/
+
+RUN npm install --force
+
+RUN apk update && apk upgrade && apk add --no-cache bash git openjpeg-tools
+
+EXPOSE 6002

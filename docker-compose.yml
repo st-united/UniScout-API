@@ -1,0 +1,34 @@
+version: '3'
+
+services:
+  # backend:
+  #   build:
+  #     dockerfile: docker/Dockerfile.local
+  #     context: .
+  #   container_name: ${APP_NAME}-app
+  #   env_file:
+  #     - .env
+  #   ports:
+  #     - 6002:6002
+  #   command: sh -c "npm run start:dev"
+  #   volumes:
+  #     - ./:/app
+  #     - /app/node_modules
+  #   depends_on:
+  #     - db
+
+  db:
+    image: postgres:14.4-alpine
+    container_name: ${APP_NAME}-db
+    environment:
+      POSTGRES_DB: ${DB_POSTGRE_DATABASE}
+      POSTGRES_USER: ${DB_POSTGRE_USERNAME}
+      POSTGRES_PASSWORD: ${DB_POSTGRE_PASSWORD}
+    ports:
+      - 5432:${DB_POSTGRE_PORT}
+    volumes:
+      - uni-scout-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  uni-scout-data:

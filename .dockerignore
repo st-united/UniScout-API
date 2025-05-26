@@ -1,0 +1,4 @@
+node_modules/
+.env.production
+.env.example
+yarn-error.log*
