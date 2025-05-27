@@ -12,6 +12,8 @@ import { JwtPayload } from '@Constant/types';
 import { ResponseItem } from '@app/common/dtos';
 import { TokenDto } from './dto/token.dto';
 import { ConfigService } from '@nestjs/config';
+import { UserDto } from '@UsersModule/dto/user.dto';
+import { RegisterUserDto } from './dto/register-user.dto';
 
 @Injectable()
 export class AuthService {
@@ -21,6 +23,12 @@ export class AuthService {
     @InjectRepository(UserEntity)
     private userRepository: Repository<UserEntity>
   ) {}
+
+  async register(registerDto: RegisterUserDto): Promise<ResponseItem<UserDto>> {
+    const user = await this.userRepository.create(registerDto);
+    await this.userRepository.save(user);
+    return new ResponseItem(user, 'Tạo tài khoản thành công');
+  }
 
   async validateUser(credentialsDto: CredentialsDto): Promise<UserPayloadDto> {
     const user = await this.userRepository.findOneBy({

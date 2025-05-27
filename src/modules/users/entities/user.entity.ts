@@ -13,7 +13,7 @@ export class UserEntity extends AbstractEntity {
   @Column({ type: 'varchar', length: 255 })
   email: string;
 
-  @Column({ type: 'varchar', length: 10 })
+  @Column({ type: 'varchar', length: 10, nullable: true })
   phone: string;
 
   @Column({ type: 'varchar' })
@@ -23,7 +23,7 @@ export class UserEntity extends AbstractEntity {
   @Column({ type: 'enum', enum: StatusEnum, default: StatusEnum.ACTIVE })
   status: StatusEnum;
 
-  @Column({ type: 'varchar', length: 50 })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   name: string;
 
   @Column({ type: 'timestamp', nullable: true })
@@ -32,7 +32,7 @@ export class UserEntity extends AbstractEntity {
   @Column({ type: 'varchar', nullable: true, length: 200 })
   address: string;
 
-  @Column({ type: 'varchar', length: 12 })
+  @Column({ type: 'varchar', length: 12, nullable: true })
   identityId: string;
 
   @Column({ type: 'varchar', nullable: true })
