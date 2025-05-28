@@ -11,4 +11,11 @@ export enum Order {
 export enum SortEnum {
   ASC = 'ASC',
   DESC = 'DESC',
+  
+}
+
+export enum UserRole {
+  ADMIN = 'admin',
+  USER = 'user',
+  MODERATOR = 'moderator', // You can add more roles here if needed
 }
