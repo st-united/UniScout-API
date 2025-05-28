@@ -2,7 +2,7 @@ import * as bcrypt from 'bcrypt';
 import { Exclude } from 'class-transformer';
 import { BeforeInsert, Column, Entity, JoinTable, ManyToMany, ManyToOne, Unique } from 'typeorm';
 
-import { StatusEnum } from '@Constant/enums';
+import { StatusEnum, UserRole } from '@Constant/enums';
 import { AbstractEntity } from '@Entity/abstract.entity';
 
 @Entity('users')
@@ -46,4 +46,11 @@ export class UserEntity extends AbstractEntity {
 
   @Column({ type: 'varchar', nullable: true })
   avatar: string;
+
+   @Column({
+    type: 'enum', // Specifies that this is an ENUM column in the database
+    enum: UserRole, // Links to your UserRole TypeScript enum
+    default: UserRole.USER, // Sets a default role for new users if not provided
+  })
+  role: UserRole;
 }
