@@ -1,0 +1,225 @@
+Country,Location,Latitude,Longitude
+Australia,Australian Capital Territory,-35.2809,149.13
+Australia,New South Wales,-33.8688,151.2093
+Australia,Northern Territory,-12.4634,130.8456
+Australia,Queensland,-27.4698,153.0251
+Australia,South Australia,-34.9285,138.6007
+Australia,Tasmania,-42.8821,147.3272
+Australia,Victoria (state),-37.8136,144.9631
+Australia,Western Australia,-31.9505,115.8605
+Australia,Australia National,-23.7,133.8667
+Japan,Aichi,35.1815,136.9066
+Japan,Akita,39.72,140.1025
+Japan,Aomori,40.8246,140.74
+Japan,Chiba,35.6074,140.1065
+Japan,Ehime,33.8416,132.7656
+Japan,Fukui,36.0652,136.2216
+Japan,Fukuoka,33.5904,130.4017
+Japan,Fukushima,37.7609,140.4734
+Japan,Gifu,35.4239,136.7606
+Japan,Gunma,36.3907,139.0604
+Japan,Hiroshima,34.3853,132.4553
+Japan,Hokkaido,43.0618,141.3545
+Japan,Hyogo,34.6901,135.1955
+Japan,Ibaraki,36.3418,140.4468
+Japan,Ishikawa,36.5947,136.6256
+Japan,Iwate,39.7036,141.1525
+Japan,Kagawa,34.3401,134.0434
+Japan,Kagoshima,31.5602,130.5581
+Japan,Kanagawa,35.4437,139.638
+Japan,Kochi,33.5597,133.5311
+Japan,Kumamoto,32.7898,130.7416
+Japan,Kyoto,35.0116,135.7681
+Japan,Mie,34.7303,136.5086
+Japan,Miyagi,38.2688,140.8721
+Japan,Miyazaki,31.9111,131.4239
+Japan,Nagano,36.6486,138.1948
+Japan,Nagasaki,32.7503,129.8777
+Japan,Nara,34.6851,135.8048
+Japan,Niigata,37.9162,139.0364
+Japan,Oita,33.2382,131.6126
+Japan,Okayama,34.6618,133.9347
+Japan,Okinawa,26.3358,127.8014
+Japan,Osaka,34.6937,135.5023
+Japan,Saga,33.2494,130.2988
+Japan,Saitama,35.8569,139.6489
+Japan,Shiga,35.0045,135.8686
+Japan,Shimane,35.4723,133.0505
+Japan,Shizuoka,34.9756,138.3825
+Japan,Tochigi,36.5657,139.8836
+Japan,Tokushima,34.0658,134.5593
+Japan,Tokyo,35.6762,139.6503
+Japan,Tottori,35.5011,134.2351
+Japan,Toyama,36.6953,137.2113
+Japan,Yamagata,38.2554,140.3396
+Japan,Yamaguchi,34.1783,131.4737
+Japan,Yamanashi,35.6639,138.5683
+Korea,Andong,36.5656,128.725
+Korea,Anseong,37.0078,127.2797
+Korea,Asan,36.7898,127.0015
+Korea,Busan,35.1731,129.0714
+Korea,Changwon,35.2279,128.6819
+Korea,Cheonan,36.8064,127.1522
+Korea,Cheongju,36.6283,127.4913
+Korea,Chuncheon,37.8747,127.7342
+Korea,Chungcheongbuk,36.8,127.7
+Korea,Chungcheongnam-do,36.5184,126.8
+Korea,Daegu,35.8501,128.5206
+Korea,Daejeon,36.3578,127.3867
+Korea,Eonyang,35.57,129.1252
+Korea,Gangneung,37.7519,128.876
+Korea,Gangwon-do,37.8272,128.3166
+Korea,Gimhae,35.2281,128.8891
+Korea,Goyang,37.6583,126.8322
+Korea,Gumi,36.1193,128.3446
+Korea,Gunsan,35.9786,126.7114
+Korea,Gwangju,35.1501,126.8559
+Korea,Gyeongsan,35.8241,128.7373
+Korea,Iksan,35.9483,126.9578
+Korea,Incheon,37.4752,126.6313
+Korea,Jeju,33.5043,126.5198
+Korea,Jeonju,35.8397,127.1293
+Korea,Jinju,35.1757,128.1178
+Korea,Masan,35.2083,128.5728
+Korea,Muan,34.9904,126.4788
+Korea,Pocheon,37.8948,127.2006
+Korea,Pohang,36.0178,129.3609
+Korea,Seongnam,37.3918,27.1131
+Korea,Seosan,36.785,126.4653
+Korea,Seoul,37.5503,126.9971
+Korea,Siheung,37.3799,126.8035
+Korea,Suncheon,34.9506,127.4875
+Korea,Suwon,37.2636,127.0286
+Korea,Ulsan,35.5377,129.328
+Korea,Wanju-gun,35.8451,127.1479
+Korea,Wonju,37.3422,127.9203
+Korea,Yongin,37.2411,127.1776
+USA,Ames,42.0308,-93.6319
+USA,Amherst,42.3732,-72.5199
+USA,Ann Arbor,42.2808,-83.743
+USA,Athens,33.9597,-83.3764
+USA,Atlanta,33.7501,-84.3885
+USA,Austin,30.2672,-97.7431
+USA,Baltimore,39.2905,-76.6104
+USA,Berkeley,37.8715,-122.273
+USA,Bethlehem,40.6259,-75.3705
+USA,Blacksburg,37.2301,-80.4151
+USA,Bloomington,39.1696,-86.5386
+USA,Boston,42.3555,-71.0565
+USA,Boulder,40.019,-105.2747
+USA,Buffalo,42.8869,-78.8789
+USA,Cambridge,42.3666,-71.1057
+USA,Champaign,40.1163,-88.2435
+USA,Chapel Hill,35.9132,-79.0558
+USA,Charlottesville,38.0302,-78.4769
+USA,Chestnut Hill,40.0703,-75.2071
+USA,Chicago,41.8781,-87.6298
+USA,Cleveland,41.4993,-81.6944
+USA,College Park,38.9897,-76.9378
+USA,College Station,30.621,-96.3255
+USA,Columbia,34.0008,-81.0351
+USA,Columbus,39.9625,-83.0032
+USA,Corvallis,44.5646,-123.262
+USA,Davis,38.5449,-121.7405
+USA,Durham,35.9956,-78.9002
+USA,East Lansing,42.737,-84.4839
+USA,Evanston,42.0568,-87.6872
+USA,Fort Collins,40.5853,-105.0844
+USA,Gainesville,29.652,-82.325
+USA,Golden,39.7555,-105.2211
+USA,Hanover,37.7666,-77.3702
+USA,Hoboken,40.7371,-74.0313
+USA,Honolulu,21.3099,-157.8581
+USA,Houston,29.7601,-95.3701
+USA,Iowa City,41.6578,-91.5346
+USA,Irvine,33.6846,-117.8265
+USA,Ithaca,42.444,-76.5019
+USA,Knoxville,35.9653,-83.9233
+USA,Lawrence,38.9717,-95.2353
+USA,Lincoln,40.8137,-96.7026
+USA,Los Angeles,34.0549,-118.2426
+USA,Madison,43.0722,-89.4008
+USA,Medford,42.323,-122.8767
+USA,Miami,25.7617,-80.1918
+USA,Minneapolis,44.9778,-93.265
+USA,Nashville,36.1627,-86.7816
+USA,New Brunswick,46.5653,-66.4619
+USA,New Haven,41.3083,-72.9279
+USA,New Orleans,29.9509,-90.0758
+USA,New York City,40.7128,-74.006
+USA,Newark,40.7315,-74.1745
+USA,Norman,35.2216,-97.4446
+USA,Notre Dame,41.7002,-86.2379
+USA,Pasadena,34.1477,-118.1443
+USA,Philadelphia,39.9526,-75.1652
+USA,Pittsburgh,40.4387,-79.9972
+USA,Princeton,40.3504,-74.6571
+USA,Providence,41.8246,-71.4142
+USA,Pullman,46.7298,-117.1817
+USA,Raleigh,35.7796,-78.6382
+USA,Richardson,32.9483,-96.7299
+USA,Riverside,33.9806,-117.3755
+USA,Rochester,43.1566,-77.6088
+USA,Rolla,37.9485,-91.7715
+USA,Salt Lake City,40.7606,-111.8881
+USA,San Diego,32.7157,-117.1611
+USA,Santa Barbara,34.4203,-119.6989
+USA,Santa Cruz,36.9741,-122.0288
+USA,Seattle,47.6061,-122.3328
+USA,St. Louis,38.6274,-90.1982
+USA,Stanford,37.4241,-122.1661
+USA,Stony Brook,40.9257,-73.1409
+USA,Storrs,41.8084,-72.2495
+USA,Tallahassee,30.4382,-84.2806
+USA,Tampa,27.9517,-82.4588
+USA,Tempe,33.4255,-111.94
+USA,Troy,42.7284,-73.6918
+USA,Tucson,32.254,-110.9742
+USA,University Park,32.855,-96.7976
+USA,Waltham,42.3764,-71.2358
+USA,Washington D.C.,38.9072,-77.0369
+USA,West Lafayette,40.4259,-86.9081
+Vietnam,Binh Duong,11.1667,106.6667
+Vietnam,Buon Ma Thuot,12.6667,108.05
+Vietnam,Can Tho,10.0452,105.7469
+Vietnam,Cao Lanh,10.4571,105.6327
+Vietnam,Da Lat,11.9404,108.4583
+Vietnam,Da Nang,16.0544,108.2022
+Vietnam,Hai Phong,20.8449,106.6881
+Vietnam,Hanoi,21.0278,105.8342
+Vietnam,Ho Chi Minh City,10.8231,106.6297
+Vietnam,Hue,16.4637,107.5909
+Vietnam,Hung Yen,20.6464,106.0511
+Vietnam,Kien Giang,9.8,105.1667
+Vietnam,Nam Dinh,20.42,106.1683
+Vietnam,Nha Trang,12.2388,109.1967
+Vietnam,Phuc Yen City,21.2297,105.9042
+Vietnam,Quy Nhon,13.7696,109.2314
+Vietnam,Thai Binh,20.4461,106.3422
+Vietnam,Thai Nguyen,21.5928,105.8442
+Vietnam,Thanh Hoa,19.8065,105.7851
+Vietnam,Thu Dau Mot City,10.9804,106.6567
+Vietnam,Tra Vinh,9.9333,106.3333
+Vietnam,Vinh,18.6733,105.6925
+India,Andhra Pradesh,16.5062,80.648
+India,Assam,26.2006,92.9376
+India,Chandigarh,30.7333,76.7794
+India,Delhi,28.6448,77.2167
+India,Gujarat,22.2587,71.1924
+India,Haryana,29.2385,76.4319
+India,Himachal Pradesh,31.1048,77.1734
+India,Jammu and Kashmir,33.7782,76.5762
+India,Jharkhand,23.6102,85.2799
+India,Karnataka,15.3173,75.7139
+India,Kerala,8.5241,76.9366
+India,Maharashtra,18.9699,72.82
+India,Mizoram,23.1645,92.9376
+India,Odisha,20.9409,84.8035
+India,Pondicherry,11.9416,79.8083
+India,Punjab,30.901,75.8573
+India,Rajasthan,27.0238,74.2179
+India,Tamil Nadu,11.0598,78.3875
+India,Telangana,17.8244,79.1879
+India,Uttar Pradesh,27.1767,80.8
+India,Uttarakhand,30.0668,79.0193
+India,West Bengal,22.5697,88.3697
