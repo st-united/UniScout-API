@@ -3,6 +3,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import 'dotenv/config';
+import 'reflect-metadata';
 
 import { AppModule } from '@app/app.module';
 
