@@ -19,6 +19,7 @@
     "seed": "node dist/seed"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@hapi/joi": "^17.1.1",
     "@nestjs/common": "^9.0.0",
     "@nestjs/config": "^2.2.0",

@@ -9,6 +9,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { XMLMiddleware } from './common/middleware/xml.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { UniversitiesModule } from './modules/universities/universities.module';
+import { ChatbotModule } from './chatbot/chatbot.module';
 
 @Module({
   imports: [
@@ -28,12 +29,15 @@ import { UniversitiesModule } from './modules/universities/universities.module';
         JWT_ACCESS_EXPIRES: Joi.string().required(),
         JWT_REFRESH_SECRETKEY: Joi.string().required(),
         JWT_REFRESH_EXPIRES: Joi.string().required(),
+        GEMINI_API_KEY: Joi.string().required(),
       }),
+      isGlobal: true,
     }),
     DatabaseModule,
     UsersModule,
     AuthModule,
     UniversitiesModule,
+    ChatbotModule,
   ],
   providers: [
     {
