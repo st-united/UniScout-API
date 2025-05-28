@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { UserEntity } from '@UsersModule/entities';
 import { CredentialsDto } from './dto/credentials.dto';
 import { StatusEnum } from '@Constant/enums';
+import { UserRole } from '@Constant/enums';
 import { UserPayloadDto } from './dto/user-payload.dto';
 import { JwtPayload } from '@Constant/types';
 import { ResponseItem } from '@app/common/dtos';
@@ -46,11 +47,12 @@ export class AuthService {
       id: user.id,
       email: user.email,
       name: user.name,
+      role: user.role,
     };
   }
 
   async login(userPayloadDto: UserPayloadDto): Promise<ResponseItem<TokenDto>> {
-    const payload: JwtPayload = { sub: userPayloadDto.id, email: userPayloadDto.email };
+    const payload: JwtPayload = { sub: userPayloadDto.id, email: userPayloadDto.email, role: userPayloadDto.role };
 
     const refreshToken = this.jwtService.sign(payload, {
       secret: this.configService.get<string>('JWT_REFRESH_SECRETKEY'),
@@ -89,7 +91,7 @@ export class AuthService {
     });
 
     if (!user) throw new UnauthorizedException('Tài khoản không đúng');
-    const payload: JwtPayload = { sub: user.id, email: user.email };
+    const payload: JwtPayload = { sub: user.id, email: user.email, role: user.role };
 
     const data = {
       accessToken: this.jwtService.sign(payload, {

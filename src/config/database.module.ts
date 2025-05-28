@@ -12,6 +12,7 @@ import {
   UsaUniEntity,
   VnUniEntity,
 } from '@UniversitiesModule/entities';
+import { University } from '../modules/universities/entities/university.entity'; // Import the University entity
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import {
           LocationEntity,
           UsaUniEntity,
           VnUniEntity,
+          University,
         ],
       }),
     }),
