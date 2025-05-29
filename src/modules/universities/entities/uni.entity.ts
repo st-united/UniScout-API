@@ -1,8 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { LocationEntity } from './location.entity';
 
-@Entity('vn_uni')
-export class VnUniEntity {
+@Entity('uni')
+export class UniEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -18,7 +18,7 @@ export class VnUniEntity {
   @Column({ type: 'text', nullable: true })
   type: string;
 
-  @Column({ type: 'text', default: 'Vietnam' })
+  @Column({ type: 'text', default: 'Korea' })
   country: string;
 
   @Column({ type: 'text', nullable: true })
@@ -44,6 +44,9 @@ export class VnUniEntity {
 
   @Column({ type: 'text', nullable: true })
   description: string;
+
+  @Column({ type: 'boolean', nullable: true })
+  exchange: boolean;
 
   @Column({ type: 'boolean', nullable: true })
   agricultural_food_science: boolean;
@@ -74,6 +77,12 @@ export class VnUniEntity {
 
   @Column({ type: 'boolean', nullable: true })
   technology: boolean;
+
+  @Column({ type: 'boolean', nullable: true })
+  theology: boolean;
+
+  @Column({ default: false })
+  is_deleted: boolean;
 
   @ManyToOne(() => LocationEntity, { eager: true })
   @JoinColumn([

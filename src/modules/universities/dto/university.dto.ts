@@ -1,4 +1,3 @@
-// base university DTO with common fields
 import { Expose } from 'class-transformer';
 
 export class UniversityDto {
@@ -16,7 +15,7 @@ export class UniversityDto {
   @Expose() website?: string;
   @Expose() strength?: string;
   @Expose() description?: string;
-
+  @Expose() exchange?: boolean;
   @Expose() agricultural_food_science?: boolean;
   @Expose() arts_design?: boolean;
   @Expose() economics_business_management?: boolean;
@@ -27,4 +26,5 @@ export class UniversityDto {
   @Expose() social_sciences_humanities?: boolean;
   @Expose() sports_physical_education?: boolean;
   @Expose() technology?: boolean;
+  @Expose() theology?: boolean;
 }

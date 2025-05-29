@@ -3,16 +3,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { UserEntity } from '@UsersModule/entities';
-import {
-  AusUniEntity,
-  IndUniEntity,
-  JapUniEntity,
-  KorUniEntity,
-  LocationEntity,
-  UsaUniEntity,
-  VnUniEntity,
-} from '@UniversitiesModule/entities';
-import { University } from '../modules/universities/entities/university.entity'; // Import the University entity
+import { LocationEntity } from '@UniversitiesModule/entities';
+import { UniEntity } from '@UniversitiesModule/entities/uni.entity';
 
 @Module({
   imports: [
@@ -28,17 +20,7 @@ import { University } from '../modules/universities/entities/university.entity';
         password: configService.get<string>('DB_POSTGRE_PASSWORD'),
         synchronize: configService.get<boolean>('DB_POSTGRE_SYNCHRONIZE'),
         logging: configService.get<boolean>('DB_POSTGRE_LOGGING'),
-        entities: [
-          UserEntity,
-          AusUniEntity,
-          IndUniEntity,
-          JapUniEntity,
-          KorUniEntity,
-          LocationEntity,
-          UsaUniEntity,
-          VnUniEntity,
-          University,
-        ],
+        entities: [UserEntity, UniEntity, LocationEntity],
       }),
     }),
   ],

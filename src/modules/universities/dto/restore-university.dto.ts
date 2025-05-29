@@ -10,9 +10,13 @@ export class RestoreUniversityDto {
   @IsString()
   admin_notes?: string;
 
+  @IsBoolean()
+  @IsNotEmpty()
+  confirm_restoration: boolean;
+
   @IsOptional()
   @IsBoolean()
-  restore_all_data?: boolean = true; // Restore with all original data
+  restore_all_data?: boolean = true;
 }
 
 // Bulk restore operations
@@ -28,6 +32,10 @@ export class BulkRestoreUniversityDto {
   @IsOptional()
   @IsString()
   admin_notes?: string;
+
+  @IsBoolean()
+  @IsNotEmpty()
+  confirm_restoration: boolean;
 
   @IsOptional()
   @IsBoolean()
@@ -47,6 +55,10 @@ export class BulkRestoreUniversityByNameDto {
   @IsOptional()
   @IsString()
   admin_notes?: string;
+
+  @IsBoolean()
+  @IsNotEmpty()
+  confirm_restoration: boolean;
 
   @IsOptional()
   @IsBoolean()

@@ -1,49 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { AusUniEntity } from './entities/aus.entity';
-import { IndUniEntity } from './entities/ind.entity';
-import { JapUniEntity } from './entities/jap.entity';
-import { KorUniEntity } from './entities/kor.entity';
-import { UsaUniEntity } from './entities/usa.entity';
-import { VnUniEntity } from './entities/vn.entity';
-import { LocationEntity } from './entities/location.entity';
+import { UniEntity } from './entities/uni.entity';
 
 import * as fs from 'fs';
 import * as Papa from 'papaparse';
-
-type CountryEntity = AusUniEntity | IndUniEntity | JapUniEntity | KorUniEntity | UsaUniEntity | VnUniEntity;
-
-type CountryCode = 'aus' | 'ind' | 'jap' | 'kor' | 'usa' | 'vn';
+import { LocationEntity } from './entities';
 
 @Injectable()
 export class CsvImport {
-  private repositories: Record<CountryCode, Repository<any>>;
-
   constructor(
-    @InjectRepository(AusUniEntity) private ausRepo: Repository<AusUniEntity>,
-    @InjectRepository(IndUniEntity) private indRepo: Repository<IndUniEntity>,
-    @InjectRepository(JapUniEntity) private japRepo: Repository<JapUniEntity>,
-    @InjectRepository(KorUniEntity) private korRepo: Repository<KorUniEntity>,
-    @InjectRepository(UsaUniEntity) private usaRepo: Repository<UsaUniEntity>,
-    @InjectRepository(VnUniEntity) private vnRepo: Repository<VnUniEntity>,
+    @InjectRepository(UniEntity) private uniRepo: Repository<UniEntity>,
     @InjectRepository(LocationEntity) private locationRepo: Repository<LocationEntity>
-  ) {
-    this.repositories = {
-      aus: this.ausRepo,
-      ind: this.indRepo,
-      jap: this.japRepo,
-      kor: this.korRepo,
-      usa: this.usaRepo,
-      vn: this.vnRepo,
-    };
-  }
+  ) {}
 
   async clearAllData(): Promise<void> {
     console.log('Clearing all university data...');
-    for (const repo of Object.values(this.repositories)) {
-      await repo.delete({});
-    }
+    await this.uniRepo.delete({});
     console.log('Clearing all location data...');
     await this.locationRepo.delete({});
     console.log('All data cleared.');
@@ -51,16 +24,10 @@ export class CsvImport {
 
   async importCoordinates(filePath: string): Promise<void> {
     console.log(`\nImporting coordinates from: ${filePath}`);
-
     const csvData = fs.readFileSync(filePath, 'utf8');
 
     try {
-      console.log('Deleting all universities before deleting locations...');
-      for (const repo of Object.values(this.repositories)) {
-        await repo.delete({});
-      }
-
-      console.log('Deleting all locations...');
+      await this.uniRepo.delete({});
       await this.locationRepo.delete({});
 
       const results = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
@@ -84,7 +51,6 @@ export class CsvImport {
         }));
 
       await this.locationRepo.save(validCoords);
-
       console.log(`Coordinates import completed! Total: ${validCoords.length}`);
     } catch (error) {
       console.error('Failed to import coordinates:', error);
@@ -92,19 +58,7 @@ export class CsvImport {
     }
   }
 
-  /**
-   * Import CSV for a country
-   * @param filePath path to CSV file
-   * @param country country code
-   * @param clearExisting if true, deletes existing records before import
-   */
-  async importCsv(filePath: string, country: CountryCode, clearExisting = true): Promise<void> {
-    const repository = this.repositories[country];
-    if (!repository) {
-      throw new Error(`Invalid country code: ${country}`);
-    }
-
-    // Read and parse CSV with lowercase headers for consistency
+  async importCsv(filePath: string, clearExisting = true): Promise<void> {
     const csvData = fs.readFileSync(filePath, 'utf8');
 
     const results = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
@@ -118,78 +72,65 @@ export class CsvImport {
       });
     });
 
-    console.log(`Parsed ${results.data.length} records for ${country.toUpperCase()}`);
+    const records = results.data;
 
-    // Ensure referenced locations exist
-    await this.ensureLocationsExist(results.data, country);
-
-    // Clear existing data if flag is set or if any data exists
     if (clearExisting) {
-      console.log(`Clearing existing ${country.toUpperCase()} data...`);
-      await repository.delete({});
-    } else {
-      const existingCount = await repository.count();
-      if (existingCount > 0) {
-        console.log(
-          `Skipping import for ${country.toUpperCase()} because data already exists (${existingCount} records).`
-        );
-        return;
-      }
+      console.log('Clearing existing university data...');
+      await this.uniRepo.delete({});
     }
 
-    // Batch import with import_order set as the index
+    await this.ensureLocationsExist(records);
+
     const batchSize = 100;
-    for (let i = 0; i < results.data.length; i += batchSize) {
-      const batch = results.data.slice(i, i + batchSize);
-      const entities = batch.map((record, idx) => this.mapCsvToEntity(record, country, i + idx));
-
-      await repository.upsert(entities, ['university']);
-      console.log(`Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(results.data.length / batchSize)}`);
+    for (let i = 0; i < records.length; i += batchSize) {
+      const batch = records.slice(i, i + batchSize);
+      const entities = batch.map((record, idx) => this.mapCsvToEntity(record, i + idx));
+      await this.uniRepo.upsert(entities, ['university']);
+      console.log(`Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(records.length / batchSize)}`);
     }
 
-    const totalCount = await repository.count();
-    console.log(`Import completed! ${country.toUpperCase()} total records: ${totalCount}`);
+    const totalCount = await this.uniRepo.count();
+    console.log(`Import completed! Total records: ${totalCount}`);
   }
 
-  private async ensureLocationsExist(records: any[], country: CountryCode) {
-    const countryName = this.getCountryName(country);
-
-    const existingLocations = await this.locationRepo.find({
-      where: { country: countryName },
-      select: ['location'],
-    });
-
-    const existingLocationSet = new Set(existingLocations.map((loc) => loc.location));
-
-    const csvLocations = new Set<string>();
-    for (const record of records) {
-      if (record.location) {
-        csvLocations.add(record.location.toString().trim());
+  private async ensureLocationsExist(records: any[]) {
+    const locationSet = new Set<string>();
+    for (const row of records) {
+      if (row.country && row.location) {
+        locationSet.add(`${row.country.trim()}::${row.location.trim()}`);
       }
     }
 
-    const missingLocations = [...csvLocations].filter((loc) => !existingLocationSet.has(loc));
+    const needed = Array.from(locationSet).map((locStr) => {
+      const [country, location] = locStr.split('::');
+      return { country, location };
+    });
 
-    if (missingLocations.length > 0) {
-      console.warn(`Warning: Missing locations for country ${countryName}:`, missingLocations);
-      const newLocations = missingLocations.map((loc) => ({
-        country: countryName,
-        location: loc,
+    const existing = await this.locationRepo.find();
+    const existingSet = new Set(existing.map((e) => `${e.country}::${e.location}`));
+
+    const missing = needed.filter(({ country, location }) => !existingSet.has(`${country}::${location}`));
+
+    if (missing.length > 0) {
+      console.warn(`Missing locations:`, missing);
+      const newEntries = missing.map(({ country, location }) => ({
+        country,
+        location,
         latitude: null,
         longitude: null,
       }));
-
-      await this.locationRepo.save(newLocations);
-      console.log(`Inserted ${newLocations.length} missing locations into location table.`);
+      await this.locationRepo.save(newEntries);
+      console.log(`Inserted ${newEntries.length} new location(s).`);
     }
   }
 
-  private mapCsvToEntity(record: any, country: CountryCode, importOrder?: number): Partial<CountryEntity> {
-    const baseEntity = {
+  private mapCsvToEntity(record: any, importOrder?: number): Partial<UniEntity> {
+    return {
       university: record.university?.toString().trim() || '',
       logo: record.logo?.toString().trim() || null,
       rank: this.parseNumber(record.rank),
       type: record.type?.toString().trim() || null,
+      country: record.country?.toString().trim() || 'Korea',
       location: record.location?.toString().trim() || null,
       student: this.parseNumber(record.student),
       year: this.parseNumber(record.year),
@@ -198,7 +139,7 @@ export class CsvImport {
       website: record.website?.toString().trim() || null,
       strength: record.strength?.toString().trim() || null,
       description: record.description?.toString().trim() || null,
-
+      exchange: this.parseBoolean(record.exchange),
       agricultural_food_science: this.parseBoolean(record.agricultural_food_science),
       arts_design: this.parseBoolean(record.arts_design),
       economics_business_management: this.parseBoolean(record.economics_business_management),
@@ -209,44 +150,8 @@ export class CsvImport {
       social_sciences_humanities: this.parseBoolean(record.social_sciences_humanities),
       sports_physical_education: this.parseBoolean(record.sports_physical_education),
       technology: this.parseBoolean(record.technology),
-
-      import_order: importOrder ?? null, // <-- important to preserve import order
+      theology: this.parseBoolean(record.theology),
     };
-
-    switch (country) {
-      case 'aus':
-        return {
-          ...baseEntity,
-          country: 'Australia',
-          theology: this.parseBoolean(record.theology),
-        };
-
-      case 'jap':
-      case 'kor':
-        return {
-          ...baseEntity,
-          country: country === 'jap' ? 'Japan' : 'Korea',
-          exchange: this.parseBoolean(record.exchange),
-        };
-
-      default:
-        return {
-          ...baseEntity,
-          country: this.getCountryName(country),
-        };
-    }
-  }
-
-  private getCountryName(country: CountryCode): string {
-    const countryNames = {
-      aus: 'Australia',
-      ind: 'India',
-      jap: 'Japan',
-      kor: 'Korea',
-      usa: 'USA',
-      vn: 'Vietnam',
-    };
-    return countryNames[country];
   }
 
   private parseNumber(value: any): number | null {
@@ -269,16 +174,8 @@ export class CsvImport {
       : null;
   }
 
-  async getStats(country?: CountryCode) {
-    if (country) {
-      const count = await this.repositories[country].count();
-      return { [country]: count };
-    }
-
-    const stats = {};
-    for (const [countryCode, repo] of Object.entries(this.repositories)) {
-      stats[countryCode] = await repo.count();
-    }
-    return stats;
+  async getStats() {
+    const count = await this.uniRepo.count();
+    return { totalUniversities: count };
   }
 }
