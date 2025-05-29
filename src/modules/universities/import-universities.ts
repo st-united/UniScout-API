@@ -13,23 +13,8 @@ async function importUniversities() {
     console.log('\n Importing coordinates...');
     await csvImportService.importCoordinates('./dataset/coord.csv');
 
-    const imports = [
-      { file: './dataset/aus.csv', country: 'aus' as const },
-      { file: './dataset/ind.csv', country: 'ind' as const },
-      { file: './dataset/jap.csv', country: 'jap' as const },
-      { file: './dataset/kor.csv', country: 'kor' as const },
-      { file: './dataset/usa.csv', country: 'usa' as const },
-      { file: './dataset/vn.csv', country: 'vn' as const },
-    ];
-
-    for (const { file, country } of imports) {
-      try {
-        console.log(`\n Importing ${country.toUpperCase()} universities...`);
-        await csvImportService.importCsv(file, country, false); // false = no need to clear again
-      } catch (error) {
-        console.error(`Failed to import ${country}:`, error.message);
-      }
-    }
+    console.log('\n Importing all universities from uni.csv...');
+    await csvImportService.importCsv('./dataset/uni.csv');
 
     console.log('\n Final Statistics:');
     const stats = await csvImportService.getStats();

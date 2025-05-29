@@ -26,7 +26,6 @@ export class UpdateUniversityDto {
   @IsString()
   location?: string;
 
-  // Stats
   @IsOptional()
   @IsInt()
   @Min(0)
