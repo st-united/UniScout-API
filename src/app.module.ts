@@ -10,6 +10,7 @@ import { XMLMiddleware } from './common/middleware/xml.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { UniversitiesModule } from './modules/universities/universities.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
+import { ContactModule } from './contact/contact.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { ChatbotModule } from './chatbot/chatbot.module';
     AuthModule,
     UniversitiesModule,
     ChatbotModule,
+    ContactModule,
   ],
   providers: [
     {
