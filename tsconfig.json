@@ -12,6 +12,7 @@
     "noImplicitAny": false,
     "outDir": "./dist",
     "paths": {
+      "@AuthModule/*": ["src/modules/auth/*"],
       "@Constant/*": ["src/common/constants/*"],
       "@Decorators/*": ["src/common/decorators/*"],
       "@Entity/*": ["src/common/entities/*"],
@@ -20,6 +21,7 @@
       "@Helper/*": ["src/common/helper/*"],
       "@PermissionsModule/*": ["src/modules/permissions/*"],
       "@RolesModule/*": ["src/modules/roles/*"],
+      "@UniversitiesModule/*": ["src/modules/universities/*"],
       "@UsersModule/*": ["src/modules/users/*"],
       "@Library/*": ["src/libraries/*"],
       "@app/*": ["src/*"]

@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { UserEntity } from '@UsersModule/entities';
+import { UniEntity, LocationEntity } from '@UniversitiesModule/entities';
 
 @Module({
   imports: [
@@ -18,7 +19,7 @@ import { UserEntity } from '@UsersModule/entities';
         password: configService.get<string>('DB_POSTGRE_PASSWORD'),
         synchronize: configService.get<boolean>('DB_POSTGRE_SYNCHRONIZE'),
         logging: configService.get<boolean>('DB_POSTGRE_LOGGING'),
-        entities: [UserEntity],
+        entities: [UserEntity, UniEntity, LocationEntity],
       }),
     }),
   ],
