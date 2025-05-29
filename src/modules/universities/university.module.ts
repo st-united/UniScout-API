@@ -5,26 +5,11 @@ import { UniversityController } from './university.controller';
 import { UniversityService } from './university.service';
 import { CsvImport } from './csv-import';
 
-import { AusUniEntity } from './entities/aus.entity';
-import { IndUniEntity } from './entities/ind.entity';
-import { JapUniEntity } from './entities/jap.entity';
-import { KorUniEntity } from './entities/kor.entity';
-import { UsaUniEntity } from './entities/usa.entity';
-import { VnUniEntity } from './entities/vn.entity';
+import { UniEntity } from './entities/uni.entity';
 import { LocationEntity } from './entities';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([
-      AusUniEntity,
-      IndUniEntity,
-      JapUniEntity,
-      KorUniEntity,
-      UsaUniEntity,
-      VnUniEntity,
-      LocationEntity,
-    ]),
-  ],
+  imports: [TypeOrmModule.forFeature([UniEntity, LocationEntity])],
 
   controllers: [UniversityController],
   providers: [UniversityService, CsvImport],

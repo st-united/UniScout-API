@@ -54,6 +54,10 @@ export class CreateUniversityDto {
 
   @IsBoolean()
   @IsOptional()
+  exchange?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
   agricultural_food_science?: boolean;
 
   @IsBoolean()
@@ -91,15 +95,7 @@ export class CreateUniversityDto {
   @IsBoolean()
   @IsOptional()
   technology?: boolean;
-}
 
-export class CreateJapKoreaUniversityDto extends CreateUniversityDto {
-  @IsBoolean()
-  @IsOptional()
-  exchange?: boolean;
-}
-
-export class CreateAustraliaUniversityDto extends CreateUniversityDto {
   @IsBoolean()
   @IsOptional()
   theology?: boolean;
