@@ -10,7 +10,6 @@ import { LocationEntity } from './entities';
 
 @Module({
   imports: [TypeOrmModule.forFeature([UniEntity, LocationEntity])],
-
   controllers: [UniversityController],
   providers: [UniversityService, CsvImport],
   exports: [UniversityService, CsvImport],

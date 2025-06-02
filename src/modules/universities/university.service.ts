@@ -3,221 +3,124 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { UniEntity } from './entities/uni.entity';
-
 import { CreateUniversityDto } from './dto/create-university.dto';
-
 import { UpdateUniversityDto } from './dto/update-university.dto';
-
-import { DeleteUniversityDto, BulkDeleteUniversityDto } from './dto/delete-university.dto';
-
-import { RestoreUniversityDto, BulkRestoreUniversityDto } from './dto/restore-university.dto';
-
-import { CountryEnum } from './dto/get-university.dto';
+import { CountryEnum, GetUniversityDto } from './dto/get-university.dto';
 
 @Injectable()
 export class UniversityService {
   private readonly logger = new Logger(UniversityService.name);
 
-  constructor(@InjectRepository(UniEntity) private uniRepository: Repository<UniEntity>) {}
+  constructor(
+    @InjectRepository(UniEntity)
+    private readonly uniRepository: Repository<UniEntity>
+  ) {}
 
-  async createUniversity(createUniversityDto: CreateUniversityDto) {
-    const uni = this.uniRepository.create(createUniversityDto);
-    return this.uniRepository.save(uni);
+  async create(createDto: CreateUniversityDto & { logo: string }): Promise<UniEntity> {
+    try {
+      const uni = this.uniRepository.create(createDto);
+      return await this.uniRepository.save(uni);
+    } catch (error) {
+      this.logger.error(`Failed to create university: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Failed to create university');
+    }
   }
 
-  async getUniversity(country: CountryEnum, id: number) {
+  async findAll(query?: GetUniversityDto): Promise<UniEntity[]> {
     try {
-      this.logger.log(`Looking for university with ID: ${id} in ${country}`);
+      const qb = this.uniRepository.createQueryBuilder('uni');
 
-      const universityById = await this.uniRepository.findOne({
-        where: {
-          id,
-          country,
-        },
+      if (query?.country) {
+        qb.andWhere('uni.country = :country', { country: query.country });
+      }
+
+      if (query?.search) {
+        qb.andWhere('LOWER(uni.university) LIKE :search', { search: `%${query.search.toLowerCase()}%` });
+      }
+
+      const page = query?.page || 1;
+      const limit = query?.limit || 10;
+
+      qb.skip((page - 1) * limit).take(limit);
+
+      return await qb.getMany();
+    } catch (error) {
+      this.logger.error(`Error fetching universities: ${error.message}`, error.stack);
+      throw new InternalServerErrorException(`Failed to fetch universities: ${error.message}`);
+    }
+  }
+
+  async getUniversity(country: CountryEnum, id: number): Promise<UniEntity> {
+    try {
+      const university = await this.uniRepository.findOne({
+        where: { id, country },
       });
 
-      if (universityById) return universityById;
-
-      throw new NotFoundException(`University with ID ${id} not found in ${country}.`);
-    } catch (error) {
-      this.logger.error(`Database error while fetching university in ${country}: ${error.message}`, error.stack);
-
-      if (error instanceof NotFoundException) {
-        throw error;
+      if (!university) {
+        throw new NotFoundException(`University with ID ${id} not found in ${country}`);
       }
+
+      return university;
+    } catch (error) {
+      this.logger.error(`Error fetching university: ${error.message}`, error.stack);
+      if (error instanceof NotFoundException) throw error;
 
       throw new InternalServerErrorException(`Database error: ${error.message}`);
     }
   }
 
-  async updateUniversity(country: CountryEnum, id: number, updateUniversityDto: UpdateUniversityDto) {
+  async findUniversityByNameAndCountry(name: string, country: string): Promise<UniEntity | null> {
     try {
-      this.logger.log(`Attempting to update university with ID: ${id} in ${country}`);
+      return await this.uniRepository
+        .createQueryBuilder('uni')
+        .where('uni.country = :country', { country })
+        .andWhere('similarity(uni.university, :name) > 0.3', { name })
+        .orderBy('similarity(uni.university, :name)', 'DESC')
+        .getOne();
+    } catch (error) {
+      this.logger.error(`Search error: ${error.message}`, error.stack);
+      throw new InternalServerErrorException(`Database search error: ${error.message}`);
+    }
+  }
 
-      const result = await this.uniRepository.update({ id, country }, updateUniversityDto);
+  async updateUniversity(country: CountryEnum, id: number, dto: UpdateUniversityDto): Promise<UniEntity | null> {
+    try {
+      const existing = await this.uniRepository.findOne({ where: { id, country } });
 
-      if (result.affected && result.affected > 0) {
-        const foundUniversity = await this.uniRepository.findOne({ where: { id, country } });
-        return foundUniversity;
+      if (!existing) {
+        return null;
       }
 
-      return null;
+      await this.uniRepository.update({ id, country }, dto);
+      return this.uniRepository.findOne({ where: { id, country } });
     } catch (error) {
       this.logger.error(`Error updating university: ${error.message}`, error.stack);
       throw new InternalServerErrorException(`Database error: ${error.message}`);
     }
   }
 
-  async deleteUniversity(country: CountryEnum, id: number, deleteDto: DeleteUniversityDto): Promise<boolean> {
+  async deleteUniversity(country: CountryEnum, id: number): Promise<{ success: boolean; message: string }> {
+    this.logger.log(`Deletion attempt: University ID=${id}, Country=${country}`);
+
     try {
-      this.logger.log(`Deleting university with ID: ${id} in ${country} (soft: ${deleteDto.soft_delete})`);
+      const university = await this.uniRepository.findOne({ where: { id, country } });
 
-      if (deleteDto.soft_delete) {
-        const updateData: any = {
-          deleted_at: new Date(),
-          is_deleted: true,
-        };
+      if (!university) {
+        this.logger.warn(`Deletion failed: University not found. ID=${id}, Country=${country}`);
+        return { success: false, message: 'University not found.' };
+      }
 
-        if (deleteDto.reason) updateData.deletion_reason = deleteDto.reason;
-        if (deleteDto.admin_notes) updateData.admin_notes = deleteDto.admin_notes;
+      const result = await this.uniRepository.delete({ id, country });
 
-        const result = await this.uniRepository.update({ id, country }, updateData);
-        return result.affected > 0;
+      if (result.affected && result.affected > 0) {
+        this.logger.log(`University deleted: ID=${id}, Country=${country}`);
+        return { success: true, message: 'Successfully deleted university.' };
       } else {
-        const result = await this.uniRepository.delete({ id, country });
-        return result.affected > 0;
+        this.logger.warn(`Deletion failed (unknown reason). ID=${id}, Country=${country}`);
+        return { success: false, message: 'Deletion failed.' };
       }
     } catch (error) {
-      this.logger.error(
-        `Database error deleting university with ID ${id} in ${country}: ${error.message}`,
-        error.stack
-      );
-
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-
-      throw new InternalServerErrorException(`Database error: ${error.message}`);
-    }
-  }
-
-  async bulkDeleteUniversities(country: CountryEnum, bulkDeleteDto: BulkDeleteUniversityDto) {
-    try {
-      this.logger.log(`Bulk deleting ${bulkDeleteDto.ids.length} universities in ${country}`);
-
-      const results = {
-        successful: [],
-        failed: [],
-        total: bulkDeleteDto.ids.length,
-      };
-
-      for (const id of bulkDeleteDto.ids) {
-        try {
-          if (bulkDeleteDto.soft_delete) {
-            const updateData: any = {
-              deleted_at: new Date(),
-              is_deleted: true,
-            };
-
-            if (bulkDeleteDto.reason) updateData.deletion_reason = bulkDeleteDto.reason;
-            if (bulkDeleteDto.admin_notes) updateData.admin_notes = bulkDeleteDto.admin_notes;
-
-            const result = await this.uniRepository.update({ id, country }, updateData);
-
-            if (result.affected > 0) {
-              results.successful.push({ id, action: 'soft_deleted' });
-            } else {
-              results.failed.push({ id, error: 'University not found' });
-            }
-          } else {
-            const result = await this.uniRepository.delete({ id, country });
-
-            if (result.affected > 0) {
-              results.successful.push({ id, action: 'permanently_deleted' });
-            } else {
-              results.failed.push({ id, error: 'University not found' });
-            }
-          }
-        } catch (error) {
-          results.failed.push({ id, error: error.message });
-        }
-      }
-
-      return results;
-    } catch (error) {
-      this.logger.error(`Database error bulk deleting universities in ${country}: ${error.message}`, error.stack);
-      throw new InternalServerErrorException(`Database error: ${error.message}`);
-    }
-  }
-
-  async restoreUniversity(country: CountryEnum, id: number, restoreDto: RestoreUniversityDto) {
-    try {
-      this.logger.log(`Restoring university with ID: ${id} in ${country}`);
-
-      const updateData: any = {
-        deleted_at: null,
-        is_deleted: false,
-        restored_at: new Date(),
-      };
-
-      if (restoreDto.restore_reason) updateData.restore_reason = restoreDto.restore_reason;
-      if (restoreDto.admin_notes) updateData.admin_notes = restoreDto.admin_notes;
-
-      const result = await this.uniRepository.update({ id, country, is_deleted: true }, updateData);
-
-      if (result.affected === 0) return null;
-
-      return this.uniRepository.findOne({ where: { id, country } });
-    } catch (error) {
-      this.logger.error(
-        `Database error restoring university with ID ${id} in ${country}: ${error.message}`,
-        error.stack
-      );
-
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-
-      throw new InternalServerErrorException(`Database error: ${error.message}`);
-    }
-  }
-
-  async bulkRestoreUniversities(country: CountryEnum, bulkRestoreDto: BulkRestoreUniversityDto) {
-    try {
-      this.logger.log(`Bulk restoring ${bulkRestoreDto.ids.length} universities in ${country}`);
-
-      const results = {
-        successful: [],
-        failed: [],
-        total: bulkRestoreDto.ids.length,
-      };
-
-      for (const id of bulkRestoreDto.ids) {
-        try {
-          const updateData: any = {
-            deleted_at: null,
-            is_deleted: false,
-            restored_at: new Date(),
-          };
-
-          if (bulkRestoreDto.restore_reason) updateData.restore_reason = bulkRestoreDto.restore_reason;
-          if (bulkRestoreDto.admin_notes) updateData.admin_notes = bulkRestoreDto.admin_notes;
-
-          const result = await this.uniRepository.update({ id, country, is_deleted: true }, updateData);
-
-          if (result.affected > 0) {
-            results.successful.push({ id, action: 'restored' });
-          } else {
-            results.failed.push({ id, error: 'University not found or not deleted' });
-          }
-        } catch (error) {
-          results.failed.push({ id, error: error.message });
-        }
-      }
-
-      return results;
-    } catch (error) {
-      this.logger.error(`Database error bulk restoring universities in ${country}: ${error.message}`, error.stack);
+      this.logger.error(`Delete error for University ID=${id}, Country=${country}: ${error.message}`, error.stack);
       throw new InternalServerErrorException(`Database error: ${error.message}`);
     }
   }

@@ -1,8 +1,10 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { LocationEntity } from './location.entity';
+import { AbstractEntity } from '@Entity/abstract.entity';
+import { CountryEnum } from '../dto/get-university.dto'; // ✅ <-- Make sure this is the correct path
 
 @Entity('uni')
-export class UniEntity {
+export class UniEntity extends AbstractEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -18,14 +20,31 @@ export class UniEntity {
   @Column({ type: 'text', nullable: true })
   type: string;
 
-  @Column({ type: 'text', default: 'Korea' })
-  country: string;
+  @Column({
+    type: 'enum',
+    enum: CountryEnum,
+  })
+  country: CountryEnum;
 
   @Column({ type: 'text', nullable: true })
   location: string;
 
   @Column({ type: 'int', nullable: true })
   student: number;
+
+  get size(): 'small' | 'medium' | 'large' | 'mega large' | 'unknown' {
+    if (this.student === null || this.student === undefined) {
+      return 'unknown';
+    } else if (this.student < 20000) {
+      return 'small';
+    } else if (this.student < 40000) {
+      return 'medium';
+    } else if (this.student < 100000) {
+      return 'large';
+    } else {
+      return 'mega large';
+    }
+  }
 
   @Column({ type: 'int', nullable: true })
   year: number;

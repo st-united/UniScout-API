@@ -9,6 +9,14 @@ export class UniversityDto {
   @Expose() country: string;
   @Expose() location?: string;
   @Expose() student?: number;
+  @Expose()
+  get size(): 'small' | 'medium' | 'large' | 'mega large' | 'unknown' {
+    if (this.student == null) return 'unknown';
+    if (this.student < 20000) return 'small';
+    if (this.student < 40000) return 'medium';
+    if (this.student < 100000) return 'large';
+    return 'mega large';
+  }
   @Expose() year?: number;
   @Expose() contact?: string;
   @Expose() email?: string;

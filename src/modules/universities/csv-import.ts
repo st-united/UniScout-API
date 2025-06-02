@@ -15,10 +15,8 @@ export class CsvImport {
   ) {}
 
   async clearAllData(): Promise<void> {
-    console.log('Clearing all university data...');
-    await this.uniRepo.delete({});
-    console.log('Clearing all location data...');
-    await this.locationRepo.delete({});
+    console.log('Clearing all university and location data...');
+    await this.uniRepo.query(`TRUNCATE TABLE uni, location CASCADE;`);
     console.log('All data cleared.');
   }
 
@@ -27,8 +25,7 @@ export class CsvImport {
     const csvData = fs.readFileSync(filePath, 'utf8');
 
     try {
-      await this.uniRepo.delete({});
-      await this.locationRepo.delete({});
+      await this.uniRepo.query(`TRUNCATE TABLE uni , location RESTART IDENTITY CASCADE;`);
 
       const results = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
         Papa.parse(csvData, {
@@ -73,11 +70,6 @@ export class CsvImport {
     });
 
     const records = results.data;
-
-    if (clearExisting) {
-      console.log('Clearing existing university data...');
-      await this.uniRepo.delete({});
-    }
 
     await this.ensureLocationsExist(records);
 

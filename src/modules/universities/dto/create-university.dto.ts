@@ -1,102 +1,119 @@
-import { IsString, IsOptional, IsBoolean, IsInt } from 'class-validator';
+import { IsNotEmpty, IsString, IsEmail, IsOptional, IsIn, IsInt, IsBoolean, Matches, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
+import { CountryEnum } from './get-university.dto';
 
 export class CreateUniversityDto {
+  @IsNotEmpty({ message: 'University name is required' })
   @IsString()
   university: string;
 
+  @IsNotEmpty({ message: 'Ranking is required' })
+  @Type(() => Number)
+  @IsInt({ message: 'Ranking must be a number' })
+  rank: number;
+
+  @IsNotEmpty({ message: 'Type is required' })
+  @IsIn(['public', 'private'], { message: 'Type must be public or private' })
+  type: 'public' | 'private';
+
+  @IsNotEmpty({ message: 'Country is required' })
+  country: CountryEnum;
+
+  @IsNotEmpty({ message: 'Location is required' })
   @IsString()
-  @IsOptional()
-  logo?: string;
+  location: string;
 
-  @IsInt()
-  @IsOptional()
-  rank?: number;
+  @IsNotEmpty({ message: 'Size is required' })
+  @Type(() => Number)
+  @IsInt({ message: 'Size must be a number' })
+  student: number;
 
+  @IsNotEmpty({ message: 'Year founded is required' })
+  @Type(() => Number)
+  @IsInt({ message: 'Year founded must be a number' })
+  @Min(1000, { message: 'Year founded must be at least 1000' })
+  @Max(9999, { message: 'Year founded must be a valid 4-digit year' })
+  year: number;
+
+  @IsNotEmpty({ message: 'Phone is required' })
   @IsString()
-  @IsOptional()
-  type?: string;
+  contact: string;
 
+  @IsNotEmpty({ message: 'Email is required' })
+  @IsEmail({}, { message: 'Please enter a valid email address' })
+  email: string;
+
+  @IsNotEmpty({ message: 'Website is required' })
+  @Matches(/^https?:\/\//, {
+    message: 'Website must start with http:// or https://',
+  })
+  website: string;
+
+  @IsOptional()
   @IsString()
-  @IsOptional()
-  country?: string;
-
-  @IsString()
-  @IsOptional()
-  location?: string;
-
-  @IsInt()
-  @IsOptional()
-  student?: number;
-
-  @IsInt()
-  @IsOptional()
-  year?: number;
-
-  @IsString()
-  @IsOptional()
-  contact?: string;
-
-  @IsString()
-  @IsOptional()
-  email?: string;
-
-  @IsString()
-  @IsOptional()
-  website?: string;
-
-  @IsString()
-  @IsOptional()
   strength?: string;
 
-  @IsString()
   @IsOptional()
+  @IsString()
   description?: string;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
   exchange?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
   agricultural_food_science?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
   arts_design?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
   economics_business_management?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
   engineering?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
   law_political_science?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
   medicine_pharmacy_health_sciences?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
   physical_science?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
   social_sciences_humanities?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
   sports_physical_education?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
   technology?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
   theology?: boolean;
 }
