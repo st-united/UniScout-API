@@ -12,12 +12,18 @@ export enum CountryEnum {
 
 export class GetUniversityDto {
   @IsOptional()
-  @IsEnum(CountryEnum)
+  @IsEnum(CountryEnum, {
+    message: `Country must be one of: ${Object.values(CountryEnum).join(', ')}`,
+  })
   country?: CountryEnum;
 
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsEnum(['small', 'medium', 'large', 'mega large'])
+  size?: 'small' | 'medium' | 'large' | 'mega large';
 
   @IsOptional()
   @Type(() => Number)

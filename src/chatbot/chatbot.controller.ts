@@ -1,4 +1,3 @@
-// src/modules/chatbot/chatbot.controller.ts
 import { Controller, Post, Body, HttpCode, HttpStatus, Logger } from '@nestjs/common';
 import { ChatbotService } from './chatbot.service';
 

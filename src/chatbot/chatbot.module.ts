@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ChatbotService } from './chatbot.service';
-import { ChatbotController } from './chatbot.controller';
+import { ConfigService } from '@nestjs/config';
+import { UniversitiesModule } from '@UniversitiesModule/university.module';
 
 @Module({
-  providers: [ChatbotService],
-  controllers: [ChatbotController],
+  imports: [UniversitiesModule],
+  providers: [ChatbotService, ConfigService],
+  exports: [ChatbotService],
 })
 export class ChatbotModule {}

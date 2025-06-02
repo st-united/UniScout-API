@@ -1,25 +1,35 @@
 import {
   Controller,
-  Get,
   Post,
+  Body,
+  Get,
+  UseGuards,
   Query,
   Delete,
   Patch,
   Param,
-  Body,
   NotFoundException,
   BadRequestException,
-  InternalServerErrorException,
   Logger,
   ParseIntPipe,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { plainToInstance } from 'class-transformer';
 
+import { JwtAccessTokenGuard } from '../auth/guards/jwt-access-token.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { UserRole } from '../../common/constants/enums';
+import { CurrentUser } from 'src/modules/auth/decorators/current-user.decorator';
+import { UserEntity } from '@UsersModule/entities';
+
+import { UniversityService } from './university.service';
 import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
-import { DeleteUniversityDto, BulkDeleteUniversityDto } from './dto/delete-university.dto';
-import { RestoreUniversityDto, BulkRestoreUniversityDto } from './dto/restore-university.dto';
-import { CountryEnum } from './dto/get-university.dto';
-import { UniversityService } from './university.service';
+import { GetUniversityDto, CountryEnum } from './dto/get-university.dto';
+import { UniversityDto } from './dto/university.dto';
 
 @Controller('universities')
 export class UniversityController {
@@ -27,269 +37,125 @@ export class UniversityController {
 
   constructor(private readonly universityService: UniversityService) {}
 
-  @Get(':country/:id')
-  async getUniversityById(@Param('country') country: string, @Param('id', ParseIntPipe) id: number) {
-    try {
-      this.logger.log(`Getting university with ID: ${id} in ${country}`);
+  @Post()
+  @UseGuards(JwtAccessTokenGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @UseInterceptors(
+    FileInterceptor('logo', {
+      fileFilter: (req, file, callback) => {
+        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif)$/)) {
+          return callback(new BadRequestException('Only image files are allowed (jpg, jpeg, png, gif)!'), false);
+        }
+        callback(null, true);
+      },
+      limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+    })
+  )
+  async create(
+    @UploadedFile() logoFile: Express.Multer.File,
+    @Body() dto: CreateUniversityDto,
+    @CurrentUser() user: UserEntity
+  ) {
+    this.logger.log(`User ${user.id} is creating a university in ${dto.country}`);
 
-      const countryEnum = this.getCountryEnum(country);
-      if (!countryEnum) {
-        throw new BadRequestException(
-          `Invalid country: ${country}. Valid countries are: ${Object.values(CountryEnum).join(', ')}`
-        );
-      }
-
-      const universityData = await this.universityService.getUniversity(countryEnum, id);
-
-      if (!universityData) {
-        throw new NotFoundException(`University with ID ${id} in ${country} not found`);
-      }
-
-      return universityData;
-    } catch (error) {
-      this.logger.error(`Error getting university: ${error.message}`, error.stack);
-
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
-
-      throw new InternalServerErrorException(`Failed to get university: ${error.message}`);
+    if (!logoFile) {
+      throw new BadRequestException('Logo file is required');
     }
+
+    // You might want to replace this with real upload handling logic
+    const logoUrl = `/uploads/${logoFile.filename}`;
+
+    return this.universityService.create({ ...dto, logo: logoUrl });
   }
 
-  @Post()
-  async createUniversity(@Body() createUniversityDto: CreateUniversityDto) {
-    try {
-      this.logger.log(`Creating university in ${createUniversityDto.country}`);
+  @Get()
+  async findAll(@Query() query: GetUniversityDto) {
+    // Pass query parameters to service for filtering & pagination
+    const universities = await this.universityService.findAll(query);
 
-      const countryEnum = this.getCountryEnum(createUniversityDto.country);
-      if (!countryEnum) {
-        throw new BadRequestException(
-          `Invalid country: ${createUniversityDto.country}. Valid countries are: ${Object.values(CountryEnum).join(
-            ', '
-          )}`
-        );
-      }
+    return universities.map((uni) => plainToInstance(UniversityDto, uni, { excludeExtraneousValues: true }));
+  }
 
-      createUniversityDto.country = countryEnum;
-
-      return await this.universityService.createUniversity(createUniversityDto);
-    } catch (error) {
-      this.logger.error(`Error creating university: ${error.message}`, error.stack);
-
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-
-      throw new InternalServerErrorException(`Failed to create university: ${error.message}`);
+  @Get(':country/:id')
+  async getUniversityById(@Param('country') country: string, @Param('id', ParseIntPipe) id: number) {
+    const countryEnum = this.getCountryEnum(country);
+    if (!countryEnum) {
+      throw new BadRequestException(
+        `Invalid country: ${country}. Valid countries: ${Object.values(CountryEnum).join(', ')}`
+      );
     }
+
+    const university = await this.universityService.getUniversity(countryEnum, id);
+    if (!university) {
+      throw new NotFoundException(`University with ID ${id} in ${country} not found`);
+    }
+
+    return plainToInstance(UniversityDto, university, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Patch(':country/:id')
+  @UseGuards(JwtAccessTokenGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   async updateUniversityById(
     @Param('country') country: string,
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateUniversityDto: UpdateUniversityDto
+    @Body() updateUniversityDto: UpdateUniversityDto,
+    @CurrentUser() user: UserEntity
   ) {
-    try {
-      this.logger.log(`Updating university with ID: ${id} in ${country}`);
-
-      const countryEnum = this.getCountryEnum(country);
-      if (!countryEnum) {
-        throw new BadRequestException(
-          `Invalid country: ${country}. Valid countries: ${Object.values(CountryEnum).join(', ')}`
-        );
-      }
-
-      const updated = await this.universityService.updateUniversity(countryEnum, id, updateUniversityDto);
-
-      if (!updated) {
-        throw new NotFoundException(`University with ID ${id} in ${country} not found`);
-      }
-
-      return updated;
-    } catch (error) {
-      this.logger.error(`Error updating university by ID: ${error.message}`, error.stack);
-
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
-
-      throw new InternalServerErrorException(`Failed to update university by ID: ${error.message}`);
+    const countryEnum = this.getCountryEnum(country);
+    if (!countryEnum) {
+      throw new BadRequestException(
+        `Invalid country: ${country}. Valid countries: ${Object.values(CountryEnum).join(', ')}`
+      );
     }
+
+    const updated = await this.universityService.updateUniversity(countryEnum, id, updateUniversityDto);
+    if (!updated) {
+      throw new NotFoundException(`University with ID ${id} in ${country} not found`);
+    }
+
+    return plainToInstance(UniversityDto, updated, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Delete(':country/:id')
+  @UseGuards(JwtAccessTokenGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   async deleteUniversityById(
     @Param('country') country: string,
     @Param('id', ParseIntPipe) id: number,
-    @Body() deleteUniversityDto: DeleteUniversityDto
+    @Body('confirm_deletion') confirmDeletion: boolean,
+    @CurrentUser() user: UserEntity
   ) {
-    try {
-      this.logger.log(`Deleting university with ID: ${id} in ${country}`);
-
-      if (!deleteUniversityDto.confirm_deletion) {
-        throw new BadRequestException('Deletion must be confirmed by setting confirm_deletion to true');
-      }
-
-      const countryEnum = this.getCountryEnum(country);
-      if (!countryEnum) {
-        throw new BadRequestException(
-          `Invalid country: ${country}. Valid countries are: ${Object.values(CountryEnum).join(', ')}`
-        );
-      }
-
-      const deleted = await this.universityService.deleteUniversity(countryEnum, id, deleteUniversityDto);
-
-      if (!deleted) {
-        throw new NotFoundException(`University with ID ${id} in ${country} not found`);
-      }
-
-      const deleteType = deleteUniversityDto.soft_delete ? 'soft deleted' : 'permanently deleted';
-      return {
-        message: `University with ID ${id} in ${country} has been successfully ${deleteType}`,
-        deleted: true,
-        soft_delete: deleteUniversityDto.soft_delete,
-      };
-    } catch (error) {
-      this.logger.error(`Error deleting university: ${error.message}`, error.stack);
-
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
-
-      throw new InternalServerErrorException(`Failed to delete university: ${error.message}`);
+    if (!confirmDeletion) {
+      throw new BadRequestException('Deletion must be confirmed by setting confirm_deletion to true.');
     }
-  }
 
-  @Delete(':country/bulk-delete')
-  async bulkDeleteUniversities(@Param('country') country: string, @Body() bulkDeleteDto: BulkDeleteUniversityDto) {
-    try {
-      this.logger.log(`Bulk deleting ${bulkDeleteDto.ids.length} universities in ${country}`);
-
-      if (!bulkDeleteDto.confirm_deletion) {
-        throw new BadRequestException('Bulk deletion must be confirmed by setting confirm_deletion to true');
-      }
-
-      const countryEnum = this.getCountryEnum(country);
-      if (!countryEnum) {
-        throw new BadRequestException(
-          `Invalid country: ${country}. Valid countries are: ${Object.values(CountryEnum).join(', ')}`
-        );
-      }
-
-      const results = await this.universityService.bulkDeleteUniversities(countryEnum, bulkDeleteDto);
-
-      const deleteType = bulkDeleteDto.soft_delete ? 'soft deleted' : 'permanently deleted';
-      return {
-        message: `Bulk delete completed for ${country} - ${results.successful.length} universities ${deleteType}`,
-        results,
-      };
-    } catch (error) {
-      this.logger.error(`Error bulk deleting universities: ${error.message}`, error.stack);
-
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-
-      throw new InternalServerErrorException(`Failed to bulk delete universities: ${error.message}`);
+    const countryEnum = this.getCountryEnum(country);
+    if (!countryEnum) {
+      throw new BadRequestException(
+        `Invalid country: ${country}. Valid countries: ${Object.values(CountryEnum).join(', ')}`
+      );
     }
-  }
 
-  @Patch(':country/:id/restore')
-  async restoreUniversityById(
-    @Param('country') country: string,
-    @Param('id', ParseIntPipe) id: number,
-    @Body() restoreUniversityDto: RestoreUniversityDto
-  ) {
-    try {
-      this.logger.log(`Restoring university with ID: ${id} in ${country}`);
+    const result = await this.universityService.deleteUniversity(countryEnum, id);
 
-      if (!restoreUniversityDto.confirm_restoration) {
-        throw new BadRequestException('Restoration must be confirmed by setting confirm_restoration to true');
-      }
-
-      const countryEnum = this.getCountryEnum(country);
-      if (!countryEnum) {
-        throw new BadRequestException(
-          `Invalid country: ${country}. Valid countries are: ${Object.values(CountryEnum).join(', ')}`
-        );
-      }
-
-      const restored = await this.universityService.restoreUniversity(countryEnum, id, restoreUniversityDto);
-
-      if (!restored) {
-        throw new NotFoundException(`University with ID ${id} in ${country} not found or not deleted`);
-      }
-
-      return {
-        message: `University with ID ${id} in ${country} has been restored successfully`,
-        restored: true,
-      };
-    } catch (error) {
-      this.logger.error(`Error restoring university: ${error.message}`, error.stack);
-
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
-
-      throw new InternalServerErrorException(`Failed to restore university: ${error.message}`);
+    if (!result.success) {
+      throw new BadRequestException(result.message);
     }
-  }
 
-  @Patch(':country/bulk-restore')
-  async bulkRestoreUniversities(@Param('country') country: string, @Body() bulkRestoreDto: BulkRestoreUniversityDto) {
-    try {
-      this.logger.log(`Bulk restoring universities in ${country}`);
-
-      if (!bulkRestoreDto.confirm_restoration) {
-        throw new BadRequestException('Bulk restoration must be confirmed by setting confirm_restoration to true');
-      }
-
-      const countryEnum = this.getCountryEnum(country);
-      if (!countryEnum) {
-        throw new BadRequestException(
-          `Invalid country: ${country}. Valid countries are: ${Object.values(CountryEnum).join(', ')}`
-        );
-      }
-
-      const results = await this.universityService.bulkRestoreUniversities(countryEnum, bulkRestoreDto);
-
-      return {
-        message: `Bulk restore completed for ${country} - ${results.successful.length} universities restored`,
-        results,
-      };
-    } catch (error) {
-      this.logger.error(`Error bulk restoring universities: ${error.message}`, error.stack);
-
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-
-      throw new InternalServerErrorException(`Failed to bulk restore universities: ${error.message}`);
-    }
+    return {
+      message: result.message,
+      deleted: true,
+    };
   }
 
   private getCountryEnum(country: string): CountryEnum | null {
-    if (!country) return null;
-
     const upperCountry = country.toUpperCase();
-
-    switch (upperCountry) {
-      case 'AUSTRALIA':
-        return CountryEnum.AUSTRALIA;
-      case 'INDIA':
-        return CountryEnum.INDIA;
-      case 'JAPAN':
-        return CountryEnum.JAPAN;
-      case 'KOREA':
-        return CountryEnum.KOREA;
-      case 'USA':
-        return CountryEnum.USA;
-      case 'VIETNAM':
-        return CountryEnum.VIETNAM;
-      default:
-        return null;
-    }
+    const countryKey = Object.keys(CountryEnum).find((key) => key.toUpperCase() === upperCountry);
+    return countryKey ? CountryEnum[countryKey as keyof typeof CountryEnum] : null;
   }
 }
