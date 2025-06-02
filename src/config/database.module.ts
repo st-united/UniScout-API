@@ -3,8 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { UserEntity } from '@UsersModule/entities';
-import { LocationEntity } from '@UniversitiesModule/entities';
-import { UniEntity } from '@UniversitiesModule/entities/uni.entity';
+import { LocationEntity, UniEntity } from '@UniversitiesModule/entities';;
 
 @Module({
   imports: [

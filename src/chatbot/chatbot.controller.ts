@@ -1,13 +1,10 @@
+// src/modules/chatbot/chatbot.controller.ts
 import { Controller, Post, Body, HttpCode, HttpStatus, Logger } from '@nestjs/common';
 import { ChatbotService } from './chatbot.service';
+import { ChatMessageDto } from './dto/chat-message.dto';
 
-// DTO for incoming chat messages
-class ChatMessageDto {
-  message: string;
-  sessionId?: string; // Optional: for continuing a conversation
-}
 
-@Controller('chatbot') // Your base API path will be /api/chatbot
+@Controller('chatbot') 
 export class ChatbotController {
   private readonly logger = new Logger(ChatbotController.name);
 

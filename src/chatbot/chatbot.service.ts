@@ -1,35 +1,36 @@
+// src/modules/chatbot/chatbot.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  GoogleGenerativeAI,
-  HarmBlockThreshold,
-  HarmCategory,
-  GenerativeModel,
-  ChatSession,
-  Part,
-  Content,
-} from '@google/generative-ai';
+// IMPORTANT: Use '@google/generative-ai', NOT '@google/genai'
+import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory, GenerativeModel, ChatSession, Part, Content } from '@google/generative-ai';
 import { ConfigService } from '@nestjs/config';
-import { UniversityService } from '@UniversitiesModule/university.service';
-import { CountryEnum } from '@UniversitiesModule/dto/get-university.dto';
-import { UniEntity } from '@UniversitiesModule/entities/uni.entity';
 
 @Injectable()
 export class ChatbotService {
   private readonly logger = new Logger(ChatbotService.name);
   private genAI: GoogleGenerativeAI;
+  // Use the exact model name from your AI Studio snippet
   private readonly modelName = 'gemini-1.5-flash';
 
+  // Using a Map for simple in-memory session management. For production, consider a database or Redis.
+  // The ChatSession type helps with autocompletion and type safety
   private chatSessions: Map<string, ChatSession> = new Map();
 
+  // Define your initial history and system instruction as a constant
+  // This will be used to initialize *each new chat session*
   private readonly initialChatHistory: Content[] = [
+    // Your AI Studio's 'System Instruction' or initial Model response can go here.
+    // The format is { role: 'user' | 'model', parts: [{ text: '...' }] }
+    // The very first user message in AI Studio often represents the system instruction
+    // if you didn't have a dedicated system instruction box.
+    // Based on your snippet, your initial "user" part looks like your system instruction.
     {
       role: 'user',
       parts: [
         {
           text: `You are a helpful and friendly university information assistant named UniBot.
 Your purpose is to answer questions about universities information.
-You MUST ONLY answer questions based on the information provided to you.
-If you don't know the answer or the information is not provided, politely state that you cannot assist with that specific query.
+Be concise, accurate, and professional.
+If you don't know the answer, politely state that you cannot assist with that specific query.
 Avoid giving personal opinions or financial advice.`,
         },
       ],
@@ -40,62 +41,73 @@ Avoid giving personal opinions or financial advice.`,
         {
           text: `Okay, I understand!
 
-Hello! I am UniBot, your friendly university information assistant. I'm here to help answer your questions about universities. I will only use the information I'm provided with.
+Hello! I am UniBot, your friendly university information assistant. I'm here to help answer your questions about universities based on the information in our database.
+
+Please feel free to ask me anything related to university programs, admissions, campus life, or other relevant topics. I'll do my best to provide concise, accurate, and professional responses. If I don't have the information you're looking for, I'll let you know that I cannot assist with that specific query.
+
 How can I assist you today?`,
         },
       ],
     },
+    // Add your other examples here from the `contents` array of your AI Studio snippet
+    // For example, the user asking about top 10 universities and the model's response:
     {
       role: 'user',
-      parts: [{ text: `what is the top 10 universities in korea` }],
+      parts: [
+        { text: `what is the top 10 universities in korea` },
+      ],
     },
     {
       role: 'model',
       parts: [
-        {
-          text: `I do not have access to university ranking information. Therefore, I cannot provide a list of the top 10 universities in Korea, as this information is not in my current database.`,
-        },
+        { text: `I do not have access to university ranking information at this time. Therefore, I cannot provide a list of the top 10 universities in Korea.\n\nIs there anything else I can help you with regarding university information that might be in our database?` },
       ],
     },
     {
       role: 'user',
-      parts: [{ text: `who is the president of singapore` }],
+      parts: [
+        { text: `who is the president of singapore` },
+      ],
     },
     {
       role: 'model',
       parts: [
-        {
-          text: `I am designed to provide information about universities. Therefore, I cannot assist with your query about the president of Singapore.`,
-        },
+        { text: `I am designed to provide information about universities. Therefore, I cannot assist with your query about the president of Singapore.\n\nIs there anything university-related I can help you with?` },
       ],
     },
   ];
 
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly universityService: UniversityService // Inject UniversityService
-  ) {
-    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+  constructor(private readonly configService: ConfigService) {
+    const apiKey = this.configService.get<string>('GEMINI_API_KEY'); // Access key directly from process.env via ConfigService
     if (!apiKey) {
       this.logger.error('GEMINI_API_KEY is not set in environment variables or config.');
       throw new Error('Gemini API key is missing.');
     }
-
+    // Initialize the Generative AI client
     this.genAI = new GoogleGenerativeAI(apiKey);
   }
 
+  // Method to start a new chat session, pre-loading with the defined initial history
   private async createNewChatSession(sessionId: string): Promise<ChatSession> {
     const model: GenerativeModel = this.genAI.getGenerativeModel({ model: this.modelName });
 
     const chat = model.startChat({
-      history: [...this.initialChatHistory],
+      history: [...this.initialChatHistory], // Use spread to create a copy for each new session
       generationConfig: {
-        temperature: 0.5, // Lower temperature for more factual responses
+        // Copy these values from your AI Studio snippet's 'config' or 'generationConfig' if it had one
+        // Your snippet shows 'responseMimeType: text/plain' in 'config', which is fine.
+        // For conversational responses, you usually want default text/plain.
+        // If AI Studio displayed temperature/topK/topP/maxOutputTokens in its 'Get code'
+        // section, include them here as they were.
+        // Example:
+        temperature: 1, // Adjust this based on your AI Studio settings (e.g., you previously had 1.0)
         topK: 1,
         topP: 0.95,
-        maxOutputTokens: 1024, // Adjusted for potentially longer contextual responses
+        maxOutputTokens: 65536,
       },
       safetySettings: [
+        // Include any safety settings you configured in AI Studio here
+        // Example:
         { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
         { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
         { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -108,121 +120,50 @@ How can I assist you today?`,
     return chat;
   }
 
+  // Method to send a message within a specific chat session
   async sendChatMessage(sessionId: string, message: string): Promise<string> {
     let chat = this.chatSessions.get(sessionId);
 
+    // If session doesn't exist, create a new one
     if (!chat) {
       chat = await this.createNewChatSession(sessionId);
     }
 
-    let contextualMessage = message;
-    let universityData: UniEntity | null; // Type for university data
-
-    // Simplified Intent Recognition & Entity Extraction
-    const lowerCaseMessage = message.toLowerCase();
-    let detectedCountry: CountryEnum | undefined;
-    let detectedUniversityName: string | undefined;
-
-    // Basic keyword detection for countries
-    if (lowerCaseMessage.includes('usa') || lowerCaseMessage.includes('united states'))
-      detectedCountry = CountryEnum.USA;
-    else if (lowerCaseMessage.includes('korea') || lowerCaseMessage.includes('south korea'))
-      detectedCountry = CountryEnum.KOREA;
-    else if (lowerCaseMessage.includes('australia')) detectedCountry = CountryEnum.AUSTRALIA;
-    else if (lowerCaseMessage.includes('india')) detectedCountry = CountryEnum.INDIA;
-    else if (lowerCaseMessage.includes('japan')) detectedCountry = CountryEnum.JAPAN;
-    else if (lowerCaseMessage.includes('vietnam')) detectedCountry = CountryEnum.VIETNAM;
-
-    // Basic keyword detection for university names (expand as needed)
-    // This is a placeholder and should be replaced with more robust NLP or a list of known universities.
-    const knownUniversities = [
-      'harvard',
-      'stanford',
-      'mit', // USA
-      'seoul national university',
-      'korea university',
-      'yonsei university', // Korea
-      'university of melbourne',
-      'sydney university', // Australia
-      // ... add more as per your database
-    ];
-
-    for (const uniName of knownUniversities) {
-      if (lowerCaseMessage.includes(uniName)) {
-        detectedUniversityName = uniName;
-        break;
-      }
-    }
-
-    // If both country and university name are detected, attempt database lookup
-    if (detectedCountry && detectedUniversityName) {
-      try {
-        universityData = await this.universityService.findUniversityByNameAndCountry(
-          detectedUniversityName,
-          detectedCountry
-        );
-
-        if (universityData) {
-          // Construct a rich contextual prompt from database data
-          contextualMessage =
-            `The user is asking about a university. Here is the information I have about ${universityData.university} in ${universityData.country}:\n\n` +
-            `**Name**: ${universityData.university}\n` +
-            `**Country**: ${universityData.country}\n` +
-            `**Location**: ${universityData.location || 'N/A'}\n` +
-            `**Website**: ${universityData.website || 'N/A'}\n` +
-            `**Description**: ${universityData.description || 'No detailed description available.'}\n` +
-            `**Contact Email**: ${universityData.email || 'N/A'}\n` +
-            `**Contact Phone**: ${universityData.contact || 'N/A'}\n` +
-            `**Established Year**: ${universityData.year || 'N/A'}\n` +
-            `**Number of Students**: ${universityData.student || 'N/A'}\n` +
-            `Based ONLY on the above information, please answer the user's question: "${message}"`;
-        } else {
-          this.logger.warn(
-            `University "${detectedUniversityName}" not found in ${detectedCountry} database. Proceeding with general prompt.`
-          );
-        }
-      } catch (dbError) {
-        this.logger.error(`Error querying university database: ${dbError.message}`, dbError.stack);
-        // Fallback: Continue with the original message if database query fails
-      }
-    }
-
     try {
-      this.logger.debug(`Sending message to Gemini for session ${sessionId}: "${contextualMessage}"`);
-      const result = await chat.sendMessage(contextualMessage);
+      this.logger.debug(`Sending message to Gemini for session ${sessionId}: "${message}"`);
+      // The core call to Gemini
+      const result = await chat.sendMessage(message);
       const response = await result.response;
       const text = response.text();
       this.logger.log(`Gemini response for session ${sessionId}: "${text}"`);
       return text;
     } catch (error) {
-      this.logger.error(
-        `Error sending chat message to Gemini API for session ${sessionId}: ${error.message}`,
-        error.stack
-      );
+      this.logger.error(`Error sending chat message to Gemini API for session ${sessionId}: ${error.message}`, error.stack);
+      // Log the full error from Gemini if available for debugging
       if (error.response && error.response.candidates && error.response.candidates.length > 0) {
-        this.logger.error(
-          'Gemini Candidate Block Reason:',
-          JSON.stringify(error.response.candidates[0].safetyRatings, null, 2)
-        );
+        this.logger.error('Gemini Candidate Block Reason:', JSON.stringify(error.response.candidates[0].safetyRatings, null, 2));
       }
       throw new Error('Failed to get response from AI chatbot. Please try again.');
     }
   }
 
+  // Optional: If you only need single-turn messages without persistent history per session
   async getSingleResponse(message: string): Promise<string> {
     try {
       const model = this.genAI.getGenerativeModel({ model: this.modelName });
-
-      // For single response, you might also want to do a quick lookup if appropriate
-      const contents: Content[] = [...this.initialChatHistory, { role: 'user', parts: [{ text: message }] }];
+      // The content here should be the initial system instruction + the user's message
+      const contents: Content[] = [
+        ...this.initialChatHistory, // Include initial persona/history
+        { role: 'user', parts: [{ text: message }] }
+      ];
 
       const result = await model.generateContent({
         contents: contents,
         generationConfig: {
-          temperature: 0.5,
+          temperature: 1, // You can adjust this for single-turn too
           topK: 1,
           topP: 0.95,
-          maxOutputTokens: 1024,
+          maxOutputTokens: 65536,
         },
         safetySettings: [
           { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },

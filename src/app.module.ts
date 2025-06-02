@@ -2,7 +2,6 @@ import * as Joi from '@hapi/joi';
 import { ClassSerializerInterceptor, MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
-
 import { UniversitiesModule } from '@UniversitiesModule/university.module';
 import { UsersModule } from '@UsersModule/users.module';
 import { DatabaseModule } from '@app/config/database.module';
@@ -11,14 +10,12 @@ import { XMLMiddleware } from './common/middleware/xml.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
 import { ContactModule } from './contact/contact.module';
-
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       validationSchema: Joi.object({
         APP_PORT: Joi.number().required(),
-
         DB_POSTGRE_HOST: Joi.string().required(),
         DB_POSTGRE_PORT: Joi.number().required(),
         DB_POSTGRE_USERNAME: Joi.string().required(),
