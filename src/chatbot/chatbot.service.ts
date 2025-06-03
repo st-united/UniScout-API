@@ -5,12 +5,10 @@ import {
   HarmCategory,
   GenerativeModel,
   ChatSession,
-  Part,
   Content,
 } from '@google/generative-ai';
 import { ConfigService } from '@nestjs/config';
 import { UniversityService } from '@UniversitiesModule/university.service';
-import { CountryEnum } from '@UniversitiesModule/dto/get-university.dto';
 import { UniEntity } from '@UniversitiesModule/entities/uni.entity';
 
 @Injectable()
@@ -71,10 +69,7 @@ How can I assist you today?`,
     },
   ];
 
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly universityService: UniversityService // Inject UniversityService
-  ) {
+  constructor(private readonly configService: ConfigService, private readonly universityService: UniversityService) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
       this.logger.error('GEMINI_API_KEY is not set in environment variables or config.');
@@ -90,10 +85,10 @@ How can I assist you today?`,
     const chat = model.startChat({
       history: [...this.initialChatHistory],
       generationConfig: {
-        temperature: 0.5, // Lower temperature for more factual responses
+        temperature: 0.5,
         topK: 1,
         topP: 0.95,
-        maxOutputTokens: 1024, // Adjusted for potentially longer contextual responses
+        maxOutputTokens: 1024,
       },
       safetySettings: [
         { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -116,25 +111,29 @@ How can I assist you today?`,
     }
 
     let contextualMessage = message;
-    let universityData: UniEntity | null; // Type for university data
+    let universityData: UniEntity | null;
 
     // Simplified Intent Recognition & Entity Extraction
     const lowerCaseMessage = message.toLowerCase();
-    let detectedCountry: CountryEnum | undefined;
+    let detectedCountry: string | undefined;
     let detectedUniversityName: string | undefined;
 
-    // Basic keyword detection for countries
-    if (lowerCaseMessage.includes('usa') || lowerCaseMessage.includes('united states'))
-      detectedCountry = CountryEnum.USA;
-    else if (lowerCaseMessage.includes('korea') || lowerCaseMessage.includes('south korea'))
-      detectedCountry = CountryEnum.KOREA;
-    else if (lowerCaseMessage.includes('australia')) detectedCountry = CountryEnum.AUSTRALIA;
-    else if (lowerCaseMessage.includes('india')) detectedCountry = CountryEnum.INDIA;
-    else if (lowerCaseMessage.includes('japan')) detectedCountry = CountryEnum.JAPAN;
-    else if (lowerCaseMessage.includes('vietnam')) detectedCountry = CountryEnum.VIETNAM;
+    // Basic keyword detection for countries as strings
+    if (lowerCaseMessage.includes('usa') || lowerCaseMessage.includes('united states')) {
+      detectedCountry = 'USA';
+    } else if (lowerCaseMessage.includes('korea') || lowerCaseMessage.includes('south korea')) {
+      detectedCountry = 'KOREA';
+    } else if (lowerCaseMessage.includes('australia')) {
+      detectedCountry = 'AUSTRALIA';
+    } else if (lowerCaseMessage.includes('india')) {
+      detectedCountry = 'INDIA';
+    } else if (lowerCaseMessage.includes('japan')) {
+      detectedCountry = 'JAPAN';
+    } else if (lowerCaseMessage.includes('vietnam')) {
+      detectedCountry = 'VIETNAM';
+    }
 
     // Basic keyword detection for university names (expand as needed)
-    // This is a placeholder and should be replaced with more robust NLP or a list of known universities.
     const knownUniversities = [
       'harvard',
       'stanford',
@@ -154,16 +153,15 @@ How can I assist you today?`,
       }
     }
 
-    // If both country and university name are detected, attempt database lookup
+    // If both detectedCountry and detectedUniversityName are set, query DB
     if (detectedCountry && detectedUniversityName) {
       try {
-        universityData = await this.universityService.findUniversityByNameAndCountry(
+        universityData = await this.universityService.findUniversity(
           detectedUniversityName,
-          detectedCountry
+          detectedCountry // Pass string, not enum
         );
 
         if (universityData) {
-          // Construct a rich contextual prompt from database data
           contextualMessage =
             `The user is asking about a university. Here is the information I have about ${universityData.university} in ${universityData.country}:\n\n` +
             `**Name**: ${universityData.university}\n` +
@@ -183,7 +181,6 @@ How can I assist you today?`,
         }
       } catch (dbError) {
         this.logger.error(`Error querying university database: ${dbError.message}`, dbError.stack);
-        // Fallback: Continue with the original message if database query fails
       }
     }
 
@@ -213,7 +210,6 @@ How can I assist you today?`,
     try {
       const model = this.genAI.getGenerativeModel({ model: this.modelName });
 
-      // For single response, you might also want to do a quick lookup if appropriate
       const contents: Content[] = [...this.initialChatHistory, { role: 'user', parts: [{ text: message }] }];
 
       const result = await model.generateContent({

@@ -5,11 +5,12 @@ import { UniversityController } from './university.controller';
 import { UniversityService } from './university.service';
 import { CsvImport } from './csv-import';
 
-import { UniEntity } from './entities/uni.entity';
-import { LocationEntity } from './entities';
+import { UniEntity } from './entities';
+
+import { DashboardModule } from '@DashboardModule/dashboard.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UniEntity, LocationEntity])],
+  imports: [TypeOrmModule.forFeature([UniEntity]), DashboardModule],
   controllers: [UniversityController],
   providers: [UniversityService, CsvImport],
   exports: [UniversityService, CsvImport],

@@ -7,12 +7,6 @@ async function importUniversities() {
   const csvImportService = app.get(CsvImport);
 
   try {
-    console.log('\n Clearing all university and location data...');
-    await csvImportService.clearAllData();
-
-    console.log('\n Importing coordinates...');
-    await csvImportService.importCoordinates('./dataset/coord.csv');
-
     console.log('\n Importing all universities from uni.csv...');
     await csvImportService.importCsv('./dataset/uni.csv');
 

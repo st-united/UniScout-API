@@ -11,6 +11,7 @@ import { XMLMiddleware } from './common/middleware/xml.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
 import { ContactModule } from './contact/contact.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { ContactModule } from './contact/contact.module';
     UniversitiesModule,
     ChatbotModule,
     ContactModule,
+    DashboardModule,
   ],
   providers: [
     {

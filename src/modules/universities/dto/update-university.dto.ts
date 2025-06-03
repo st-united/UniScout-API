@@ -1,6 +1,19 @@
-import { IsOptional, IsNotEmpty, IsString, IsEmail, IsIn, IsInt, IsBoolean, Matches, Min, Max } from 'class-validator';
+import {
+  IsOptional,
+  IsNotEmpty,
+  IsString,
+  IsNumber,
+  IsEmail,
+  IsIn,
+  IsInt,
+  IsBoolean,
+  Matches,
+  Min,
+  Max,
+  Validate,
+} from 'class-validator';
 import { Type } from 'class-transformer';
-import { CountryEnum } from './get-university.dto';
+import { IsCountryValidConstraint } from '@UniversitiesModule/validator';
 
 export class UpdateUniversityDto {
   @IsOptional()
@@ -9,9 +22,25 @@ export class UpdateUniversityDto {
   university?: string;
 
   @IsOptional()
-  @IsNotEmpty({ message: 'Ranking cannot be empty' })
+  @IsNotEmpty({ message: 'Latitude cannot be empty' })
   @Type(() => Number)
-  @IsInt({ message: 'Ranking must be a number' })
+  @IsNumber({}, { message: 'Latitude must be a number' })
+  latitude?: number;
+
+  @IsOptional()
+  @IsNotEmpty({ message: 'Longitude cannot be empty' })
+  @Type(() => Number)
+  @IsNumber({}, { message: 'Longitude must be a number' })
+  longitude?: number;
+
+  @IsOptional()
+  @IsNotEmpty({ message: 'Logo is required' })
+  @IsString()
+  logo: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'Rank must be a number' })
   @Min(1)
   rank?: number;
 
@@ -22,8 +51,8 @@ export class UpdateUniversityDto {
 
   @IsOptional()
   @IsNotEmpty({ message: 'Country cannot be empty' })
-  @IsIn(Object.values(CountryEnum), { message: 'Invalid country' })
-  country?: CountryEnum;
+  @Validate(IsCountryValidConstraint, { message: 'Invalid or unsupported country' })
+  country?: string;
 
   @IsOptional()
   @IsNotEmpty({ message: 'Location cannot be empty' })
@@ -31,12 +60,14 @@ export class UpdateUniversityDto {
   location?: string;
 
   @IsOptional()
+  @IsNotEmpty({ message: 'Student cannot be empty' })
   @Type(() => Number)
-  @IsInt()
+  @IsInt({ message: 'Student must be a number' })
   @Min(0)
   student?: number;
 
   @IsOptional()
+  @IsNotEmpty({ message: 'Year cannot be empty' })
   @Type(() => Number)
   @IsInt()
   @Min(1000)

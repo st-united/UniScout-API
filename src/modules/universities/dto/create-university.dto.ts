@@ -1,15 +1,38 @@
-import { IsNotEmpty, IsString, IsEmail, IsOptional, IsIn, IsInt, IsBoolean, Matches, Min, Max } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsNumber,
+  IsEmail,
+  IsOptional,
+  IsIn,
+  IsInt,
+  IsBoolean,
+  Matches,
+  Min,
+  Max,
+  Validate,
+} from 'class-validator';
 import { Type } from 'class-transformer';
-import { CountryEnum } from './get-university.dto';
+import { IsCountryValidConstraint } from '@UniversitiesModule/validator';
 
 export class CreateUniversityDto {
   @IsNotEmpty({ message: 'University name is required' })
   @IsString()
   university: string;
 
-  @IsNotEmpty({ message: 'Ranking is required' })
+  @IsNotEmpty()
   @Type(() => Number)
-  @IsInt({ message: 'Ranking must be a number' })
+  @IsNumber({}, { message: 'Latitude must be a number' })
+  latitude?: number;
+
+  @IsNotEmpty()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'Longitude must be a number' })
+  longitude?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'Rank must be a number' })
   rank: number;
 
   @IsNotEmpty({ message: 'Type is required' })
@@ -17,7 +40,11 @@ export class CreateUniversityDto {
   type: 'public' | 'private';
 
   @IsNotEmpty({ message: 'Country is required' })
-  country: CountryEnum;
+  @IsString()
+  @Validate(IsCountryValidConstraint, {
+    message: 'Country is not valid or supported',
+  })
+  country: string;
 
   @IsNotEmpty({ message: 'Location is required' })
   @IsString()

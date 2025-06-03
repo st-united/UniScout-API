@@ -1,7 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
-import { LocationEntity } from './location.entity';
 import { AbstractEntity } from '@Entity/abstract.entity';
-import { CountryEnum } from '../dto/get-university.dto'; // ✅ <-- Make sure this is the correct path
 
 @Entity('uni')
 export class UniEntity extends AbstractEntity {
@@ -11,25 +9,28 @@ export class UniEntity extends AbstractEntity {
   @Column({ type: 'text', unique: true })
   university: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'double precision' })
+  latitude: number;
+
+  @Column({ type: 'double precision' })
+  longitude: number;
+
+  @Column({ type: 'text' })
   logo: string;
 
   @Column({ type: 'int', nullable: true })
   rank: number;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text' })
   type: string;
 
-  @Column({
-    type: 'enum',
-    enum: CountryEnum,
-  })
-  country: CountryEnum;
+  @Column({ type: 'text' })
+  country: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text' })
   location: string;
 
-  @Column({ type: 'int', nullable: true })
+  @Column({ type: 'int' })
   student: number;
 
   get size(): 'small' | 'medium' | 'large' | 'mega large' | 'unknown' {
@@ -46,16 +47,16 @@ export class UniEntity extends AbstractEntity {
     }
   }
 
-  @Column({ type: 'int', nullable: true })
+  @Column({ type: 'int' })
   year: number;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text' })
   contact: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text' })
   email: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text' })
   website: string;
 
   @Column({ type: 'text', nullable: true })
@@ -102,11 +103,4 @@ export class UniEntity extends AbstractEntity {
 
   @Column({ default: false })
   is_deleted: boolean;
-
-  @ManyToOne(() => LocationEntity, { eager: true })
-  @JoinColumn([
-    { name: 'country', referencedColumnName: 'country' },
-    { name: 'location', referencedColumnName: 'location' },
-  ])
-  locationCoordinates: LocationEntity;
 }
