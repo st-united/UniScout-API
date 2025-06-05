@@ -21,6 +21,7 @@
       "@PermissionsModule/*": ["src/modules/permissions/*"],
       "@RolesModule/*": ["src/modules/roles/*"],
       "@UsersModule/*": ["src/modules/users/*"],
+      "@UniversitiesModule/*": ["src/modules/universities/*"],
       "@Library/*": ["src/libraries/*"],
       "@app/*": ["src/*"]
     },

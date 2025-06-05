@@ -3,11 +3,12 @@ import { ClassSerializerInterceptor, MiddlewareConsumer, Module, NestModule, Req
 import { ConfigModule } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 
-import { UsersModule } from '@UsersModule/users.module';
+import { UniversitiesModule } from '@UniversitiesModule/university.module';
 import { DatabaseModule } from '@app/config/database.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { XMLMiddleware } from './common/middleware/xml.middleware';
 import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from '@UsersModule/users.module';
 
 @Module({
   imports: [
@@ -30,8 +31,9 @@ import { AuthModule } from './modules/auth/auth.module';
       }),
     }),
     DatabaseModule,
-    UsersModule,
     AuthModule,
+    UniversitiesModule,
+    UsersModule,
   ],
   providers: [
     {

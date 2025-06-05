@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { useContainer } from 'class-validator';
+
 import 'dotenv/config';
 
 import { AppModule } from '@app/app.module';
@@ -11,6 +13,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, appOptions);
 
   const configService = app.get(ConfigService);
+
+  useContainer(app.select(AppModule), { fallbackOnErrors: true });
 
   // Pipes
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
