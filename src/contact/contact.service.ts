@@ -33,7 +33,7 @@ export class ContactService {
     this.logger.log(`Received contact form submission from: ${senderEmail}`);
 
     try {
-      const { name, subject, message, universityName, phoneNumber, requestType } = createContactDto;
+      const { name, country, message, universityName, phoneNumber, requestType } = createContactDto;
 
       const attachments = attachmentPaths.map((filePath) => ({
         filename: path.basename(filePath),
@@ -43,7 +43,7 @@ export class ContactService {
       const mailOptions = {
         from: `"${name}" <${senderEmail}>`,
         to: this.configService.get<string>('CONTACT_FORM_RECEIVER_EMAIL'),
-        subject: subject || `New Contact Form Submission from UniScout`,
+        subject: `UNISCOUT`,
         html: `
           <h3>Contact Details:</h3>
           <p><strong>Name:</strong> ${name}</p>
@@ -51,13 +51,13 @@ export class ContactService {
           <p><strong>Phone Number:</strong> ${phoneNumber || 'N/A'}</p>
           <p><strong>University Name:</strong> ${universityName || 'N/A'}</p>
           <p><strong>Request Type:</strong> ${requestType}</p>
-          <p><strong>Subject:</strong> ${subject || 'N/A'}</p>
+          <p><strong>Country:</strong> ${country || 'N/A'}</p>
           <h3>Message:</h3>
           <p>${message}</p>
         `,
         text: `Name: ${name}\nEmail: ${senderEmail}\nPhone Number: ${phoneNumber || 'N/A'}\nUniversity Name: ${
           universityName || 'N/A'
-        }\nRequest Type: ${requestType}\nSubject: ${subject || 'N/A'}\nMessage: ${message}`,
+        }\nRequest Type: ${requestType}\nCountry: ${country || 'N/A'}\nMessage: ${message}`,
         attachments: attachments,
       };
 

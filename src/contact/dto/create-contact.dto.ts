@@ -17,9 +17,9 @@ export class CreateContactDto {
   message: string;
 
   @IsString()
-  @MaxLength(200, { message: 'Subject cannot exceed 200 characters.' })
+  @MaxLength(200, { message: 'Country cannot exceed 200 characters.' })
   @IsNotEmpty()
-  subject: string;
+  country: string;
 
   @IsString()
   @IsNotEmpty()

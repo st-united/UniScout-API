@@ -13,7 +13,6 @@ export enum SortEnum {
   DESC = 'DESC',
 }
 export enum RequestTypeEnum {
-  INFORMATION_EDITING = 'information_editing',
-  COLLABORATION = 'collaboration',
-  OTHER = 'other',
+  CHANGE_INFORMATION = 'change_information',
+  COOPERATION = 'cooperation',
 }
