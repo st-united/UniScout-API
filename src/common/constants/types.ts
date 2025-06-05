@@ -1,5 +1,3 @@
-import { UserRole } from './enums'; // Adjust path if your enums are elsewhere, e.g., '../enums'
-
 export interface JwtPayload {
   sub: number; // This is the user ID from your strategy's validate method
   email: string;

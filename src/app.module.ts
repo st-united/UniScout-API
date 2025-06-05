@@ -8,6 +8,7 @@ import { DatabaseModule } from '@app/config/database.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { XMLMiddleware } from './common/middleware/xml.middleware';
 import { AuthModule } from './modules/auth/auth.module';
+import { ContactModule } from './contact/contact.module';
 import { UsersModule } from '@UsersModule/users.module';
 
 @Module({
@@ -34,6 +35,7 @@ import { UsersModule } from '@UsersModule/users.module';
     }),
     DatabaseModule,
     AuthModule,
+    ContactModule,
     UniversitiesModule,
     UsersModule,
   ],

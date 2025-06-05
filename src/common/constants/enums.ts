@@ -18,3 +18,8 @@ export enum UserRole {
   USER = 'user',
   MODERATOR = 'moderator', // You can add more roles here if needed
 }
+
+export enum RequestTypeEnum {
+  CHANGE_INFORMATION = 'change_information',
+  COOPERATION = 'cooperation',
+}
