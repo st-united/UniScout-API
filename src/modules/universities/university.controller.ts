@@ -3,7 +3,6 @@ import {
   Get,
   Query,
   ValidationPipe,
-  UsePipes,
   NotFoundException,
   Param,
   ParseIntPipe,
@@ -15,6 +14,8 @@ import {
   UseInterceptors,
   Delete,
   Logger,
+  UsePipes,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -35,8 +36,20 @@ export class UniversityController {
 
   //View University
   @Get()
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  async findAll(@Query() query: GetUniversityDto) {
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    })
+  )
+  async findAll(@Query() query: GetUniversityDto, @Req() req: any) {
+    this._logger.log('Raw Query Params (req.query):', req.query);
+    this._logger.log('Transformed Query DTO (query):', query);
+    this._logger.log('Query.fields (after transform):', query.fields);
+
     const universities = await this._universityService.findAll(query);
 
     if (!universities || universities.length === 0) {

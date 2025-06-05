@@ -55,7 +55,7 @@ export class CreateUniTable1717391676000 implements MigrationInterface {
             isNullable: false,
           },
           {
-            name: 'student',
+            name: 'studentPopulation',
             type: 'int',
             isNullable: false,
           },
@@ -95,17 +95,17 @@ export class CreateUniTable1717391676000 implements MigrationInterface {
             isNullable: true,
           },
           {
-            name: 'agricultural_food_science',
+            name: 'agriculturalFoodScience',
             type: 'boolean',
             isNullable: true,
           },
           {
-            name: 'arts_design',
+            name: 'artsDesign',
             type: 'boolean',
             isNullable: true,
           },
           {
-            name: 'economics_business_management',
+            name: 'economicsBusinessManagement',
             type: 'boolean',
             isNullable: true,
           },
@@ -115,27 +115,27 @@ export class CreateUniTable1717391676000 implements MigrationInterface {
             isNullable: true,
           },
           {
-            name: 'law_political_science',
+            name: 'lawPoliticalScience',
             type: 'boolean',
             isNullable: true,
           },
           {
-            name: 'medicine_pharmacy_health_sciences',
+            name: 'medicinePharmacyHealthSciences',
             type: 'boolean',
             isNullable: true,
           },
           {
-            name: 'physical_science',
+            name: 'physicalScience',
             type: 'boolean',
             isNullable: true,
           },
           {
-            name: 'social_sciences_humanities',
+            name: 'socialSciencesHumanities',
             type: 'boolean',
             isNullable: true,
           },
           {
-            name: 'sports_physical_education',
+            name: 'sportsPhysicalEducation',
             type: 'boolean',
             isNullable: true,
           },
@@ -150,21 +150,21 @@ export class CreateUniTable1717391676000 implements MigrationInterface {
             isNullable: true,
           },
           {
-            name: 'is_deleted',
+            name: 'isDeleted',
             type: 'boolean',
             default: false,
             isNullable: false,
           },
 
           {
-            name: 'created_at',
+            name: 'createdAt',
             type: 'timestamp',
             precision: 6,
             default: 'CURRENT_TIMESTAMP(6)',
             isNullable: false,
           },
           {
-            name: 'updated_at',
+            name: 'updatedAt',
             type: 'timestamp',
             precision: 6,
             default: 'CURRENT_TIMESTAMP(6)',
