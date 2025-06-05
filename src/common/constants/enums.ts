@@ -12,3 +12,8 @@ export enum SortEnum {
   ASC = 'ASC',
   DESC = 'DESC',
 }
+export enum RequestTypeEnum {
+  INFORMATION_EDITING = 'information_editing',
+  COLLABORATION = 'collaboration',
+  OTHER = 'other',
+}
