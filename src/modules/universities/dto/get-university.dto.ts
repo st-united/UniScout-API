@@ -18,6 +18,7 @@ export enum UniversitySizeEnum {
   MEDIUM = 'medium',
   LARGE = 'large',
   MEGA_LARGE = 'mega large',
+  UNKNOWN = 'unknown',
 }
 
 export enum UniversityTypeEnum {

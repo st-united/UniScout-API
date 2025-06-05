@@ -1,9 +1,19 @@
-import { Injectable, Logger, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { unlink } from 'fs/promises';
+import { join, basename } from 'path';
 
 import { UniEntity } from './entities/uni.entity';
 import { GetUniversityDto, UniversitySizeEnum } from './dto/get-university.dto';
+import { CreateUniversityDto } from './dto/create-university.dto';
+import { UpdateUniversityDto } from './dto/update-university.dto';
 
 @Injectable()
 export class UniversityService {
@@ -15,6 +25,7 @@ export class UniversityService {
     private readonly _uniRepository: Repository<UniEntity>
   ) {}
 
+  //View University
   async findAll(query?: GetUniversityDto): Promise<UniEntity[]> {
     try {
       const qb = this._uniRepository.createQueryBuilder('uni');
@@ -79,6 +90,8 @@ export class UniversityService {
           case UniversitySizeEnum.MEGA_LARGE:
             qb.andWhere('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
             break;
+          case UniversitySizeEnum.UNKNOWN:
+            break;
         }
       }
 
@@ -117,6 +130,7 @@ export class UniversityService {
     }
   }
 
+  //Validator
   async getValidCountries(): Promise<string[]> {
     const countries = await this._uniRepository
       .createQueryBuilder('uni')
@@ -124,5 +138,99 @@ export class UniversityService {
       .getRawMany();
 
     return countries.map((c) => c.country);
+  }
+
+  //Create University
+  async create(createDto: CreateUniversityDto & { logo: string }): Promise<UniEntity> {
+    try {
+      const uni = this._uniRepository.create({
+        ...createDto,
+      });
+      return await this._uniRepository.save(uni);
+    } catch (error) {
+      this._logger.error(`Failed to create university: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Failed to create university');
+    }
+  }
+
+  //Update University
+  async updateUniversity(id: number, dto: UpdateUniversityDto): Promise<{ message: string; data: UniEntity }> {
+    try {
+      const university = await this._uniRepository.findOne({ where: { id } });
+
+      if (!university) {
+        throw new NotFoundException(`University with ID ${id} not found.`);
+      }
+
+      const updateData: Partial<UniEntity> = {};
+
+      for (const key in dto) {
+        if (Object.prototype.hasOwnProperty.call(dto, key)) {
+          if (key === 'country') {
+            updateData.country = dto.country && dto.country.length > 0 ? dto.country[0] : null;
+          } else {
+            (updateData as any)[key] = (dto as any)[key];
+          }
+        }
+      }
+
+      const updateResult = await this._uniRepository.update({ id }, updateData);
+
+      if (updateResult.affected === 0) {
+        throw new BadRequestException('University found but no changes were applied.');
+      }
+
+      const updatedUniversity = await this._uniRepository.findOne({ where: { id } });
+
+      return {
+        message: 'University updated successfully',
+        data: updatedUniversity,
+      };
+    } catch (error) {
+      this._logger.error(`Error updating university: ${error.message}`, error.stack);
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(`Failed to update university: ${error.message}`);
+    }
+  }
+
+  //Delete University
+  async deleteUniversity(id: number): Promise<{ success: boolean; message: string }> {
+    this._logger.log(`Deletion attempt: University ID=${id}`);
+
+    try {
+      const university = await this._uniRepository.findOne({ where: { id } });
+      if (!university) {
+        this._logger.warn(`Deletion failed: University not found. ID=${id}`);
+        return { success: false, message: 'University not found.' };
+      }
+
+      if (university.logo) {
+        await this.deleteLogoFile(university.logo);
+      }
+
+      const result = await this._uniRepository.delete({ id });
+
+      if (result.affected && result.affected > 0) {
+        this._logger.log(`University deleted: ID=${id}`);
+        return { success: true, message: 'Successfully deleted university.' };
+      } else {
+        this._logger.warn(`Deletion failed (unknown reason). ID=${id}`);
+        return { success: false, message: 'Deletion failed.' };
+      }
+    } catch (error) {
+      this._logger.error(`Delete error for University ID=${id}: ${error.message}`, error.stack);
+      throw new InternalServerErrorException(`Database error: ${error.message}`);
+    }
+  }
+
+  private async deleteLogoFile(logoFilename: string): Promise<void> {
+    try {
+      const filePath = join(process.cwd(), 'uploads', 'university', basename(logoFilename));
+      await unlink(filePath);
+    } catch (error) {
+      this._logger.warn(`Failed to delete logo file ${logoFilename}: ${error.message}`);
+    }
   }
 }
