@@ -1,10 +1,11 @@
 // src/modules/users/users.module.ts (or src/users/users.module.ts)
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule } from '@nestjs/config'; // <-- ADD THIS IMPORT
+import { ConfigModule, ConfigService } from '@nestjs/config';
+
+import { UsersController } from '@UsersModule/users.controller';
+import { UserEntity } from './entities';
 import { UsersService } from './users.service';
-import { UsersController } from './users.controller';
-import { UserEntity } from './entities/user.entity';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
 @Module({
   imports: [

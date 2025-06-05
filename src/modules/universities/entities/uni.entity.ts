@@ -1,7 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
-import { LocationEntity } from './location.entity';
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 import { AbstractEntity } from '@Entity/abstract.entity';
-import { CountryEnum } from '../dto/get-university.dto'; // ✅ <-- Make sure this is the correct path
 
 @Entity('uni')
 export class UniEntity extends AbstractEntity {
@@ -11,51 +9,54 @@ export class UniEntity extends AbstractEntity {
   @Column({ type: 'text', unique: true })
   university: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'double precision' })
+  latitude: number;
+
+  @Column({ type: 'double precision' })
+  longitude: number;
+
+  @Column({ type: 'text' })
   logo: string;
 
   @Column({ type: 'int', nullable: true })
   rank: number;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text' })
   type: string;
 
-  @Column({
-    type: 'enum',
-    enum: CountryEnum,
-  })
-  country: CountryEnum;
+  @Column({ type: 'text' })
+  country: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text' })
   location: string;
 
-  @Column({ type: 'int', nullable: true })
-  student: number;
+  @Column({ type: 'int' })
+  studentPopulation: number;
 
   get size(): 'small' | 'medium' | 'large' | 'mega large' | 'unknown' {
-    if (this.student === null || this.student === undefined) {
+    if (this.studentPopulation === null || this.studentPopulation === undefined) {
       return 'unknown';
-    } else if (this.student < 20000) {
+    } else if (this.studentPopulation < 20000) {
       return 'small';
-    } else if (this.student < 40000) {
+    } else if (this.studentPopulation < 40000) {
       return 'medium';
-    } else if (this.student < 100000) {
+    } else if (this.studentPopulation < 100000) {
       return 'large';
     } else {
       return 'mega large';
     }
   }
 
-  @Column({ type: 'int', nullable: true })
+  @Column({ type: 'int' })
   year: number;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text' })
   contact: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text' })
   email: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text' })
   website: string;
 
   @Column({ type: 'text', nullable: true })
@@ -68,31 +69,31 @@ export class UniEntity extends AbstractEntity {
   exchange: boolean;
 
   @Column({ type: 'boolean', nullable: true })
-  agricultural_food_science: boolean;
+  agriculturalFoodScience: boolean;
 
   @Column({ type: 'boolean', nullable: true })
-  arts_design: boolean;
+  artsDesign: boolean;
 
   @Column({ type: 'boolean', nullable: true })
-  economics_business_management: boolean;
+  economicsBusinessManagement: boolean;
 
   @Column({ type: 'boolean', nullable: true })
   engineering: boolean;
 
   @Column({ type: 'boolean', nullable: true })
-  law_political_science: boolean;
+  lawPoliticalScience: boolean;
 
   @Column({ type: 'boolean', nullable: true })
-  medicine_pharmacy_health_sciences: boolean;
+  medicinePharmacyHealthSciences: boolean;
 
   @Column({ type: 'boolean', nullable: true })
-  physical_science: boolean;
+  physicalScience: boolean;
 
   @Column({ type: 'boolean', nullable: true })
-  social_sciences_humanities: boolean;
+  socialSciencesHumanities: boolean;
 
   @Column({ type: 'boolean', nullable: true })
-  sports_physical_education: boolean;
+  sportsPhysicalEducation: boolean;
 
   @Column({ type: 'boolean', nullable: true })
   technology: boolean;
@@ -101,12 +102,5 @@ export class UniEntity extends AbstractEntity {
   theology: boolean;
 
   @Column({ default: false })
-  is_deleted: boolean;
-
-  @ManyToOne(() => LocationEntity, { eager: true })
-  @JoinColumn([
-    { name: 'country', referencedColumnName: 'country' },
-    { name: 'location', referencedColumnName: 'location' },
-  ])
-  locationCoordinates: LocationEntity;
+  isDeleted: boolean;
 }
