@@ -23,6 +23,7 @@
       "@RolesModule/*": ["src/modules/roles/*"],
       "@UniversitiesModule/*": ["src/modules/universities/*"],
       "@UsersModule/*": ["src/modules/users/*"],
+      "@UniversitiesModule/*": ["src/modules/universities/*"],
       "@Library/*": ["src/libraries/*"],
       "@app/*": ["src/*"]
     },

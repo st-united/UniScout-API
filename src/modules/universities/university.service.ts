@@ -1,127 +1,128 @@
-import { Injectable, NotFoundException, Logger, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { UniEntity } from './entities/uni.entity';
-import { CreateUniversityDto } from './dto/create-university.dto';
-import { UpdateUniversityDto } from './dto/update-university.dto';
-import { CountryEnum, GetUniversityDto } from './dto/get-university.dto';
+import { GetUniversityDto, UniversitySizeEnum } from './dto/get-university.dto';
 
 @Injectable()
 export class UniversityService {
-  private readonly logger = new Logger(UniversityService.name);
+  private readonly _logger = new Logger(UniversityService.name);
+  private readonly _FUZZY_THRESHOLD: number = parseFloat(process.env.FUZZY_SEARCH_THRESHOLD || '0.3');
 
   constructor(
     @InjectRepository(UniEntity)
-    private readonly uniRepository: Repository<UniEntity>
+    private readonly _uniRepository: Repository<UniEntity>
   ) {}
-
-  async create(createDto: CreateUniversityDto & { logo: string }): Promise<UniEntity> {
-    try {
-      const uni = this.uniRepository.create(createDto);
-      return await this.uniRepository.save(uni);
-    } catch (error) {
-      this.logger.error(`Failed to create university: ${error.message}`, error.stack);
-      throw new InternalServerErrorException('Failed to create university');
-    }
-  }
 
   async findAll(query?: GetUniversityDto): Promise<UniEntity[]> {
     try {
-      const qb = this.uniRepository.createQueryBuilder('uni');
-
-      if (query?.country) {
-        qb.andWhere('uni.country = :country', { country: query.country });
-      }
+      const qb = this._uniRepository.createQueryBuilder('uni');
 
       if (query?.search) {
-        qb.andWhere('LOWER(uni.university) LIKE :search', { search: `%${query.search.toLowerCase()}%` });
+        qb.andWhere('similarity(uni.university, :search) > :threshold', {
+          search: query.search,
+          threshold: this._FUZZY_THRESHOLD,
+        });
+        qb.orderBy('similarity(uni.university, :search)', 'ASC');
+        qb.addOrderBy('uni.id', 'ASC');
+      } else {
+        qb.orderBy('uni.id', 'ASC');
       }
 
-      const page = query?.page || 1;
-      const limit = query?.limit || 10;
+      if (query?.minRank) {
+        qb.andWhere('uni.rank >= :minRank', { minRank: query.minRank });
+      }
+      if (query?.maxRank) {
+        qb.andWhere('uni.rank <= :maxRank', { maxRank: query.maxRank });
+      }
 
+      if (query?.rank) {
+        qb.andWhere('uni.rank = :rank', { rank: query.rank });
+      }
+
+      if (query?.type) {
+        qb.andWhere('uni.type = :type', { type: query.type });
+      }
+
+      if (query?.country) {
+        qb.andWhere(
+          new Array(query.country.length)
+            .fill(0)
+            .map((_, i) => `uni.country ILIKE :country_${i}`)
+            .join(' OR '),
+          query.country.reduce((acc, curr, i) => ({ ...acc, [`country_${i}`]: curr }), {})
+        );
+      }
+
+      if (query?.location) {
+        qb.andWhere('uni.location ILIKE :location', { location: `%${query.location}%` });
+      }
+
+      if (query?.size) {
+        switch (query.size) {
+          case UniversitySizeEnum.SMALL:
+            qb.andWhere('uni.studentPopulation < :smallThreshold', { smallThreshold: 20000 });
+            break;
+          case UniversitySizeEnum.MEDIUM:
+            qb.andWhere('uni.studentPopulation >= :smallThreshold AND uni.studentPopulation < :mediumThreshold', {
+              smallThreshold: 20000,
+              mediumThreshold: 40000,
+            });
+            break;
+          case UniversitySizeEnum.LARGE:
+            qb.andWhere('uni.studentPopulation >= :mediumThreshold AND uni.studentPopulation < :largeThreshold', {
+              mediumThreshold: 40000,
+              largeThreshold: 100000,
+            });
+            break;
+          case UniversitySizeEnum.MEGA_LARGE:
+            qb.andWhere('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
+            break;
+        }
+      }
+
+      if (query?.fields) {
+        Object.entries(query.fields).forEach(([key, value]) => {
+          if (value === true) {
+            qb.andWhere(`uni.${key} = true`);
+          }
+        });
+      }
+
+      const page = query?.page ?? 1;
+      const limit = query?.limit ?? 12;
       qb.skip((page - 1) * limit).take(limit);
 
       return await qb.getMany();
     } catch (error) {
-      this.logger.error(`Error fetching universities: ${error.message}`, error.stack);
+      this._logger.error(`Error fetching universities: ${error.message}`, error.stack);
       throw new InternalServerErrorException(`Failed to fetch universities: ${error.message}`);
     }
   }
 
-  async getUniversity(country: CountryEnum, id: number): Promise<UniEntity> {
+  async getUniversity(id: number): Promise<UniEntity> {
     try {
-      const university = await this.uniRepository.findOne({
-        where: { id, country },
-      });
+      const university = await this._uniRepository.findOne({ where: { id } });
 
       if (!university) {
-        throw new NotFoundException(`University with ID ${id} not found in ${country}`);
+        throw new NotFoundException(`University with ID ${id} not found.`);
       }
-
       return university;
     } catch (error) {
-      this.logger.error(`Error fetching university: ${error.message}`, error.stack);
+      this._logger.error(`Error fetching university: ${error.message}`, error.stack);
       if (error instanceof NotFoundException) throw error;
 
       throw new InternalServerErrorException(`Database error: ${error.message}`);
     }
   }
 
-  async findUniversityByNameAndCountry(name: string, country: string): Promise<UniEntity | null> {
-    try {
-      return await this.uniRepository
-        .createQueryBuilder('uni')
-        .where('uni.country = :country', { country })
-        .andWhere('similarity(uni.university, :name) > 0.3', { name })
-        .orderBy('similarity(uni.university, :name)', 'DESC')
-        .getOne();
-    } catch (error) {
-      this.logger.error(`Search error: ${error.message}`, error.stack);
-      throw new InternalServerErrorException(`Database search error: ${error.message}`);
-    }
-  }
+  async getValidCountries(): Promise<string[]> {
+    const countries = await this._uniRepository
+      .createQueryBuilder('uni')
+      .select('DISTINCT uni.country', 'country')
+      .getRawMany();
 
-  async updateUniversity(country: CountryEnum, id: number, dto: UpdateUniversityDto): Promise<UniEntity | null> {
-    try {
-      const existing = await this.uniRepository.findOne({ where: { id, country } });
-
-      if (!existing) {
-        return null;
-      }
-
-      await this.uniRepository.update({ id, country }, dto);
-      return this.uniRepository.findOne({ where: { id, country } });
-    } catch (error) {
-      this.logger.error(`Error updating university: ${error.message}`, error.stack);
-      throw new InternalServerErrorException(`Database error: ${error.message}`);
-    }
-  }
-
-  async deleteUniversity(country: CountryEnum, id: number): Promise<{ success: boolean; message: string }> {
-    this.logger.log(`Deletion attempt: University ID=${id}, Country=${country}`);
-
-    try {
-      const university = await this.uniRepository.findOne({ where: { id, country } });
-
-      if (!university) {
-        this.logger.warn(`Deletion failed: University not found. ID=${id}, Country=${country}`);
-        return { success: false, message: 'University not found.' };
-      }
-
-      const result = await this.uniRepository.delete({ id, country });
-
-      if (result.affected && result.affected > 0) {
-        this.logger.log(`University deleted: ID=${id}, Country=${country}`);
-        return { success: true, message: 'Successfully deleted university.' };
-      } else {
-        this.logger.warn(`Deletion failed (unknown reason). ID=${id}, Country=${country}`);
-        return { success: false, message: 'Deletion failed.' };
-      }
-    } catch (error) {
-      this.logger.error(`Delete error for University ID=${id}, Country=${country}: ${error.message}`, error.stack);
-      throw new InternalServerErrorException(`Database error: ${error.message}`);
-    }
+    return countries.map((c) => c.country);
   }
 }
