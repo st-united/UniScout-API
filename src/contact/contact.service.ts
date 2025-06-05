@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { ConfigService } from '@nestjs/config';
-
 import * as nodemailer from 'nodemailer';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class ContactService {
@@ -18,37 +19,61 @@ export class ContactService {
         user: this.configService.get<string>('EMAIL_USER'),
         pass: this.configService.get<string>('EMAIL_PASS'),
       },
+      tls: {
+        rejectUnauthorized: false,
+      },
     });
   }
 
-  async handleSubmitContactForm(createContactDto: CreateContactDto) {
-    this.logger.log(`Received contact form submission from: ${createContactDto.email}`);
+  async handleSubmitContactForm(
+    createContactDto: CreateContactDto,
+    attachmentPaths: string[] = []
+  ): Promise<{ message: string }> {
+    const senderEmail = createContactDto.email;
+    this.logger.log(`Received contact form submission from: ${senderEmail}`);
 
     try {
+      const { name, country, message, universityName, phoneNumber, requestType } = createContactDto;
+
+      const attachments = attachmentPaths.map((filePath) => ({
+        filename: path.basename(filePath),
+        path: filePath,
+      }));
+
       const mailOptions = {
-        from: `"${createContactDto.name}" <${createContactDto.email}>`,
+        from: `"${name}" <${senderEmail}>`,
         to: this.configService.get<string>('CONTACT_FORM_RECEIVER_EMAIL'),
-        subject: createContactDto.subject || `New Contact Form Submission from UniScout`,
+        subject: `UNISCOUT`,
         html: `
           <h3>Contact Details:</h3>
-          <p><strong>Name:</strong> ${createContactDto.name}</p>
-          <p><strong>Email:</strong> ${createContactDto.email}</p>
-          <p><strong>Subject:</strong> ${createContactDto.subject || 'N/A'}</p>
+          <p><strong>Name:</strong> ${name}</p>
+          <p><strong>Email:</strong> ${senderEmail}</p>
+          <p><strong>Phone Number:</strong> ${phoneNumber || 'N/A'}</p>
+          <p><strong>University Name:</strong> ${universityName || 'N/A'}</p>
+          <p><strong>Request Type:</strong> ${requestType}</p>
+          <p><strong>Country:</strong> ${country || 'N/A'}</p>
           <h3>Message:</h3>
-          <p>${createContactDto.message}</p>
+          <p>${message}</p>
         `,
-
-        text: `Name: ${createContactDto.name}\nEmail: ${createContactDto.email}\nSubject: ${
-          createContactDto.subject || 'N/A'
-        }\nMessage: ${createContactDto.message}`,
+        text: `Name: ${name}\nEmail: ${senderEmail}\nPhone Number: ${phoneNumber || 'N/A'}\nUniversity Name: ${
+          universityName || 'N/A'
+        }\nRequest Type: ${requestType}\nCountry: ${country || 'N/A'}\nMessage: ${message}`,
+        attachments: attachments,
       };
 
       await this.transporter.sendMail(mailOptions);
-      this.logger.log(`Contact form email sent successfully from ${createContactDto.email}.`);
+      this.logger.log(`Contact form email sent successfully from ${senderEmail}.`);
       return { message: 'Contact form submitted successfully!' };
     } catch (error) {
-      this.logger.error(`Failed to send contact form email from ${createContactDto.email}:`, error.stack);
+      this.logger.error(`Failed to send contact form email from ${senderEmail || 'unknown'}:`, error.stack);
       throw new Error('Failed to submit contact form. Please try again later.');
+    } finally {
+      attachmentPaths.forEach((filePath) => {
+        fs.unlink(filePath, (err) => {
+          if (err) this.logger.error(`Failed to delete temporary attachment file: ${filePath}, Error: ${err.message}`);
+          else this.logger.log(`Successfully deleted temporary attachment file: ${filePath}`);
+        });
+      });
     }
   }
 }
