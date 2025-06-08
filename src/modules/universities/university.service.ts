@@ -14,6 +14,7 @@ import { UniEntity } from './entities/uni.entity';
 import { GetUniversityDto, UniversitySizeEnum } from './dto/get-university.dto';
 import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
+import { GeoIpService, SearchLogService, TrackingService } from '@DashboardModule/services';
 
 @Injectable()
 export class UniversityService {
@@ -22,11 +23,14 @@ export class UniversityService {
 
   constructor(
     @InjectRepository(UniEntity)
-    private readonly _uniRepository: Repository<UniEntity>
+    private readonly _uniRepository: Repository<UniEntity>,
+    private readonly _trackingService: TrackingService,
+    private readonly _geoIpService: GeoIpService,
+    private readonly _searchLogService: SearchLogService
   ) {}
 
   //View University
-  async findAll(query?: GetUniversityDto): Promise<UniEntity[]> {
+  async findAll(query?: GetUniversityDto, ipAddress?: string): Promise<UniEntity[]> {
     try {
       const qb = this._uniRepository.createQueryBuilder('uni');
 
@@ -37,6 +41,12 @@ export class UniversityService {
         });
         qb.orderBy('similarity(uni.university, :search)', 'ASC');
         qb.addOrderBy('uni.id', 'ASC');
+
+        let country = 'Unknown';
+        if (ipAddress) {
+          country = await this._geoIpService.getCountryFromIp(ipAddress);
+        }
+        await this._searchLogService.logSearch(query.search, country);
       } else {
         qb.orderBy('uni.id', 'ASC');
       }
@@ -114,13 +124,19 @@ export class UniversityService {
     }
   }
 
-  async getUniversity(id: number): Promise<UniEntity> {
+  async getUniversity(id: number, ipAddress?: string): Promise<UniEntity> {
     try {
       const university = await this._uniRepository.findOne({ where: { id } });
 
       if (!university) {
         throw new NotFoundException(`University with ID ${id} not found.`);
       }
+
+      if (ipAddress) {
+        const country = await this._geoIpService.getCountryFromIp(ipAddress);
+        await this._trackingService.incrementCountryTraffic(country);
+      }
+
       return university;
     } catch (error) {
       this._logger.error(`Error fetching university: ${error.message}`, error.stack);

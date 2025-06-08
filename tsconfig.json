@@ -14,6 +14,7 @@
     "paths": {
       "@AuthModule/*": ["src/modules/auth/*"],
       "@Constant/*": ["src/common/constants/*"],
+      "@DashboardModule/*": ["src/modules/dashboard/*"],
       "@Decorators/*": ["src/common/decorators/*"],
       "@Entity/*": ["src/common/entities/*"],
       "@Enums/*": ["src/common/enums/*"],
@@ -23,7 +24,6 @@
       "@RolesModule/*": ["src/modules/roles/*"],
       "@UniversitiesModule/*": ["src/modules/universities/*"],
       "@UsersModule/*": ["src/modules/users/*"],
-      "@UniversitiesModule/*": ["src/modules/universities/*"],
       "@Library/*": ["src/libraries/*"],
       "@app/*": ["src/*"]
     },
