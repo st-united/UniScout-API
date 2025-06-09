@@ -5,19 +5,22 @@ import { groupBy } from 'lodash';
 
 import { UniEntity } from '@UniversitiesModule/entities/uni.entity';
 import { SearchLogService, TrackingService } from './services';
+import { ContactSubmissionEntity } from '@ContactModule/entities';
 
 @Injectable()
 export class DashboardService {
   constructor(
     @InjectRepository(UniEntity)
     private readonly _uniRepo: Repository<UniEntity>,
+    @InjectRepository(ContactSubmissionEntity)
+    private readonly _contactSubmissionRepo: Repository<ContactSubmissionEntity>,
     private readonly _searchLogService: SearchLogService,
     private readonly _trackingService: TrackingService
   ) {}
 
   async getSummary() {
     const universityCount = await this._uniRepo.count();
-    const contactCount = 0; // TODO: Integrate with contact
+    const contactCount = await this._contactSubmissionRepo.count(); // Modified
 
     const totalSearches = await this._searchLogService.totalSearches();
 

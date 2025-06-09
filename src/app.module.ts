@@ -8,7 +8,7 @@ import { DatabaseModule } from '@app/config/database.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { XMLMiddleware } from './common/middleware/xml.middleware';
 import { AuthModule } from './modules/auth/auth.module';
-import { ContactModule } from './contact/contact.module';
+import { ContactModule } from '@ContactModule/contact.module';
 import { UsersModule } from '@UsersModule/users.module';
 import { DashboardModule } from '@DashboardModule/dashboard.module';
 
@@ -33,6 +33,7 @@ import { DashboardModule } from '@DashboardModule/dashboard.module';
         // GEMINI_API_KEY: Joi.string().required(),
       }),
       isGlobal: true,
+      envFilePath: '.env',
     }),
     DatabaseModule,
     AuthModule,

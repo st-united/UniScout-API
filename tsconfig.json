@@ -14,6 +14,7 @@
     "paths": {
       "@AuthModule/*": ["src/modules/auth/*"],
       "@Constant/*": ["src/common/constants/*"],
+      "@ContactModule/*": ["src/modules/contact/*"],
       "@DashboardModule/*": ["src/modules/dashboard/*"],
       "@Decorators/*": ["src/common/decorators/*"],
       "@Entity/*": ["src/common/entities/*"],

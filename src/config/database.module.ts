@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { UniEntity } from '@UniversitiesModule/entities';
 import { UserEntity } from '@UsersModule/entities';
 import { SearchLogEntity, TrackingEntity } from '@DashboardModule/entities';
+import { ContactSubmissionEntity } from '@ContactModule/entities';
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { SearchLogEntity, TrackingEntity } from '@DashboardModule/entities';
         password: configService.get<string>('DB_POSTGRE_PASSWORD'),
         synchronize: configService.get<boolean>('DB_POSTGRE_SYNCHRONIZE'),
         logging: configService.get<boolean>('DB_POSTGRE_LOGGING'),
-        entities: [UserEntity, UniEntity, SearchLogEntity, TrackingEntity],
+        entities: [UserEntity, UniEntity, SearchLogEntity, TrackingEntity, ContactSubmissionEntity],
       }),
     }),
   ],
