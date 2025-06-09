@@ -10,6 +10,7 @@ import { XMLMiddleware } from './common/middleware/xml.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { ContactModule } from './contact/contact.module';
 import { UsersModule } from '@UsersModule/users.module';
+import { DashboardModule } from '@DashboardModule/dashboard.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { UsersModule } from '@UsersModule/users.module';
     DatabaseModule,
     AuthModule,
     ContactModule,
+    DashboardModule,
     UniversitiesModule,
     UsersModule,
   ],

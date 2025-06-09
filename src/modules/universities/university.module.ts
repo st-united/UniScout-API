@@ -5,9 +5,10 @@ import { UniversityService } from './university.service';
 import { IsCountryValidConstraint } from './validator';
 import { CsvImport } from './csv-import';
 import { UniEntity } from './entities';
+import { DashboardModule } from '@DashboardModule/dashboard.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UniEntity])],
+  imports: [TypeOrmModule.forFeature([UniEntity]), DashboardModule],
   controllers: [UniversityController],
   providers: [UniversityService, CsvImport, IsCountryValidConstraint],
   exports: [UniversityService, CsvImport],
