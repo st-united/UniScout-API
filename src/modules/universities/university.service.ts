@@ -1,6 +1,6 @@
 import { Injectable, Logger, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 
 import { UniEntity } from './entities/uni.entity';
 import { GetUniversityDto, UniversitySizeEnum } from './dto/get-university.dto';
@@ -100,7 +100,13 @@ export class UniversityService {
       throw new InternalServerErrorException(`Failed to fetch universities: ${error.message}`);
     }
   }
-
+  async countAll(filter?: GetUniversityDto): Promise<number> {
+    const whereClause: any = {};
+    if (filter?.country && filter.country.length > 0) {
+      whereClause.country = In(filter.country);
+    }
+    return await this._uniRepository.count({ where: whereClause });
+  }
   async getUniversity(id: number): Promise<UniEntity> {
     try {
       const university = await this._uniRepository.findOne({ where: { id } });

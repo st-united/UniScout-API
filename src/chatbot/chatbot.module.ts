@@ -3,14 +3,12 @@ import { ConfigModule } from '@nestjs/config';
 import { ChatbotController } from './chatbot.controller';
 import { ChatbotService } from './chatbot.service';
 import { UniversitiesModule } from '@UniversitiesModule/university.module';
+import { FileExportService } from '../file-export/file-export.service';
 
 @Module({
-  imports: [
-    ConfigModule,
-    UniversitiesModule, // Import to access UniversityService
-  ],
+  imports: [ConfigModule, UniversitiesModule],
   controllers: [ChatbotController],
-  providers: [ChatbotService],
+  providers: [ChatbotService, FileExportService],
   exports: [ChatbotService],
 })
 export class ChatbotModule {}
