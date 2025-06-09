@@ -20,7 +20,7 @@ export class DashboardService {
 
   async getSummary() {
     const universityCount = await this._uniRepo.count();
-    const contactCount = await this._contactSubmissionRepo.count(); // Modified
+    const contactCount = await this._contactSubmissionRepo.count();
 
     const totalSearches = await this._searchLogService.totalSearches();
 
