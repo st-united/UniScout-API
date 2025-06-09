@@ -11,7 +11,7 @@ import { unlink } from 'fs/promises';
 import { join, basename } from 'path';
 
 import { UniEntity } from './entities/uni.entity';
-import { GetUniversityDto, UniversitySizeEnum } from './dto/get-university.dto';
+import { GetUniversityDto, UniversitySizeEnum, SortOrderEnum } from './dto/get-university.dto';
 import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
 import { GeoIpService, SearchLogService, TrackingService } from '@DashboardModule/services';
@@ -19,7 +19,6 @@ import { GeoIpService, SearchLogService, TrackingService } from '@DashboardModul
 @Injectable()
 export class UniversityService {
   private readonly _logger = new Logger(UniversityService.name);
-  private readonly _FUZZY_THRESHOLD: number = parseFloat(process.env.FUZZY_SEARCH_THRESHOLD || '0.3');
 
   constructor(
     @InjectRepository(UniEntity)
@@ -34,50 +33,44 @@ export class UniversityService {
     try {
       const qb = this._uniRepository.createQueryBuilder('uni');
 
-      if (query?.search) {
-        qb.andWhere('similarity(uni.university, :search) > :threshold', {
-          search: query.search,
-          threshold: this._FUZZY_THRESHOLD,
+      if (query && query.search && query.search.trim() !== '') {
+        const searchTerm = query.search.trim();
+
+        const fieldColumns = [
+          'agriculturalFoodScience',
+          'artsDesign',
+          'economicsBusinessManagement',
+          'engineering',
+          'lawPoliticalScience',
+          'medicinePharmacyHealthSciences',
+          'physicalScience',
+          'socialSciencesHumanities',
+          'sportsPhysicalEducation',
+          'technology',
+          'theology',
+        ];
+
+        const orConditions: string[] = ['uni.university % :searchTerm', 'uni.location % :searchTerm'];
+
+        fieldColumns.forEach((col) => {
+          orConditions.push(`(uni.${col} IS TRUE AND '${col}' ILIKE '%' || :searchTerm || '%')`);
         });
-        qb.orderBy('similarity(uni.university, :search)', 'ASC');
-        qb.addOrderBy('uni.id', 'ASC');
+
+        qb.andWhere(`(${orConditions.join(' OR ')})`, { searchTerm });
 
         let country = 'Unknown';
         if (ipAddress) {
           country = await this._geoIpService.getCountryFromIp(ipAddress);
         }
         await this._searchLogService.logSearch(query.search, country);
-      } else {
-        qb.orderBy('uni.id', 'ASC');
-      }
-
-      if (query?.minRank) {
-        qb.andWhere('uni.rank >= :minRank', { minRank: query.minRank });
-      }
-      if (query?.maxRank) {
-        qb.andWhere('uni.rank <= :maxRank', { maxRank: query.maxRank });
-      }
-
-      if (query?.rank) {
-        qb.andWhere('uni.rank = :rank', { rank: query.rank });
       }
 
       if (query?.type) {
         qb.andWhere('uni.type = :type', { type: query.type });
       }
 
-      if (query?.country) {
-        qb.andWhere(
-          new Array(query.country.length)
-            .fill(0)
-            .map((_, i) => `uni.country ILIKE :country_${i}`)
-            .join(' OR '),
-          query.country.reduce((acc, curr, i) => ({ ...acc, [`country_${i}`]: curr }), {})
-        );
-      }
-
-      if (query?.location) {
-        qb.andWhere('uni.location ILIKE :location', { location: `%${query.location}%` });
+      if (query?.country && query.country.length > 0) {
+        qb.andWhere('uni.country IN (:...countries)', { countries: query.country });
       }
 
       if (query?.size) {
@@ -106,20 +99,56 @@ export class UniversityService {
       }
 
       if (query?.fields) {
-        Object.entries(query.fields).forEach(([key, value]) => {
-          if (value === true) {
-            qb.andWhere(`uni.${key} = true`);
+        for (const key in query.fields) {
+          if (Object.prototype.hasOwnProperty.call(query.fields, key) && typeof query.fields[key] === 'boolean') {
+            qb.andWhere(`uni.${key} = :${key}`, { [key]: query.fields[key] });
           }
-        });
+        }
       }
+
+      if (query?.minRank) {
+        qb.andWhere('uni.rank >= :minRank', { minRank: query.minRank });
+      }
+      if (query?.maxRank) {
+        qb.andWhere('uni.rank <= :maxRank', { maxRank: query.maxRank });
+      }
+      if (query?.rank) {
+        qb.andWhere('uni.rank = :rank', { rank: query.rank });
+      }
+
+      if (query?.location && !query.search) {
+        qb.andWhere('uni.location ILIKE :location', { location: `%${query.location}%` });
+      }
+
+      if (query?.search && query.search.trim() !== '') {
+        const orderBySearchTerm = query.search.trim();
+        qb.addOrderBy('similarity(uni.university, :orderBySearchTerm)', 'DESC');
+        qb.setParameter('orderBySearchTerm', orderBySearchTerm);
+      } else {
+        const sortColumn = query?.sortBy ? `uni.${query.sortBy}` : 'uni.id';
+        const sortOrder = query?.sortOrder || SortOrderEnum.ASC;
+        const allowedSortColumns = this._uniRepository.metadata.columns.map((col) => col.propertyName);
+        if (query?.sortBy && !allowedSortColumns.includes(query.sortBy)) {
+          this._logger.warn(`Invalid sortBy column: ${query.sortBy}. Defaulting to 'id'.`);
+          qb.orderBy('uni.id', sortOrder);
+        } else {
+          qb.orderBy(sortColumn, sortOrder);
+        }
+      }
+
+      qb.addOrderBy('uni.id', 'ASC');
 
       const page = query?.page ?? 1;
       const limit = query?.limit ?? 12;
       qb.skip((page - 1) * limit).take(limit);
 
-      return await qb.getMany();
+      const universities = await qb.getMany();
+      return universities;
     } catch (error) {
       this._logger.error(`Error fetching universities: ${error.message}`, error.stack);
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
       throw new InternalServerErrorException(`Failed to fetch universities: ${error.message}`);
     }
   }

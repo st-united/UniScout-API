@@ -50,7 +50,7 @@ export class UniversityController {
     this._logger.log('Transformed Query DTO (query):', query);
     this._logger.log('Query.fields (after transform):', query.fields);
 
-    const universities = await this._universityService.findAll(query);
+    const universities = await this._universityService.findAll(query, req.ip);
 
     if (!universities || universities.length === 0) {
       return {
@@ -60,13 +60,13 @@ export class UniversityController {
     }
     return {
       message: 'Universities retrieved successfully.',
-      data: universities,
+      data: universities.map((uni) => plainToInstance(UniversityDto, uni, { excludeExtraneousValues: true })),
     };
   }
 
   @Get(':id')
-  async getUniversity(@Param('id', ParseIntPipe) id: number) {
-    const university = await this._universityService.getUniversity(id);
+  async getUniversity(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
+    const university = await this._universityService.getUniversity(id, req.ip);
     if (!university) {
       throw new NotFoundException(`University with ID ${id} not found.`);
     }
@@ -144,11 +144,7 @@ export class UniversityController {
 
   //Delete University
   @Delete(':id')
-  async deleteUniversity(
-    @Param('country') country: string,
-    @Param('id', ParseIntPipe) id: number,
-    @Body('confirm_deletion') confirmDeletion: boolean
-  ) {
+  async deleteUniversity(@Param('id', ParseIntPipe) id: number, @Body('confirm_deletion') confirmDeletion: boolean) {
     if (!confirmDeletion) {
       throw new BadRequestException('Deletion must be confirmed by setting confirm_deletion to true.');
     }

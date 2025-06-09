@@ -1,7 +1,6 @@
 import {
   IsOptional,
   IsString,
-  IsNumber,
   IsEnum,
   IsInt,
   Min,
@@ -107,7 +106,7 @@ export class FieldsFilterDto {
 }
 
 export class GetUniversityDto {
-  @ApiPropertyOptional({ description: 'Search query for university name' })
+  @ApiPropertyOptional({ description: 'Generic search term for university name, location, or fields' })
   @IsOptional()
   @IsString()
   search?: string;
@@ -177,6 +176,15 @@ export class GetUniversityDto {
   @Min(1)
   @Type(() => Number)
   limit = 12;
+
+  @ApiPropertyOptional({
+    description: 'Column to sort by',
+    type: String,
+    default: 'id',
+  })
+  @IsOptional()
+  @IsString()
+  sortBy?: string = 'id';
 
   @ApiPropertyOptional({
     enum: SortOrderEnum,
