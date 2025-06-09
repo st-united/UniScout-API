@@ -2,7 +2,6 @@ import { Body, Controller, Post, HttpStatus, HttpException, UseInterceptors, Upl
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ContactService } from './contact.service';
 import { CreateContactDto } from './dto/create-contact.dto';
-import { Express } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as multer from 'multer';
@@ -18,7 +17,7 @@ const MAX_FILES = 5;
 
 @Controller('api/contact')
 export class ContactController {
-  constructor(private readonly contactService: ContactService) {}
+  constructor(private readonly _contactService: ContactService) {}
 
   @Post()
   @UseInterceptors(
@@ -67,7 +66,7 @@ export class ContactController {
 
       // Pass the DTO data and the attachment paths to the service
       // The service will then handle sending the email and cleaning up the files.
-      const result = await this.contactService.handleSubmitContactForm(createContactDto, attachmentPaths);
+      const result = await this._contactService.handleSubmitContactForm(createContactDto, attachmentPaths);
       return result; // NestJS handles JSON response and 200 OK status
     } catch (error) {
       // --- IMPORTANT: Clean up uploaded files if an error occurs before the service handles them ---
