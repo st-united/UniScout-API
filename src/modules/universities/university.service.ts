@@ -1,4 +1,3 @@
-// university.service.ts
 import {
   Injectable,
   Logger,
@@ -65,7 +64,11 @@ export class UniversityService {
         let country = 'Unknown';
         if (ipAddress) {
           country = await this._geoIpService.getCountryFromIp(ipAddress);
+          this._logger.log(`Country resolved by GeoIpService for findAll: ${country}`);
+        } else {
+          this._logger.warn('No IP address provided to UniversityService.findAll. Country will be Unknown.');
         }
+        this._logger.log(`Logging search with country: ${country}`);
         await this._searchLogService.logSearch(query.search, country);
       }
 
@@ -160,7 +163,7 @@ export class UniversityService {
     }
   }
 
-  async getUniversity(id: number, ipAddress?: string): Promise<UniEntity> {
+  async getUniversity(id: number, ipAddress?: string): Promise<UniEntity | null> {
     try {
       const university = await this._uniRepository.findOne({ where: { id } });
 
@@ -168,10 +171,16 @@ export class UniversityService {
         throw new NotFoundException(`University with ID ${id} not found.`);
       }
 
+      let country = 'Unknown';
       if (ipAddress) {
-        const country = await this._geoIpService.getCountryFromIp(ipAddress);
+        country = await this._geoIpService.getCountryFromIp(ipAddress);
+        this._logger.log(`Country resolved by GeoIpService for getUniversity: ${country}`);
         await this._trackingService.incrementCountryTraffic(country);
+      } else {
+        this._logger.warn('No IP address provided to UniversityService.getUniversity. Country will be Unknown.');
       }
+
+      this._logger.log(`Tracking view for university ID ${id} with country: ${country}`);
 
       return university;
     } catch (error) {
