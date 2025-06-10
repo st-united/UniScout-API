@@ -1,3 +1,4 @@
+// university.service.ts
 import {
   Injectable,
   Logger,
@@ -29,7 +30,10 @@ export class UniversityService {
   ) {}
 
   //View University
-  async findAll(query?: GetUniversityDto, ipAddress?: string): Promise<UniEntity[]> {
+  async findAll(
+    query?: GetUniversityDto,
+    ipAddress?: string
+  ): Promise<{ universities: UniEntity[]; totalCount: number; currentPage: number; limit: number }> {
     try {
       const qb = this._uniRepository.createQueryBuilder('uni');
 
@@ -139,11 +143,14 @@ export class UniversityService {
       qb.addOrderBy('uni.id', 'ASC');
 
       const page = query?.page ?? 1;
-      const limit = query?.limit ?? 12;
-      qb.skip((page - 1) * limit).take(limit);
+      const limit = query?.limit ?? 16;
 
-      const universities = await qb.getMany();
-      return universities;
+      const [universities, totalCount] = await qb
+        .skip((page - 1) * limit)
+        .take(limit)
+        .getManyAndCount();
+
+      return { universities, totalCount, currentPage: page, limit };
     } catch (error) {
       this._logger.error(`Error fetching universities: ${error.message}`, error.stack);
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
