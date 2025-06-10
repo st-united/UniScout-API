@@ -20,6 +20,6 @@ export enum UserRole {
 }
 
 export enum RequestTypeEnum {
-  CHANGE_INFORMATION = 'change_information',
-  COOPERATION = 'cooperation',
+  CHANGE_INFORMATION = 'CHANGE_INFORMATION',
+  COOPERATION = 'COOPERATION',
 }

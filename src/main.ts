@@ -3,6 +3,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { useContainer } from 'class-validator';
 import { ExpressAdapter } from '@nestjs/platform-express';
+import { ValidationPipe } from '@nestjs/common';
 
 import 'dotenv/config';
 import 'reflect-metadata';
@@ -13,6 +14,14 @@ async function bootstrap() {
   const appOptions = { cors: true };
   const app = await NestFactory.create(AppModule, new ExpressAdapter(), appOptions);
   const configService = app.get(ConfigService);
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    })
+  );
 
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
 

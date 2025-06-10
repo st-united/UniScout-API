@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, MaxLength, IsPhoneNumber, IsOptional, IsEnum } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MaxLength, IsOptional, IsEnum, IsNumberString } from 'class-validator';
 import { RequestTypeEnum } from '@Constant/enums';
 
 export class CreateContactDto {
@@ -28,7 +28,7 @@ export class CreateContactDto {
 
   @IsString()
   @IsNotEmpty()
-  @IsPhoneNumber('VN', { message: 'Please provide a valid phone number.' })
+  @IsNumberString({}, { message: 'Please provide a valid phone number.' })
   phoneNumber?: string;
 
   @IsEnum(RequestTypeEnum, { message: 'Invalid request type.' })

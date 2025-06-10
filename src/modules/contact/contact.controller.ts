@@ -2,6 +2,8 @@ import { Body, Controller, Post, HttpStatus, HttpException, UseInterceptors, Upl
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ContactService } from './contact.service';
 import { CreateContactDto } from './dto/create-contact.dto';
+import { validate } from 'class-validator';
+import { plainToClass } from 'class-transformer';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as multer from 'multer';
@@ -12,10 +14,10 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_FILES = 5;
 
-@Controller('api/contact')
+@Controller('contact')
 export class ContactController {
   constructor(private readonly _contactService: ContactService) {}
 
@@ -42,35 +44,44 @@ export class ContactController {
       },
       storage: multer.diskStorage({
         destination: (req, file, cb) => {
-          cb(null, uploadDir); // Save files to the specified directory
+          cb(null, uploadDir);
         },
         filename: (req, file, cb) => {
-          // Generate a unique filename to prevent overwrites
           const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
           cb(null, `${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
         },
       }),
     })
   )
-  async submitContactForm(
-    @Body() createContactDto: CreateContactDto,
-    @UploadedFiles() files: Array<Express.Multer.File> // Inject uploaded files here
-  ) {
-    let attachmentPaths: string[] = []; // To store paths of successfully uploaded files
+  async submitContactForm(@Body() body: any, @UploadedFiles() files?: Array<Express.Multer.File>) {
+    let attachmentPaths: string[] = [];
 
     try {
+      const { files: _, ...createContactData } = body;
+      const createContactDto = plainToClass(CreateContactDto, createContactData);
+
+      const errors = await validate(createContactDto);
+      if (errors.length > 0) {
+        const errorMessages = errors.map((error) => Object.values(error.constraints || {}).join(', ')).join('; ');
+
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: errorMessages,
+            error: 'Bad Request',
+          },
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Handle optional file attachments
       if (files && files.length > 0) {
-        // Extract the paths of the uploaded files from Multer's output
         attachmentPaths = files.map((file) => file.path);
       }
 
-      // Pass the DTO data and the attachment paths to the service
-      // The service will then handle sending the email and cleaning up the files.
       const result = await this._contactService.handleSubmitContactForm(createContactDto, attachmentPaths);
-      return result; // NestJS handles JSON response and 200 OK status
+      return result;
     } catch (error) {
-      // --- IMPORTANT: Clean up uploaded files if an error occurs before the service handles them ---
-      // (The service has its own cleanup, but this is a safeguard for controller-level errors)
       if (attachmentPaths.length > 0) {
         attachmentPaths.forEach((filePath) => {
           fs.unlink(filePath, (err) => {
@@ -79,7 +90,7 @@ export class ContactController {
           });
         });
       }
-      // Use NestJS's HttpException for consistent error handling
+
       throw new HttpException(
         {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
