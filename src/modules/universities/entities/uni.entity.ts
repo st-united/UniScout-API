@@ -33,17 +33,15 @@ export class UniEntity extends AbstractEntity {
   @Column({ type: 'int' })
   studentPopulation: number;
 
-  get size(): 'small' | 'medium' | 'large' | 'mega large' | 'unknown' {
-    if (this.studentPopulation === null || this.studentPopulation === undefined) {
-      return 'unknown';
-    } else if (this.studentPopulation < 20000) {
+  get size(): 'small' | 'medium' | 'large' | 'extra large' {
+    if (this.studentPopulation < 20000) {
       return 'small';
     } else if (this.studentPopulation < 40000) {
       return 'medium';
     } else if (this.studentPopulation < 100000) {
       return 'large';
     } else {
-      return 'mega large';
+      return 'extra large';
     }
   }
 
@@ -78,16 +76,13 @@ export class UniEntity extends AbstractEntity {
   economicsBusinessManagement: boolean;
 
   @Column({ type: 'boolean', nullable: true })
-  engineering: boolean;
-
-  @Column({ type: 'boolean', nullable: true })
   lawPoliticalScience: boolean;
 
   @Column({ type: 'boolean', nullable: true })
   medicinePharmacyHealthSciences: boolean;
 
   @Column({ type: 'boolean', nullable: true })
-  physicalScience: boolean;
+  scienceEngineering: boolean;
 
   @Column({ type: 'boolean', nullable: true })
   socialSciencesHumanities: boolean;
@@ -99,7 +94,7 @@ export class UniEntity extends AbstractEntity {
   technology: boolean;
 
   @Column({ type: 'boolean', nullable: true })
-  theology: boolean;
+  others: boolean;
 
   @Column({ default: false })
   isDeleted: boolean;

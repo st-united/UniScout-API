@@ -60,14 +60,13 @@ export class CsvImport {
       agriculturalFoodScience: this.parseBoolean(record.agricultural_food_science),
       artsDesign: this.parseBoolean(record.arts_design),
       economicsBusinessManagement: this.parseBoolean(record.economics_business_management),
-      engineering: this.parseBoolean(record.engineering),
       lawPoliticalScience: this.parseBoolean(record.law_political_science),
       medicinePharmacyHealthSciences: this.parseBoolean(record.medicine_pharmacy_health_sciences),
-      physicalScience: this.parseBoolean(record.physical_science),
+      scienceEngineering: this.parseBoolean(record.science_engineering),
       socialSciencesHumanities: this.parseBoolean(record.social_sciences_humanities),
       sportsPhysicalEducation: this.parseBoolean(record.sports_physical_education),
       technology: this.parseBoolean(record.technology),
-      theology: this.parseBoolean(record.theology),
+      others: this.parseBoolean(record.others),
     };
   }
 
