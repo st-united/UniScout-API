@@ -50,17 +50,24 @@ export class UniversityController {
     this._logger.log('Transformed Query DTO (query):', query);
     this._logger.log('Query.fields (after transform):', query.fields);
 
-    const universities = await this._universityService.findAll(query, req.ip);
+    // Destructure the response from the service to get the universities array and totalCount
+    const { universities, totalCount, currentPage, limit } = await this._universityService.findAll(query, req.ip);
 
     if (!universities || universities.length === 0) {
       return {
         message: 'No universities match the selected criteria.',
         data: [],
+        totalCount: 0,
+        currentPage: currentPage,
+        limit: limit,
       };
     }
     return {
       message: 'Universities retrieved successfully.',
       data: universities.map((uni) => plainToInstance(UniversityDto, uni, { excludeExtraneousValues: true })),
+      totalCount: totalCount,
+      currentPage: currentPage,
+      limit: limit,
     };
   }
 
