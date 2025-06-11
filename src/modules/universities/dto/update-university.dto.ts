@@ -103,52 +103,7 @@ export class UpdateUniversityDto {
   exchange?: boolean;
 
   @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  agriculturalFoodScience?: boolean;
-
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  artsDesign?: boolean;
-
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  economicsBusinessManagement?: boolean;
-
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  lawPoliticalScience?: boolean;
-
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  medicinePharmacyHealthSciences?: boolean;
-
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  scienceEngineering?: boolean;
-
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  socialSciencesHumanities?: boolean;
-
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  sportsPhysicalEducation?: boolean;
-
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  technology?: boolean;
-
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  others?: boolean;
+  @IsArray()
+  @IsString({ each: true })
+  academicFields?: string[];
 }

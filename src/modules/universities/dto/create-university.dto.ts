@@ -93,52 +93,7 @@ export class CreateUniversityDto {
   exchange?: boolean;
 
   @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  agriculturalFoodScience?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  artsDesign?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  economicsBusinessManagement?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  lawPoliticalScience?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  medicinePharmacyHealthSciences?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  scienceEngineering?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  socialSciencesHumanities?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  sportsPhysicalEducation?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  technology?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  others?: boolean;
+  @IsArray()
+  @IsString({ each: true })
+  academicFields?: string[];
 }

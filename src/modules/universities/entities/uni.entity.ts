@@ -66,35 +66,8 @@ export class UniEntity extends AbstractEntity {
   @Column({ type: 'boolean', nullable: true })
   exchange: boolean;
 
-  @Column({ type: 'boolean', nullable: true })
-  agriculturalFoodScience: boolean;
-
-  @Column({ type: 'boolean', nullable: true })
-  artsDesign: boolean;
-
-  @Column({ type: 'boolean', nullable: true })
-  economicsBusinessManagement: boolean;
-
-  @Column({ type: 'boolean', nullable: true })
-  lawPoliticalScience: boolean;
-
-  @Column({ type: 'boolean', nullable: true })
-  medicinePharmacyHealthSciences: boolean;
-
-  @Column({ type: 'boolean', nullable: true })
-  scienceEngineering: boolean;
-
-  @Column({ type: 'boolean', nullable: true })
-  socialSciencesHumanities: boolean;
-
-  @Column({ type: 'boolean', nullable: true })
-  sportsPhysicalEducation: boolean;
-
-  @Column({ type: 'boolean', nullable: true })
-  technology: boolean;
-
-  @Column({ type: 'boolean', nullable: true })
-  others: boolean;
+  @Column({ type: 'jsonb', nullable: true, default: [] })
+  academicFields: string[];
 
   @Column({ default: false })
   isDeleted: boolean;

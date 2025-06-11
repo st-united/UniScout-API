@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Brackets } from 'typeorm';
 import { unlink } from 'fs/promises';
 import { join, basename } from 'path';
 
@@ -39,29 +39,27 @@ export class UniversityService {
       if (query && query.search && query.search.trim() !== '') {
         const searchTerm = query.search.trim();
         const similarityThreshold = 0.1;
-        const fieldColumns = [
-          'agriculturalFoodScience',
-          'artsDesign',
-          'economicsBusinessManagement',
-          'lawPoliticalScience',
-          'medicinePharmacyHealthSciences',
-          'scienceEngineering',
-          'socialSciencesHumanities',
-          'sportsPhysicalEducation',
-          'technology',
-          'others',
-        ];
 
-        const orConditions: string[] = [
-          `similarity(uni.university, :searchTerm) > :similarityThreshold`,
-          `uni.location ILIKE '%' || :searchTerm || '%'`,
-        ];
+        qb.andWhere(
+          new Brackets((qbInner) => {
+            qbInner
+              .where('similarity(uni.university, :searchTerm) > :similarityThreshold', {
+                searchTerm,
+                similarityThreshold,
+              })
+              .orWhere('uni.location ILIKE :searchPattern', { searchPattern: `%${searchTerm}%` })
+              .orWhere('uni.strength ILIKE :searchPattern', { searchPattern: `%${searchTerm}%` });
 
-        fieldColumns.forEach((col) => {
-          orConditions.push(`(uni.${col} IS TRUE AND '${col}' ILIKE '%' || :searchTerm || '%')`);
-        });
-
-        qb.andWhere(`(${orConditions.join(' OR ')})`, { searchTerm, similarityThreshold });
+            qbInner.orWhere(
+              `EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(uni."academicFields") AS field
+              WHERE field ILIKE :searchPattern
+            )`,
+              { searchPattern: `%${searchTerm}%` }
+            );
+          })
+        );
 
         let country = 'Unknown';
         if (ipAddress) {
@@ -105,12 +103,22 @@ export class UniversityService {
         }
       }
 
-      if (query?.fields) {
-        for (const key in query.fields) {
-          if (Object.prototype.hasOwnProperty.call(query.fields, key) && typeof query.fields[key] === 'boolean') {
-            qb.andWhere(`uni.${key} = :${key}`, { [key]: query.fields[key] });
-          }
-        }
+      // Academic Fields Filter
+      if (query?.fields?.fieldNames && query.fields.fieldNames.length > 0) {
+        query.fields.fieldNames.forEach((fieldName, index) => {
+          qb.andWhere(
+            new Brackets((subQb) => {
+              subQb.where(
+                `EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(uni."academicFields") AS field
+              WHERE field ILIKE :fieldName${index}
+            )`,
+                { [`fieldName${index}`]: `%${fieldName}%` }
+              );
+            })
+          );
+        });
       }
 
       if (query?.minRank) {
@@ -163,6 +171,14 @@ export class UniversityService {
       }
       throw new InternalServerErrorException(`Failed to fetch universities: ${error.message}`);
     }
+  }
+
+  async getAllAvailableAcademicFields(): Promise<string[]> {
+    const result = await this._uniRepository
+      .createQueryBuilder('uni')
+      .select('DISTINCT jsonb_array_elements_text(uni.academicFields)', 'field')
+      .getRawMany();
+    return result.map((row) => row.field);
   }
 
   async getUniversity(id: number, ipAddress?: string): Promise<UniEntity | null> {
@@ -231,6 +247,8 @@ export class UniversityService {
         if (Object.prototype.hasOwnProperty.call(dto, key)) {
           if (key === 'country') {
             updateData.country = dto.country && dto.country.length > 0 ? dto.country[0] : null;
+          } else if (key === 'academicFields' && Array.isArray(dto.academicFields)) {
+            updateData.academicFields = dto.academicFields;
           } else {
             (updateData as any)[key] = (dto as any)[key];
           }

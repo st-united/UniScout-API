@@ -25,14 +25,5 @@ export class UniversityDto {
   @Expose() strength?: string;
   @Expose() description?: string;
   @Expose() exchange?: boolean;
-  @Expose() agriculturalFoodScience?: boolean;
-  @Expose() artsDesign?: boolean;
-  @Expose() economicsBusinessManagement?: boolean;
-  @Expose() lawPoliticalScience?: boolean;
-  @Expose() medicinePharmacyHealthSciences?: boolean;
-  @Expose() scienceEngineering?: boolean;
-  @Expose() socialSciencesHumanities?: boolean;
-  @Expose() sportsPhysicalEducation?: boolean;
-  @Expose() technology?: boolean;
-  @Expose() others?: boolean;
+  @Expose() academicFields?: string[];
 }

@@ -70,6 +70,15 @@ export class UniversityController {
     };
   }
 
+  @Get('academic-fields')
+  async getAcademicFields() {
+    const fields = await this._universityService.getAllAvailableAcademicFields();
+    return {
+      message: 'Academic fields retrieved successfully.',
+      data: fields,
+    };
+  }
+
   @Get(':id')
   async getUniversity(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
     const university = await this._universityService.getUniversity(id, req.ip);
