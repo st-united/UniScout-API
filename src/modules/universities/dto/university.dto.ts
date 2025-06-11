@@ -12,12 +12,11 @@ export class UniversityDto {
   @Expose() location?: string;
   @Expose() studentPopulation?: number;
   @Expose()
-  get size(): 'small' | 'medium' | 'large' | 'mega large' | 'unknown' {
-    if (this.studentPopulation == null) return 'unknown';
+  get size(): 'small' | 'medium' | 'large' | 'extra large' {
     if (this.studentPopulation < 20000) return 'small';
     if (this.studentPopulation < 40000) return 'medium';
     if (this.studentPopulation < 100000) return 'large';
-    return 'mega large';
+    return 'extra large';
   }
   @Expose() year?: number;
   @Expose() contact?: string;
@@ -29,12 +28,11 @@ export class UniversityDto {
   @Expose() agriculturalFoodScience?: boolean;
   @Expose() artsDesign?: boolean;
   @Expose() economicsBusinessManagement?: boolean;
-  @Expose() engineering?: boolean;
   @Expose() lawPoliticalScience?: boolean;
   @Expose() medicinePharmacyHealthSciences?: boolean;
-  @Expose() physicalScience?: boolean;
+  @Expose() scienceEngineering?: boolean;
   @Expose() socialSciencesHumanities?: boolean;
   @Expose() sportsPhysicalEducation?: boolean;
   @Expose() technology?: boolean;
-  @Expose() theology?: boolean;
+  @Expose() others?: boolean;
 }

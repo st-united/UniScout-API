@@ -11,7 +11,7 @@ import { unlink } from 'fs/promises';
 import { join, basename } from 'path';
 
 import { UniEntity } from './entities/uni.entity';
-import { GetUniversityDto, UniversitySizeEnum, SortOrderEnum } from './dto/get-university.dto';
+import { GetUniversityDto, UniversitySizeEnum, SortOrderEnum, SortByEnum } from './dto/get-university.dto';
 import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
 import { GeoIpService, SearchLogService, TrackingService } from '@DashboardModule/services';
@@ -38,28 +38,30 @@ export class UniversityService {
 
       if (query && query.search && query.search.trim() !== '') {
         const searchTerm = query.search.trim();
-
+        const similarityThreshold = 0.1;
         const fieldColumns = [
           'agriculturalFoodScience',
           'artsDesign',
           'economicsBusinessManagement',
-          'engineering',
           'lawPoliticalScience',
           'medicinePharmacyHealthSciences',
-          'physicalScience',
+          'scienceEngineering',
           'socialSciencesHumanities',
           'sportsPhysicalEducation',
           'technology',
-          'theology',
+          'others',
         ];
 
-        const orConditions: string[] = ['uni.university % :searchTerm', 'uni.location % :searchTerm'];
+        const orConditions: string[] = [
+          `similarity(uni.university, :searchTerm) > :similarityThreshold`,
+          `uni.location ILIKE '%' || :searchTerm || '%'`,
+        ];
 
         fieldColumns.forEach((col) => {
           orConditions.push(`(uni.${col} IS TRUE AND '${col}' ILIKE '%' || :searchTerm || '%')`);
         });
 
-        qb.andWhere(`(${orConditions.join(' OR ')})`, { searchTerm });
+        qb.andWhere(`(${orConditions.join(' OR ')})`, { searchTerm, similarityThreshold });
 
         let country = 'Unknown';
         if (ipAddress) {
@@ -97,10 +99,8 @@ export class UniversityService {
               largeThreshold: 100000,
             });
             break;
-          case UniversitySizeEnum.MEGA_LARGE:
+          case UniversitySizeEnum.EXTRA_LARGE:
             qb.andWhere('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
-            break;
-          case UniversitySizeEnum.UNKNOWN:
             break;
         }
       }
@@ -127,23 +127,25 @@ export class UniversityService {
         qb.andWhere('uni.location ILIKE :location', { location: `%${query.location}%` });
       }
 
-      if (query?.search && query.search.trim() !== '') {
-        const orderBySearchTerm = query.search.trim();
-        qb.addOrderBy('similarity(uni.university, :orderBySearchTerm)', 'DESC');
-        qb.setParameter('orderBySearchTerm', orderBySearchTerm);
-      } else {
-        const sortColumn = query?.sortBy ? `uni.${query.sortBy}` : 'uni.id';
-        const sortOrder = query?.sortOrder || SortOrderEnum.ASC;
-        const allowedSortColumns = this._uniRepository.metadata.columns.map((col) => col.propertyName);
-        if (query?.sortBy && !allowedSortColumns.includes(query.sortBy)) {
-          this._logger.warn(`Invalid sortBy column: ${query.sortBy}. Defaulting to 'id'.`);
-          qb.orderBy('uni.id', sortOrder);
-        } else {
-          qb.orderBy(sortColumn, sortOrder);
-        }
-      }
+      const requestedSortOrder =
+        query?.sortOrder?.toUpperCase() === SortOrderEnum.DESC ? SortOrderEnum.DESC : SortOrderEnum.ASC;
 
-      qb.addOrderBy('uni.id', 'ASC');
+      qb.addOrderBy('uni.rank', requestedSortOrder, 'NULLS LAST');
+
+      qb.addOrderBy(
+        `CASE uni.country
+        WHEN 'Vietnam' THEN 1
+        WHEN 'Korea' THEN 2
+        WHEN 'Japan' THEN 3
+        WHEN 'India' THEN 4
+        WHEN 'Australia' THEN 5
+        WHEN 'USA' THEN 6
+        ELSE 7 END`,
+        'ASC',
+        'NULLS LAST'
+      );
+
+      qb.addOrderBy('uni.university', SortOrderEnum.ASC);
 
       const page = query?.page ?? 1;
       const limit = query?.limit ?? 16;

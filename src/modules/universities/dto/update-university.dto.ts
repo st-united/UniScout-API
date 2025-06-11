@@ -120,11 +120,6 @@ export class UpdateUniversityDto {
   @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
-  engineering?: boolean;
-
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
   lawPoliticalScience?: boolean;
 
   @IsOptional()
@@ -135,7 +130,7 @@ export class UpdateUniversityDto {
   @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
-  physicalScience?: boolean;
+  scienceEngineering?: boolean;
 
   @IsOptional()
   @Type(() => Boolean)
@@ -155,5 +150,5 @@ export class UpdateUniversityDto {
   @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
-  theology?: boolean;
+  others?: boolean;
 }

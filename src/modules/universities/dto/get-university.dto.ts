@@ -18,8 +18,7 @@ export enum UniversitySizeEnum {
   SMALL = 'small',
   MEDIUM = 'medium',
   LARGE = 'large',
-  MEGA_LARGE = 'mega large',
-  UNKNOWN = 'unknown',
+  EXTRA_LARGE = 'extra large',
 }
 
 export enum UniversityTypeEnum {
@@ -30,6 +29,10 @@ export enum UniversityTypeEnum {
 export enum SortOrderEnum {
   ASC = 'ASC',
   DESC = 'DESC',
+}
+
+export enum SortByEnum {
+  RANK = 'rank',
 }
 
 export class FieldsFilterDto {
@@ -55,12 +58,6 @@ export class FieldsFilterDto {
   @IsOptional()
   @IsBoolean()
   @Type(() => Boolean)
-  engineering?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
   lawPoliticalScience?: boolean;
 
   @ApiPropertyOptional()
@@ -73,7 +70,7 @@ export class FieldsFilterDto {
   @IsOptional()
   @IsBoolean()
   @Type(() => Boolean)
-  physicalScience?: boolean;
+  scienceEngineering?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -97,7 +94,7 @@ export class FieldsFilterDto {
   @IsOptional()
   @IsBoolean()
   @Type(() => Boolean)
-  theology?: boolean;
+  others?: boolean;
 
   constructor() {
     const logger = new Logger(FieldsFilterDto.name);
@@ -123,7 +120,7 @@ export class GetUniversityDto {
   @Type(() => Number)
   maxRank?: number;
 
-  @ApiPropertyOptional({ description: 'Exact university rank', type: Number })
+  @ApiPropertyOptional({ description: 'University rank', type: Number })
   @IsOptional()
   @IsInt()
   @Type(() => Number)
@@ -179,12 +176,11 @@ export class GetUniversityDto {
 
   @ApiPropertyOptional({
     description: 'Column to sort by',
-    type: String,
-    default: 'id',
+    enum: SortByEnum,
   })
   @IsOptional()
-  @IsString()
-  sortBy?: string = 'id';
+  @IsEnum(SortByEnum)
+  sortBy?: SortByEnum = SortByEnum.RANK;
 
   @ApiPropertyOptional({
     enum: SortOrderEnum,

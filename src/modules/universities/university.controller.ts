@@ -50,7 +50,6 @@ export class UniversityController {
     this._logger.log('Transformed Query DTO (query):', query);
     this._logger.log('Query.fields (after transform):', query.fields);
 
-    // Destructure the response from the service to get the universities array and totalCount
     const { universities, totalCount, currentPage, limit } = await this._universityService.findAll(query, req.ip);
 
     if (!universities || universities.length === 0) {
