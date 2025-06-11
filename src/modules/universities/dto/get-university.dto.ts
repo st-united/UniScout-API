@@ -36,65 +36,11 @@ export enum SortByEnum {
 }
 
 export class FieldsFilterDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Array of field names to filter by' })
   @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  agriculturalFoodScience?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  artsDesign?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  economicsBusinessManagement?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  lawPoliticalScience?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  medicinePharmacyHealthSciences?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  scienceEngineering?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  socialSciencesHumanities?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  sportsPhysicalEducation?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  technology?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  others?: boolean;
+  @IsArray()
+  @IsString({ each: true })
+  fieldNames?: string[];
 
   constructor() {
     const logger = new Logger(FieldsFilterDto.name);

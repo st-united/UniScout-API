@@ -95,59 +95,10 @@ export class CreateUniTable1717391676000 implements MigrationInterface {
             isNullable: true,
           },
           {
-            name: 'agriculturalFoodScience',
-            type: 'boolean',
+            name: 'academicFields',
+            type: 'jsonb',
             isNullable: true,
-          },
-          {
-            name: 'artsDesign',
-            type: 'boolean',
-            isNullable: true,
-          },
-          {
-            name: 'economicsBusinessManagement',
-            type: 'boolean',
-            isNullable: true,
-          },
-          {
-            name: 'engineering',
-            type: 'boolean',
-            isNullable: true,
-          },
-          {
-            name: 'lawPoliticalScience',
-            type: 'boolean',
-            isNullable: true,
-          },
-          {
-            name: 'medicinePharmacyHealthSciences',
-            type: 'boolean',
-            isNullable: true,
-          },
-          {
-            name: 'physicalScience',
-            type: 'boolean',
-            isNullable: true,
-          },
-          {
-            name: 'socialSciencesHumanities',
-            type: 'boolean',
-            isNullable: true,
-          },
-          {
-            name: 'sportsPhysicalEducation',
-            type: 'boolean',
-            isNullable: true,
-          },
-          {
-            name: 'technology',
-            type: 'boolean',
-            isNullable: true,
-          },
-          {
-            name: 'theology',
-            type: 'boolean',
-            isNullable: true,
+            default: `'[]'::jsonb`,
           },
           {
             name: 'isDeleted',
@@ -155,7 +106,6 @@ export class CreateUniTable1717391676000 implements MigrationInterface {
             default: false,
             isNullable: false,
           },
-
           {
             name: 'createdAt',
             type: 'timestamp',
@@ -164,12 +114,33 @@ export class CreateUniTable1717391676000 implements MigrationInterface {
             isNullable: false,
           },
           {
+            name: 'createdBy',
+            type: 'bigint',
+            isNullable: true,
+          },
+          {
             name: 'updatedAt',
             type: 'timestamp',
             precision: 6,
             default: 'CURRENT_TIMESTAMP(6)',
             onUpdate: 'CURRENT_TIMESTAMP(6)',
             isNullable: false,
+          },
+          {
+            name: 'updatedBy',
+            type: 'bigint',
+            isNullable: true,
+          },
+          {
+            name: 'deletedAt',
+            type: 'timestamp',
+            precision: 6,
+            isNullable: true,
+          },
+          {
+            name: 'deletedBy',
+            type: 'bigint',
+            isNullable: true,
           },
         ],
       }),

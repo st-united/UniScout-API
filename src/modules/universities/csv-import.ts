@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UniEntity } from './entities/uni.entity';
@@ -7,12 +7,14 @@ import * as Papa from 'papaparse';
 
 @Injectable()
 export class CsvImport {
+  private readonly _logger = new Logger(CsvImport.name);
+
   constructor(@InjectRepository(UniEntity) private uniRepo: Repository<UniEntity>) {}
 
   async importCsv(filePath: string): Promise<void> {
     const csvData = fs.readFileSync(filePath, 'utf8');
 
-    console.log(`\nImporting universities from: ${filePath}`);
+    this._logger.log(`\nImporting universities from: ${filePath}`);
     const results = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
       Papa.parse(csvData, {
         header: true,
@@ -32,14 +34,37 @@ export class CsvImport {
       const entity = this.mapCsvToEntity(record, i);
 
       await this.uniRepo.upsert(entity, ['university']);
-      console.log(`Processed record ${i + 1}/${totalRecords}: ${entity.university}`);
+      this._logger.log(`Processed record ${i + 1}/${totalRecords}: ${entity.university}`);
     }
 
     const totalCount = await this.uniRepo.count();
-    console.log(`Import completed! Total records: ${totalCount}`);
+    this._logger.log(`Import completed! Total records: ${totalCount}`);
   }
 
   private mapCsvToEntity(record: any, importOrder?: number): Partial<UniEntity> {
+    const academicFields: string[] = [];
+
+    const fieldColumns = [
+      'agricultural_food_science',
+      'arts_design',
+      'economics_business_management',
+      'law_political_science',
+      'medicine_pharmacy_health_sciences',
+      'science_engineering',
+      'social_sciences_humanities',
+      'sports_physical_education',
+      'technology',
+      'others',
+    ];
+
+    fieldColumns.forEach((column) => {
+      const parsedBoolean = this.parseBoolean(record[column]);
+      if (parsedBoolean === true) {
+        const fieldName = column.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+        academicFields.push(fieldName);
+      }
+    });
+
     return {
       university: record.university?.toString().trim() || '',
       latitude: this.parseNumber(record.latitude),
@@ -57,16 +82,7 @@ export class CsvImport {
       strength: record.strength?.toString().trim() || null,
       description: record.description?.toString().trim() || null,
       exchange: this.parseBoolean(record.exchange),
-      agriculturalFoodScience: this.parseBoolean(record.agricultural_food_science),
-      artsDesign: this.parseBoolean(record.arts_design),
-      economicsBusinessManagement: this.parseBoolean(record.economics_business_management),
-      lawPoliticalScience: this.parseBoolean(record.law_political_science),
-      medicinePharmacyHealthSciences: this.parseBoolean(record.medicine_pharmacy_health_sciences),
-      scienceEngineering: this.parseBoolean(record.science_engineering),
-      socialSciencesHumanities: this.parseBoolean(record.social_sciences_humanities),
-      sportsPhysicalEducation: this.parseBoolean(record.sports_physical_education),
-      technology: this.parseBoolean(record.technology),
-      others: this.parseBoolean(record.others),
+      academicFields: academicFields,
     };
   }
 
