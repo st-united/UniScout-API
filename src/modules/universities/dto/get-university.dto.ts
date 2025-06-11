@@ -34,20 +34,6 @@ export enum SortOrderEnum {
 export enum SortByEnum {
   RANK = 'rank',
 }
-
-export class FieldsFilterDto {
-  @ApiPropertyOptional({ description: 'Array of field names to filter by' })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  fieldNames?: string[];
-
-  constructor() {
-    const logger = new Logger(FieldsFilterDto.name);
-    logger.log('FieldsFilterDto instantiated:', this);
-  }
-}
-
 export class GetUniversityDto {
   @ApiPropertyOptional({ description: 'Generic search term for university name, location, or fields' })
   @IsOptional()
@@ -98,13 +84,14 @@ export class GetUniversityDto {
   size?: UniversitySizeEnum;
 
   @ApiPropertyOptional({
-    description: 'Filter by fields of study',
-    type: FieldsFilterDto,
+    description: 'Array of academic field names to filter by',
+    type: [String],
   })
   @IsOptional()
-  @ValidateNested()
-  @Type(() => FieldsFilterDto)
-  fields?: FieldsFilterDto;
+  @IsArray()
+  @IsString({ each: true })
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  fieldNames?: string[];
 
   @ApiPropertyOptional({ description: 'Page number', type: Number, default: 1, minimum: 1 })
   @IsOptional()

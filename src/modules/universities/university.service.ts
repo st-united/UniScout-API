@@ -103,17 +103,16 @@ export class UniversityService {
         }
       }
 
-      // Academic Fields Filter
-      if (query?.fields?.fieldNames && query.fields.fieldNames.length > 0) {
-        query.fields.fieldNames.forEach((fieldName, index) => {
+      if (query?.fieldNames && query.fieldNames.length > 0) {
+        query.fieldNames.forEach((fieldName, index) => {
           qb.andWhere(
             new Brackets((subQb) => {
               subQb.where(
                 `EXISTS (
-              SELECT 1
-              FROM jsonb_array_elements_text(uni."academicFields") AS field
-              WHERE field ILIKE :fieldName${index}
-            )`,
+                  SELECT 1
+                  FROM jsonb_array_elements_text(uni."academicFields") AS field
+                  WHERE field ILIKE :fieldName${index}
+                )`,
                 { [`fieldName${index}`]: `%${fieldName}%` }
               );
             })
