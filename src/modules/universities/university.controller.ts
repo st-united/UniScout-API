@@ -48,7 +48,7 @@ export class UniversityController {
   async findAll(@Query() query: GetUniversityDto, @Req() req: any) {
     this._logger.log('Raw Query Params (req.query):', req.query);
     this._logger.log('Transformed Query DTO (query):', query);
-    this._logger.log('Query.fields (after transform):', query.fields);
+    this._logger.log('Query.fieldNames:', query.fieldNames);
 
     const { universities, totalCount, currentPage, limit } = await this._universityService.findAll(query, req.ip);
 
