@@ -58,10 +58,11 @@ export class GetUniversityDto {
   @Type(() => Number)
   rank?: number;
 
-  @ApiPropertyOptional({ enum: UniversityTypeEnum, description: 'Type of university' })
+  @ApiPropertyOptional({ description: 'Type of university' })
   @IsOptional()
-  @IsEnum(UniversityTypeEnum)
-  type?: UniversityTypeEnum;
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  @IsArray()
+  type?: string[];
 
   @ApiPropertyOptional({
     description: 'Country or list of countries',
@@ -78,10 +79,11 @@ export class GetUniversityDto {
   @IsString()
   location?: string;
 
-  @ApiPropertyOptional({ enum: UniversitySizeEnum, description: 'Size of university' })
+  @ApiPropertyOptional({ description: 'Size of university' })
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
   @IsOptional()
-  @IsEnum(UniversitySizeEnum)
-  size?: UniversitySizeEnum;
+  @IsArray()
+  size?: string[];
 
   @ApiPropertyOptional({
     description: 'Array of academic field names to filter by',

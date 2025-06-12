@@ -70,6 +70,15 @@ export class UniversityController {
     };
   }
 
+  @Get('countries')
+  async getCountries() {
+    const countries = await this._universityService.getAllAvailableCountries();
+    return {
+      message: 'Countries retrieved successfully.',
+      data: countries,
+    };
+  }
+
   @Get('academic-fields')
   async getAcademicFields() {
     const fields = await this._universityService.getAllAvailableAcademicFields();
