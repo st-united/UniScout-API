@@ -1,10 +1,9 @@
-// src/modules/users/dto/user.dto.ts
-import { Expose } from 'class-transformer'; // <-- ADD THIS IMPORT
-import { StatusEnum, UserRole } from '@Constant/enums'; // <-- ADD UserRole import from your constants/enums
+import { Expose } from 'class-transformer';
+import { StatusEnum, UserRole } from '@Constant/enums';
 
 export class UserDto {
   @Expose()
-  id: number; // <-- ADD THIS LINE
+  id: number;
 
   @Expose()
   email: string;
@@ -17,9 +16,6 @@ export class UserDto {
 
   @Expose()
   name: string;
-
-  // @Expose() // <-- REMOVE OR COMMENT OUT THIS FIELD COMPLETELY. Passwords should not be exposed.
-  // password: string;
 
   @Expose()
   dateOfBirth: Date;
