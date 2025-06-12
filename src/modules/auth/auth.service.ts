@@ -126,6 +126,46 @@ export class AuthService {
 
     return new ResponseItem(data, 'Log In Successful!');
   }
+  async logout(userId: string): Promise<ResponseItem<string | null>> {
+    try {
+      console.log(`Attempting logout for userId: ${userId}`);
+      const numericUserId = parseInt(userId, 10); // Use parseInt with radix 10 for safety
+
+      // 1. Find the user to check their current refreshToken status
+      const user = await this.userRepository.findOneBy({ id: numericUserId });
+
+      if (!user) {
+        console.log(`User with ID ${userId} not found.`);
+        throw new BadRequestException('User not found.'); // Or 'Session already expired.'
+      }
+
+      // 2. Check if the user is already logged out (refreshToken is null)
+      if (user.refreshToken === null) {
+        console.log(`User with ID ${userId} is already logged out.`);
+        throw new BadRequestException('User is already logged out.');
+      }
+
+      // 3. If refreshToken exists, proceed with nullifying it
+      // Use the numericUserId here as well for the update operation
+      const updateResult = await this.userRepository.update(numericUserId, { refreshToken: null });
+      console.log('TypeORM Update Result:', updateResult);
+      console.log('Affected rows:', updateResult.affected);
+
+      if (updateResult.affected === 0) {
+        console.log('Update reported 0 affected rows even though refreshToken was not null. Investigate DB behavior.');
+        throw new InternalServerErrorException('Logout failed due to an unexpected database issue.');
+      }
+
+      console.log('Logout successful, refreshToken nullified.');
+      return new ResponseItem(null, 'Logged Out Succesful!');
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
+        throw error;
+      }
+      console.error('Logout failed due to a server error:', error);
+      throw new InternalServerErrorException('Logout failed. Please try again.');
+    }
+  }
 
   async refreshToken(token: string): Promise<ResponseItem<TokenDto>> {
     const user = await this.userRepository.findOneBy({
