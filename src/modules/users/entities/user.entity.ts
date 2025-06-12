@@ -48,9 +48,15 @@ export class UserEntity extends AbstractEntity {
   avatar: string;
 
   @Column({
-    type: 'enum', // Specifies that this is an ENUM column in the database
-    enum: UserRole, // Links to your UserRole TypeScript enum
-    default: UserRole.USER, // Sets a default role for new users if not provided
+    type: 'enum',
+    enum: UserRole,
+    default: UserRole.USER,
   })
   role: UserRole;
+
+  @Column({ type: 'int', default: 0 })
+  failedLoginAttempts: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lockoutUntil: Date | null;
 }

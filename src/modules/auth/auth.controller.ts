@@ -13,12 +13,12 @@ import { UserDto } from '@UsersModule/dto/user.dto';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // @UseGuards(LocalAuthGuard)
-  // @HttpCode(200)
-  // @Post('login')
-  // async login(@Req() request): Promise<ResponseItem<TokenDto>> {
-  //   return this.authService.login(request.user);
-  // }
+  @UseGuards(LocalAuthGuard)
+  @HttpCode(200)
+  @Post('login')
+  async login(@Req() request): Promise<ResponseItem<TokenDto>> {
+    return this.authService.login(request.user);
+  }
 
   @UseGuards(JwtAccessTokenGuard)
   @Get('logout')
