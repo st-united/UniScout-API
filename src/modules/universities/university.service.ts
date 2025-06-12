@@ -172,10 +172,21 @@ export class UniversityService {
     }
   }
 
+  async getAllAvailableCountries(): Promise<string[]> {
+    const countries = await this._uniRepository
+      .createQueryBuilder('uni')
+      .select('DISTINCT uni.country', 'country')
+      .orderBy('uni.country', 'ASC')
+      .getRawMany();
+
+    return countries.map((c) => c.country);
+  }
+
   async getAllAvailableAcademicFields(): Promise<string[]> {
     const result = await this._uniRepository
       .createQueryBuilder('uni')
       .select('DISTINCT jsonb_array_elements_text(uni.academicFields)', 'field')
+      .orderBy('uni.academicFields', 'ASC')
       .getRawMany();
     return result.map((row) => row.field);
   }
