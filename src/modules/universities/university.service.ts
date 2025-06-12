@@ -72,35 +72,80 @@ export class UniversityService {
         await this._searchLogService.logSearch(query.search, country);
       }
 
-      if (query?.type) {
-        qb.andWhere('uni.type = :type', { type: query.type });
+      if (query?.type && query.type.length > 0) {
+        qb.andWhere('uni.type IN (:...types)', { types: query.type });
       }
 
       if (query?.country && query.country.length > 0) {
         qb.andWhere('uni.country IN (:...countries)', { countries: query.country });
       }
 
-      if (query?.size) {
-        switch (query.size) {
-          case UniversitySizeEnum.SMALL:
-            qb.andWhere('uni.studentPopulation < :smallThreshold', { smallThreshold: 20000 });
-            break;
-          case UniversitySizeEnum.MEDIUM:
-            qb.andWhere('uni.studentPopulation >= :smallThreshold AND uni.studentPopulation < :mediumThreshold', {
-              smallThreshold: 20000,
-              mediumThreshold: 40000,
+      if (query?.size && query.size.length > 0) {
+        qb.andWhere(
+          new Brackets((qbInner) => {
+            query.size.forEach((size, index) => {
+              if (index > 0)
+                qbInner.orWhere(
+                  new Brackets((subQb) => {
+                    switch (size) {
+                      case UniversitySizeEnum.SMALL:
+                        subQb.where('uni.studentPopulation < :smallThreshold', { smallThreshold: 20000 });
+                        break;
+                      case UniversitySizeEnum.MEDIUM:
+                        subQb.where(
+                          'uni.studentPopulation >= :smallThreshold AND uni.studentPopulation < :mediumThreshold',
+                          {
+                            smallThreshold: 20000,
+                            mediumThreshold: 40000,
+                          }
+                        );
+                        break;
+                      case UniversitySizeEnum.LARGE:
+                        subQb.where(
+                          'uni.studentPopulation >= :mediumThreshold AND uni.studentPopulation < :largeThreshold',
+                          {
+                            mediumThreshold: 40000,
+                            largeThreshold: 100000,
+                          }
+                        );
+                        break;
+                      case UniversitySizeEnum.EXTRA_LARGE:
+                        subQb.where('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
+                        break;
+                    }
+                  })
+                );
+              else {
+                switch (size) {
+                  case UniversitySizeEnum.SMALL:
+                    qbInner.where('uni.studentPopulation < :smallThreshold', { smallThreshold: 20000 });
+                    break;
+                  case UniversitySizeEnum.MEDIUM:
+                    qbInner.where(
+                      'uni.studentPopulation >= :smallThreshold AND uni.studentPopulation < :mediumThreshold',
+                      {
+                        smallThreshold: 20000,
+                        mediumThreshold: 40000,
+                      }
+                    );
+                    break;
+                  case UniversitySizeEnum.LARGE:
+                    qbInner.where(
+                      'uni.studentPopulation >= :mediumThreshold AND uni.studentPopulation < :largeThreshold',
+                      {
+                        mediumThreshold: 40000,
+                        largeThreshold: 100000,
+                      }
+                    );
+                    break;
+                  case UniversitySizeEnum.EXTRA_LARGE:
+                    qbInner.where('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
+                    break;
+                }
+              }
             });
-            break;
-          case UniversitySizeEnum.LARGE:
-            qb.andWhere('uni.studentPopulation >= :mediumThreshold AND uni.studentPopulation < :largeThreshold', {
-              mediumThreshold: 40000,
-              largeThreshold: 100000,
-            });
-            break;
-          case UniversitySizeEnum.EXTRA_LARGE:
-            qb.andWhere('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
-            break;
-        }
+          })
+        );
       }
 
       if (query?.fieldNames && query.fieldNames.length > 0) {
