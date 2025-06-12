@@ -34,7 +34,7 @@ export class AuthService {
   async register(registerDto: RegisterUserDto): Promise<ResponseItem<UserDto>> {
     const emailExisted = await this.userRepository.findOneBy({
       email: registerDto.email,
-      deletedAt: null, // Important: check for non-deleted users
+      deletedAt: null,
     });
     if (emailExisted) {
       throw new BadRequestException('Email Already Exist!');
@@ -47,40 +47,32 @@ export class AuthService {
     try {
       const user = await this.userRepository.findOneBy({
         email: credentialsDto.email,
-        deletedAt: null, // Ensure not a soft-deleted user
+        deletedAt: null,
       });
 
-      // 1. Check if user exists and is active
       if (!user || user.status !== StatusEnum.ACTIVE) {
-        // Increment attempts for unknown/inactive user attempts as well to prevent enumeration attacks
-        // However, we can't lock out a non-existent user.
-        // For security, always return the same generic message.
         throw new UnauthorizedException('Invalid username or password.');
       }
 
-      // 2. Check for account lockout
       if (user.lockoutUntil && user.lockoutUntil > new Date()) {
         const remainingTime = Math.ceil((user.lockoutUntil.getTime() - new Date().getTime()) / (1000 * 60));
         throw new UnauthorizedException(`Account locked. Please try again in ${remainingTime} minutes.`);
       }
 
-      // 3. Compare password
-      const comparePassword = await bcrypt.compare(credentialsDto.password, user.password); // Use await with bcrypt.compare
+      const comparePassword = await bcrypt.compare(credentialsDto.password, user.password);
 
       if (!comparePassword) {
-        // Incorrect password: Increment failed attempts
         user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
 
         if (user.failedLoginAttempts >= this.MAX_LOGIN_ATTEMPTS) {
-          // Lock the account
           user.lockoutUntil = new Date(Date.now() + this.LOCKOUT_DURATION_MINUTES * 60 * 1000);
-          user.failedLoginAttempts = 0; // Reset for next lockout period if needed
-          await this.userRepository.save(user); // Save lockout state
+          user.failedLoginAttempts = 0;
+          await this.userRepository.save(user);
           throw new UnauthorizedException(
             `Invalid username or password. Account locked for ${this.LOCKOUT_DURATION_MINUTES} minutes due to multiple failed attempts.`
           );
         } else {
-          await this.userRepository.save(user); // Save incremented attempts
+          await this.userRepository.save(user);
           throw new UnauthorizedException('Invalid username or password.');
         }
       }
@@ -99,7 +91,6 @@ export class AuthService {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      console.error('Login validation error:', error);
       throw new InternalServerErrorException('Login failed due to server error. Please try again later.');
     }
   }
@@ -125,6 +116,32 @@ export class AuthService {
     };
 
     return new ResponseItem(data, 'Log In Successful!');
+  }
+  async logout(userId: string): Promise<ResponseItem<string | null>> {
+    try {
+      const numericUserId = parseInt(userId, 10);
+
+      const user = await this.userRepository.findOneBy({ id: numericUserId });
+
+      if (!user) {
+        throw new BadRequestException('User not found.');
+      }
+      if (user.refreshToken === null) {
+        throw new BadRequestException('User is already logged out.');
+      }
+      const updateResult = await this.userRepository.update(numericUserId, { refreshToken: null });
+
+      if (updateResult.affected === 0) {
+        throw new InternalServerErrorException('Logout failed due to an unexpected database issue.');
+      }
+
+      return new ResponseItem(null, 'Logged Out Succesful!');
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Logout failed. Please try again.');
+    }
   }
 
   async refreshToken(token: string): Promise<ResponseItem<TokenDto>> {
