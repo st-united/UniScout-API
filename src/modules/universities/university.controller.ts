@@ -16,17 +16,21 @@ import {
   Logger,
   UsePipes,
   Req,
+  Res,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { plainToInstance } from 'class-transformer';
+import { Response } from 'express';
 
 import { UniversityService } from './university.service';
 import { GetUniversityDto } from './dto/get-university.dto';
 import { UniversityDto } from './dto/university.dto';
 import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
+import { ExportUniversityDto } from './dto/export-university.dto';
+import { Readable } from 'stream';
 
 @Controller('universities')
 export class UniversityController {
@@ -68,6 +72,35 @@ export class UniversityController {
       currentPage: currentPage,
       limit: limit,
     };
+  }
+
+  @Get('export')
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    })
+  )
+  async exportUniversities(@Query() query: ExportUniversityDto, @Res() res: Response) {
+    try {
+      const { format, ...filters } = query;
+      const { data, filename, contentType } = await this._universityService.exportUniversities(filters, format);
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+      const readableStream = new Readable();
+      readableStream.push(data);
+      readableStream.push(null);
+
+      readableStream.pipe(res);
+    } catch (error) {
+      this._logger.error(`Export failed: ${error.message}`, error.stack);
+      throw new BadRequestException('Export failed. Please try again later.');
+    }
   }
 
   @Get('countries')
