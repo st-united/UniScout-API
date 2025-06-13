@@ -241,7 +241,7 @@ export class UniversityService {
     const result = await this._uniRepository
       .createQueryBuilder('uni')
       .select('DISTINCT jsonb_array_elements_text(uni.academicFields)', 'field')
-      .orderBy('uni.academicFields', 'ASC')
+      .orderBy('field', 'ASC')
       .getRawMany();
     return result.map((row) => row.field);
   }
