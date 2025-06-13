@@ -14,6 +14,9 @@ export enum UniversitySizeEnum {
 export enum UniversityTypeEnum {
   PUBLIC = 'public',
   PRIVATE = 'private',
+  COLLEGE = 'college',
+  ACADEMY = 'academy',
+  INTERNATIONAL = 'international',
 }
 
 export enum SortOrderEnum {
