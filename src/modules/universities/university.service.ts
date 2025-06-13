@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets } from 'typeorm';
+import { Repository, Brackets, In } from 'typeorm';
 import { unlink } from 'fs/promises';
 import { join, basename } from 'path';
 
@@ -28,7 +28,6 @@ export class UniversityService {
     private readonly _searchLogService: SearchLogService
   ) {}
 
-  //View University
   async findAll(
     query?: GetUniversityDto,
     ipAddress?: string
@@ -52,10 +51,10 @@ export class UniversityService {
 
             qbInner.orWhere(
               `EXISTS (
-              SELECT 1
-              FROM jsonb_array_elements_text(uni."academicFields") AS field
-              WHERE field ILIKE :searchPattern
-            )`,
+                SELECT 1
+                FROM jsonb_array_elements_text(uni."academicFields") AS field
+                WHERE field ILIKE :searchPattern
+              )`,
               { searchPattern: `%${searchTerm}%` }
             );
           })
@@ -165,6 +164,40 @@ export class UniversityService {
         });
       }
 
+      if (query?.agriculturalFoodScience === true) {
+        qb.andWhere('uni.agriculturalFoodScience = true');
+      }
+      if (query?.artsDesign === true) {
+        qb.andWhere('uni.artsDesign = true');
+      }
+      if (query?.economicsBusinessManagement === true) {
+        qb.andWhere('uni.economicsBusinessManagement = true');
+      }
+      if (query?.engineering === true) {
+        qb.andWhere('uni.engineering = true');
+      }
+      if (query?.lawPoliticalScience === true) {
+        qb.andWhere('uni.lawPoliticalScience = true');
+      }
+      if (query?.medicinePharmacyHealthSciences === true) {
+        qb.andWhere('uni.medicinePharmacyHealthSciences = true');
+      }
+      if (query?.physicalScience === true) {
+        qb.andWhere('uni.physicalScience = true');
+      }
+      if (query?.socialSciencesHumanities === true) {
+        qb.andWhere('uni.socialSciencesHumanities = true');
+      }
+      if (query?.sportsPhysicalEducation === true) {
+        qb.andWhere('uni.sportsPhysicalEducation = true');
+      }
+      if (query?.technology === true) {
+        qb.andWhere('uni.technology = true');
+      }
+      if (query?.theology === true) {
+        qb.andWhere('uni.theology = true');
+      }
+
       if (query?.minRank) {
         qb.andWhere('uni.rank >= :minRank', { minRank: query.minRank });
       }
@@ -216,6 +249,182 @@ export class UniversityService {
       throw new InternalServerErrorException(`Failed to fetch universities: ${error.message}`);
     }
   }
+  async countAll(filter?: GetUniversityDto): Promise<number> {
+    try {
+      const qb = this._uniRepository.createQueryBuilder('uni');
+      if (filter && filter.search && filter.search.trim() !== '') {
+        const searchTerm = filter.search.trim();
+        const similarityThreshold = 0.1;
+
+        qb.andWhere(
+          new Brackets((qbInner) => {
+            qbInner
+              .where('similarity(uni.university, :searchTerm) > :similarityThreshold', {
+                searchTerm,
+                similarityThreshold,
+              })
+              .orWhere('uni.location ILIKE :searchPattern', { searchPattern: `%${searchTerm}%` })
+              .orWhere('uni.strength ILIKE :searchPattern', { searchPattern: `%${searchTerm}%` });
+
+            qbInner.orWhere(
+              `EXISTS (
+                  SELECT 1
+                  FROM jsonb_array_elements_text(uni."academicFields") AS field
+                  WHERE field ILIKE :searchPattern
+                )`,
+              { searchPattern: `%${searchTerm}%` }
+            );
+          })
+        );
+      }
+
+      if (filter?.type && filter.type.length > 0) {
+        qb.andWhere('uni.type IN (:...types)', { types: filter.type });
+      }
+
+      if (filter?.country && filter.country.length > 0) {
+        qb.andWhere('uni.country IN (:...countries)', { countries: filter.country });
+      }
+
+      if (filter?.size && filter.size.length > 0) {
+        qb.andWhere(
+          new Brackets((qbInner) => {
+            filter.size.forEach((size, index) => {
+              if (index > 0)
+                qbInner.orWhere(
+                  new Brackets((subQb) => {
+                    switch (size) {
+                      case UniversitySizeEnum.SMALL:
+                        subQb.where('uni.studentPopulation < :smallThreshold', { smallThreshold: 20000 });
+                        break;
+                      case UniversitySizeEnum.MEDIUM:
+                        subQb.where(
+                          'uni.studentPopulation >= :smallThreshold AND uni.studentPopulation < :mediumThreshold',
+                          {
+                            smallThreshold: 20000,
+                            mediumThreshold: 40000,
+                          }
+                        );
+                        break;
+                      case UniversitySizeEnum.LARGE:
+                        subQb.where(
+                          'uni.studentPopulation >= :mediumThreshold AND uni.studentPopulation < :largeThreshold',
+                          {
+                            mediumThreshold: 40000,
+                            largeThreshold: 100000,
+                          }
+                        );
+                        break;
+                      case UniversitySizeEnum.EXTRA_LARGE:
+                        subQb.where('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
+                        break;
+                    }
+                  })
+                );
+              else {
+                switch (size) {
+                  case UniversitySizeEnum.SMALL:
+                    qbInner.where('uni.studentPopulation < :smallThreshold', { smallThreshold: 20000 });
+                    break;
+                  case UniversitySizeEnum.MEDIUM:
+                    qbInner.where(
+                      'uni.studentPopulation >= :smallThreshold AND uni.studentPopulation < :mediumThreshold',
+                      {
+                        smallThreshold: 20000,
+                        mediumThreshold: 40000,
+                      }
+                    );
+                    break;
+                  case UniversitySizeEnum.LARGE:
+                    qbInner.where(
+                      'uni.studentPopulation >= :mediumThreshold AND uni.studentPopulation < :largeThreshold',
+                      {
+                        mediumThreshold: 40000,
+                        largeThreshold: 100000,
+                      }
+                    );
+                    break;
+                  case UniversitySizeEnum.EXTRA_LARGE:
+                    qbInner.where('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
+                    break;
+                }
+              }
+            });
+          })
+        );
+      }
+
+      if (filter?.fieldNames && filter.fieldNames.length > 0) {
+        filter.fieldNames.forEach((fieldName, index) => {
+          qb.andWhere(
+            new Brackets((subQb) => {
+              subQb.where(
+                `EXISTS (
+                  SELECT 1
+                  FROM jsonb_array_elements_text(uni."academicFields") AS field
+                  WHERE field ILIKE :fieldName${index}
+                )`,
+                { [`fieldName${index}`]: `%${fieldName}%` }
+              );
+            })
+          );
+        });
+      }
+      if (filter?.agriculturalFoodScience === true) {
+        qb.andWhere('uni.agriculturalFoodScience = true');
+      }
+      if (filter?.artsDesign === true) {
+        qb.andWhere('uni.artsDesign = true');
+      }
+      if (filter?.economicsBusinessManagement === true) {
+        qb.andWhere('uni.economicsBusinessManagement = true');
+      }
+      if (filter?.engineering === true) {
+        qb.andWhere('uni.engineering = true');
+      }
+      if (filter?.lawPoliticalScience === true) {
+        qb.andWhere('uni.lawPoliticalScience = true');
+      }
+      if (filter?.medicinePharmacyHealthSciences === true) {
+        qb.andWhere('uni.medicinePharmacyHealthSciences = true');
+      }
+      if (filter?.physicalScience === true) {
+        qb.andWhere('uni.physicalScience = true');
+      }
+      if (filter?.socialSciencesHumanities === true) {
+        qb.andWhere('uni.socialSciencesHumanities = true');
+      }
+      if (filter?.sportsPhysicalEducation === true) {
+        qb.andWhere('uni.sportsPhysicalEducation = true');
+      }
+      if (filter?.technology === true) {
+        qb.andWhere('uni.technology = true');
+      }
+      if (filter?.theology === true) {
+        qb.andWhere('uni.theology = true');
+      }
+
+      if (filter?.minRank) {
+        qb.andWhere('uni.rank >= :minRank', { minRank: filter.minRank });
+      }
+      if (filter?.maxRank) {
+        qb.andWhere('uni.rank <= :maxRank', { maxRank: filter.maxRank });
+      }
+      if (filter?.rank) {
+        qb.andWhere('uni.rank = :rank', { rank: filter.rank });
+      }
+
+      if (filter?.location && !filter.search) {
+        qb.andWhere('uni.location ILIKE :location', { location: `%${filter.location}%` });
+      }
+
+      const totalCount = await qb.getCount();
+      return totalCount;
+    } catch (error) {
+      this._logger.error(`Error counting universities: ${error.message}`, error.stack);
+      throw new InternalServerErrorException(`Failed to count universities: ${error.message}`);
+    }
+  }
 
   async getAllAvailableCountries(): Promise<string[]> {
     const countries = await this._uniRepository
@@ -264,7 +473,6 @@ export class UniversityService {
     }
   }
 
-  //Validator
   async getValidCountries(): Promise<string[]> {
     const countries = await this._uniRepository
       .createQueryBuilder('uni')
@@ -274,7 +482,20 @@ export class UniversityService {
     return countries.map((c) => c.country);
   }
 
-  //Create University
+  async findByIds(ids: number[]): Promise<UniEntity[]> {
+    if (!ids || ids.length === 0) {
+      return [];
+    }
+    try {
+      return await this._uniRepository.find({
+        where: { id: In(ids) },
+      });
+    } catch (error) {
+      this._logger.error(`Failed to find universities by IDs: ${error.message}`, error.stack);
+      throw new InternalServerErrorException(`Failed to find universities by IDs: ${error.message}`);
+    }
+  }
+
   async create(createDto: CreateUniversityDto & { logo: string }): Promise<UniEntity> {
     try {
       const uni = this._uniRepository.create({
@@ -287,7 +508,6 @@ export class UniversityService {
     }
   }
 
-  //Update University
   async updateUniversity(id: number, dto: UpdateUniversityDto): Promise<{ message: string; data: UniEntity }> {
     try {
       const university = await this._uniRepository.findOne({ where: { id } });

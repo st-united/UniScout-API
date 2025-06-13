@@ -34,6 +34,7 @@ export enum SortOrderEnum {
 export enum SortByEnum {
   RANK = 'rank',
 }
+
 export class GetUniversityDto {
   @ApiPropertyOptional({ description: 'Generic search term for university name, location, or fields' })
   @IsOptional()
@@ -62,6 +63,7 @@ export class GetUniversityDto {
   @IsOptional()
   @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
   @IsArray()
+  @IsEnum(UniversityTypeEnum, { each: true }) // Added explicit enum validation
   type?: string[];
 
   @ApiPropertyOptional({
@@ -83,6 +85,7 @@ export class GetUniversityDto {
   @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
   @IsOptional()
   @IsArray()
+  @IsEnum(UniversitySizeEnum, { each: true }) // Added explicit enum validation
   size?: string[];
 
   @ApiPropertyOptional({
@@ -125,6 +128,72 @@ export class GetUniversityDto {
   @IsOptional()
   @IsEnum(SortOrderEnum, { message: 'sortOrder must be ASC or DESC' })
   sortOrder?: SortOrderEnum = SortOrderEnum.ASC;
+
+  @ApiPropertyOptional({ description: 'Filter by Agricultural & Food Science programs' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  agriculturalFoodScience?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by Arts & Design programs' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  artsDesign?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by Economics & Business Management programs' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  economicsBusinessManagement?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by Engineering programs' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  engineering?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by Law & Political Science programs' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  lawPoliticalScience?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by Medicine, Pharmacy & Health Sciences programs' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  medicinePharmacyHealthSciences?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by Physical Science programs' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  physicalScience?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by Social Sciences & Humanities programs' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  socialSciencesHumanities?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by Sports & Physical Education programs' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  sportsPhysicalEducation?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by Technology programs' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  technology?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by Theology programs' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  theology?: boolean;
 
   constructor() {
     const logger = new Logger(GetUniversityDto.name);

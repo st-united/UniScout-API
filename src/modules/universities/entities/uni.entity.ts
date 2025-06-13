@@ -71,4 +71,36 @@ export class UniEntity extends AbstractEntity {
 
   @Column({ default: false })
   isDeleted: boolean;
+  @Column({ type: 'boolean', default: false })
+  agriculturalFoodScience: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  artsDesign: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  economicsBusinessManagement: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  engineering: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  lawPoliticalScience: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  medicinePharmacyHealthSciences: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  physicalScience: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  socialSciencesHumanities: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  sportsPhysicalEducation: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  technology: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  theology: boolean;
 }
