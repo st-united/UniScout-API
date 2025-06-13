@@ -1,14 +1,4 @@
-import {
-  IsOptional,
-  IsString,
-  IsEnum,
-  IsInt,
-  Min,
-  ValidateNested,
-  IsBoolean,
-  IsArray,
-  Validate,
-} from 'class-validator';
+import { IsOptional, IsString, IsEnum, IsInt, Min, IsArray, Validate } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { IsCountryValidConstraint } from '@UniversitiesModule/validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -24,6 +14,9 @@ export enum UniversitySizeEnum {
 export enum UniversityTypeEnum {
   PUBLIC = 'public',
   PRIVATE = 'private',
+  COLLEGE = 'college',
+  ACADEMY = 'academy',
+  INTERNATIONAL = 'international',
 }
 
 export enum SortOrderEnum {

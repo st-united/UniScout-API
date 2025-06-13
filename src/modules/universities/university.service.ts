@@ -6,15 +6,18 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets } from 'typeorm';
+import { Repository, Brackets, SelectQueryBuilder } from 'typeorm';
 import { unlink } from 'fs/promises';
 import { join, basename } from 'path';
+import { stringify } from 'csv-stringify';
+import * as ExcelJS from 'exceljs';
 
 import { UniEntity } from './entities/uni.entity';
-import { GetUniversityDto, UniversitySizeEnum, SortOrderEnum, SortByEnum } from './dto/get-university.dto';
+import { GetUniversityDto, UniversitySizeEnum, SortOrderEnum } from './dto/get-university.dto';
 import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
 import { GeoIpService, SearchLogService, TrackingService } from '@DashboardModule/services';
+import { ExportUniversityDto, ExportFormat } from './dto/export-university.dto';
 
 @Injectable()
 export class UniversityService {
@@ -28,6 +31,162 @@ export class UniversityService {
     private readonly _searchLogService: SearchLogService
   ) {}
 
+  private _applyFilters(qb: SelectQueryBuilder<UniEntity>, query: GetUniversityDto | ExportUniversityDto) {
+    if (query && query.search && query.search.trim() !== '') {
+      const searchTerm = query.search.trim();
+      const similarityThreshold = 0.1;
+
+      qb.andWhere(
+        new Brackets((qbInner) => {
+          qbInner
+            .where('similarity(uni.university, :searchTerm) > :similarityThreshold', {
+              searchTerm,
+              similarityThreshold,
+            })
+            .orWhere('uni.location ILIKE :searchPattern', { searchPattern: `%${searchTerm}%` })
+            .orWhere('uni.strength ILIKE :searchPattern', { searchPattern: `%${searchTerm}%` });
+
+          qbInner.orWhere(
+            `EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(uni."academicFields") AS field
+              WHERE field ILIKE :searchPattern
+            )`,
+            { searchPattern: `%${searchTerm}%` }
+          );
+        })
+      );
+    }
+
+    if (query?.type && query.type.length > 0) {
+      qb.andWhere('uni.type IN (:...types)', { types: query.type });
+    }
+
+    if (query?.country && query.country.length > 0) {
+      qb.andWhere('uni.country IN (:...countries)', { countries: query.country });
+    }
+
+    if (query?.size && query.size.length > 0) {
+      qb.andWhere(
+        new Brackets((qbInner) => {
+          query.size.forEach((size, index) => {
+            if (index > 0)
+              qbInner.orWhere(
+                new Brackets((subQb) => {
+                  switch (size) {
+                    case UniversitySizeEnum.SMALL:
+                      subQb.where('uni.studentPopulation < :smallThreshold', { smallThreshold: 20000 });
+                      break;
+                    case UniversitySizeEnum.MEDIUM:
+                      subQb.where(
+                        'uni.studentPopulation >= :smallThreshold AND uni.studentPopulation < :mediumThreshold',
+                        {
+                          smallThreshold: 20000,
+                          mediumThreshold: 40000,
+                        }
+                      );
+                      break;
+                    case UniversitySizeEnum.LARGE:
+                      subQb.where(
+                        'uni.studentPopulation >= :mediumThreshold AND uni.studentPopulation < :largeThreshold',
+                        {
+                          mediumThreshold: 40000,
+                          largeThreshold: 100000,
+                        }
+                      );
+                      break;
+                    case UniversitySizeEnum.EXTRA_LARGE:
+                      subQb.where('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
+                      break;
+                  }
+                })
+              );
+            else {
+              switch (size) {
+                case UniversitySizeEnum.SMALL:
+                  qbInner.where('uni.studentPopulation < :smallThreshold', { smallThreshold: 20000 });
+                  break;
+                case UniversitySizeEnum.MEDIUM:
+                  qbInner.where(
+                    'uni.studentPopulation >= :smallThreshold AND uni.studentPopulation < :mediumThreshold',
+                    {
+                      smallThreshold: 20000,
+                      mediumThreshold: 40000,
+                    }
+                  );
+                  break;
+                case UniversitySizeEnum.LARGE:
+                  qbInner.where(
+                    'uni.studentPopulation >= :mediumThreshold AND uni.studentPopulation < :largeThreshold',
+                    {
+                      mediumThreshold: 40000,
+                      largeThreshold: 100000,
+                    }
+                  );
+                  break;
+                case UniversitySizeEnum.EXTRA_LARGE:
+                  qbInner.where('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
+                  break;
+              }
+            }
+          });
+        })
+      );
+    }
+
+    if (query?.fieldNames && query.fieldNames.length > 0) {
+      query.fieldNames.forEach((fieldName, index) => {
+        qb.andWhere(
+          new Brackets((subQb) => {
+            subQb.where(
+              `EXISTS (
+                  SELECT 1
+                  FROM jsonb_array_elements_text(uni."academicFields") AS field
+                  WHERE field ILIKE :fieldName${index}
+                )`,
+              { [`fieldName${index}`]: `%${fieldName}%` }
+            );
+          })
+        );
+      });
+    }
+
+    if (query?.minRank) {
+      qb.andWhere('uni.rank >= :minRank', { minRank: query.minRank });
+    }
+    if (query?.maxRank) {
+      qb.andWhere('uni.rank <= :maxRank', { maxRank: query.maxRank });
+    }
+    if (query?.rank) {
+      qb.andWhere('uni.rank = :rank', { rank: query.rank });
+    }
+
+    if (query?.location && !query.search) {
+      qb.andWhere('uni.location ILIKE :location', { location: `%${query.location}%` });
+    }
+  }
+
+  private _applySorting(qb: SelectQueryBuilder<UniEntity>, sortOrder?: SortOrderEnum) {
+    const requestedSortOrder = sortOrder?.toUpperCase() === SortOrderEnum.DESC ? SortOrderEnum.DESC : SortOrderEnum.ASC;
+
+    qb.addOrderBy('uni.rank', requestedSortOrder, 'NULLS LAST');
+
+    qb.addOrderBy(
+      `CASE uni.country
+        WHEN 'Vietnam' THEN 1
+        WHEN 'Korea' THEN 2
+        WHEN 'Japan' THEN 3
+        WHEN 'India' THEN 4
+        WHEN 'Australia' THEN 5
+        WHEN 'USA' THEN 6
+        ELSE 7 END`,
+      'ASC',
+      'NULLS LAST'
+    );
+
+    qb.addOrderBy('uni.university', SortOrderEnum.ASC);
+  }
+
   //View University
   async findAll(
     query?: GetUniversityDto,
@@ -36,168 +195,19 @@ export class UniversityService {
     try {
       const qb = this._uniRepository.createQueryBuilder('uni');
 
-      if (query && query.search && query.search.trim() !== '') {
-        const searchTerm = query.search.trim();
-        const similarityThreshold = 0.1;
+      this._applyFilters(qb, query);
+      this._applySorting(qb, query?.sortOrder);
 
-        qb.andWhere(
-          new Brackets((qbInner) => {
-            qbInner
-              .where('similarity(uni.university, :searchTerm) > :similarityThreshold', {
-                searchTerm,
-                similarityThreshold,
-              })
-              .orWhere('uni.location ILIKE :searchPattern', { searchPattern: `%${searchTerm}%` })
-              .orWhere('uni.strength ILIKE :searchPattern', { searchPattern: `%${searchTerm}%` });
-
-            qbInner.orWhere(
-              `EXISTS (
-              SELECT 1
-              FROM jsonb_array_elements_text(uni."academicFields") AS field
-              WHERE field ILIKE :searchPattern
-            )`,
-              { searchPattern: `%${searchTerm}%` }
-            );
-          })
-        );
-
+      if (query && query.search && ipAddress) {
         let country = 'Unknown';
-        if (ipAddress) {
-          country = await this._geoIpService.getCountryFromIp(ipAddress);
-          this._logger.log(`Country resolved by GeoIpService for findAll: ${country}`);
-        } else {
-          this._logger.warn('No IP address provided to UniversityService.findAll. Country will be Unknown.');
-        }
+        country = await this._geoIpService.getCountryFromIp(ipAddress);
+        this._logger.log(`Country resolved by GeoIpService for findAll: ${country}`);
         this._logger.log(`Logging search with country: ${country}`);
         await this._searchLogService.logSearch(query.search, country);
+      } else if (query && query.search) {
+        this._logger.warn('No IP address provided to UniversityService.findAll. Country will be Unknown.');
+        await this._searchLogService.logSearch(query.search, 'Unknown');
       }
-
-      if (query?.type && query.type.length > 0) {
-        qb.andWhere('uni.type IN (:...types)', { types: query.type });
-      }
-
-      if (query?.country && query.country.length > 0) {
-        qb.andWhere('uni.country IN (:...countries)', { countries: query.country });
-      }
-
-      if (query?.size && query.size.length > 0) {
-        qb.andWhere(
-          new Brackets((qbInner) => {
-            query.size.forEach((size, index) => {
-              if (index > 0)
-                qbInner.orWhere(
-                  new Brackets((subQb) => {
-                    switch (size) {
-                      case UniversitySizeEnum.SMALL:
-                        subQb.where('uni.studentPopulation < :smallThreshold', { smallThreshold: 20000 });
-                        break;
-                      case UniversitySizeEnum.MEDIUM:
-                        subQb.where(
-                          'uni.studentPopulation >= :smallThreshold AND uni.studentPopulation < :mediumThreshold',
-                          {
-                            smallThreshold: 20000,
-                            mediumThreshold: 40000,
-                          }
-                        );
-                        break;
-                      case UniversitySizeEnum.LARGE:
-                        subQb.where(
-                          'uni.studentPopulation >= :mediumThreshold AND uni.studentPopulation < :largeThreshold',
-                          {
-                            mediumThreshold: 40000,
-                            largeThreshold: 100000,
-                          }
-                        );
-                        break;
-                      case UniversitySizeEnum.EXTRA_LARGE:
-                        subQb.where('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
-                        break;
-                    }
-                  })
-                );
-              else {
-                switch (size) {
-                  case UniversitySizeEnum.SMALL:
-                    qbInner.where('uni.studentPopulation < :smallThreshold', { smallThreshold: 20000 });
-                    break;
-                  case UniversitySizeEnum.MEDIUM:
-                    qbInner.where(
-                      'uni.studentPopulation >= :smallThreshold AND uni.studentPopulation < :mediumThreshold',
-                      {
-                        smallThreshold: 20000,
-                        mediumThreshold: 40000,
-                      }
-                    );
-                    break;
-                  case UniversitySizeEnum.LARGE:
-                    qbInner.where(
-                      'uni.studentPopulation >= :mediumThreshold AND uni.studentPopulation < :largeThreshold',
-                      {
-                        mediumThreshold: 40000,
-                        largeThreshold: 100000,
-                      }
-                    );
-                    break;
-                  case UniversitySizeEnum.EXTRA_LARGE:
-                    qbInner.where('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
-                    break;
-                }
-              }
-            });
-          })
-        );
-      }
-
-      if (query?.fieldNames && query.fieldNames.length > 0) {
-        query.fieldNames.forEach((fieldName, index) => {
-          qb.andWhere(
-            new Brackets((subQb) => {
-              subQb.where(
-                `EXISTS (
-                  SELECT 1
-                  FROM jsonb_array_elements_text(uni."academicFields") AS field
-                  WHERE field ILIKE :fieldName${index}
-                )`,
-                { [`fieldName${index}`]: `%${fieldName}%` }
-              );
-            })
-          );
-        });
-      }
-
-      if (query?.minRank) {
-        qb.andWhere('uni.rank >= :minRank', { minRank: query.minRank });
-      }
-      if (query?.maxRank) {
-        qb.andWhere('uni.rank <= :maxRank', { maxRank: query.maxRank });
-      }
-      if (query?.rank) {
-        qb.andWhere('uni.rank = :rank', { rank: query.rank });
-      }
-
-      if (query?.location && !query.search) {
-        qb.andWhere('uni.location ILIKE :location', { location: `%${query.location}%` });
-      }
-
-      const requestedSortOrder =
-        query?.sortOrder?.toUpperCase() === SortOrderEnum.DESC ? SortOrderEnum.DESC : SortOrderEnum.ASC;
-
-      qb.addOrderBy('uni.rank', requestedSortOrder, 'NULLS LAST');
-
-      qb.addOrderBy(
-        `CASE uni.country
-        WHEN 'Vietnam' THEN 1
-        WHEN 'Korea' THEN 2
-        WHEN 'Japan' THEN 3
-        WHEN 'India' THEN 4
-        WHEN 'Australia' THEN 5
-        WHEN 'USA' THEN 6
-        ELSE 7 END`,
-        'ASC',
-        'NULLS LAST'
-      );
-
-      qb.addOrderBy('uni.university', SortOrderEnum.ASC);
 
       const page = query?.page ?? 1;
       const limit = query?.limit ?? 16;
@@ -231,7 +241,7 @@ export class UniversityService {
     const result = await this._uniRepository
       .createQueryBuilder('uni')
       .select('DISTINCT jsonb_array_elements_text(uni.academicFields)', 'field')
-      .orderBy('uni.academicFields', 'ASC')
+      .orderBy('field', 'ASC')
       .getRawMany();
     return result.map((row) => row.field);
   }
@@ -368,5 +378,102 @@ export class UniversityService {
     } catch (error) {
       this._logger.warn(`Failed to delete logo file ${logoFilename}: ${error.message}`);
     }
+  }
+
+  async exportUniversities(
+    query: Omit<ExportUniversityDto, 'format'>,
+    format: ExportFormat
+  ): Promise<{ data: Buffer; filename: string; contentType: string }> {
+    try {
+      const qb = this._uniRepository.createQueryBuilder('uni');
+
+      this._applyFilters(qb, query);
+      this._applySorting(qb, query?.sortOrder);
+
+      const universities = await qb.getMany();
+
+      let columnsToInclude: string[];
+
+      if (query.columns && query.columns.length > 0) {
+        columnsToInclude = query.columns;
+      } else {
+        if (universities.length > 0) {
+          columnsToInclude = Object.keys(universities[0]);
+        } else {
+          columnsToInclude = [];
+        }
+      }
+
+      if (format === ExportFormat.CSV) {
+        return await this.exportCSV(universities, columnsToInclude);
+      } else if (format === ExportFormat.EXCEL) {
+        return await this.exportExcel(universities, columnsToInclude);
+      } else {
+        throw new BadRequestException('Unsupported export format');
+      }
+    } catch (error) {
+      this._logger.error(`Export error: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Failed to export universities');
+    }
+  }
+
+  private async exportCSV(universities: UniEntity[], columns: string[]) {
+    return new Promise<{ data: Buffer; filename: string; contentType: string }>((resolve, reject) => {
+      const stringifier = stringify({ header: true, columns });
+      const chunks: Buffer[] = [];
+
+      stringifier.on('readable', () => {
+        let row;
+        while ((row = stringifier.read()) !== null) {
+          chunks.push(Buffer.from(row));
+        }
+      });
+
+      stringifier.on('error', (err) => reject(err));
+      stringifier.on('finish', () => {
+        const data = Buffer.concat(chunks);
+        resolve({
+          data,
+          filename: `universities_${Date.now()}.csv`,
+          contentType: 'text/csv',
+        });
+      });
+
+      universities.forEach((u) => {
+        const row: Record<string, any> = {};
+        columns.forEach((col) => {
+          row[col] = (u as any)[col];
+        });
+        stringifier.write(row);
+      });
+
+      stringifier.end();
+    });
+  }
+
+  private async exportExcel(universities: UniEntity[], columns: string[]) {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Universities');
+
+    worksheet.columns = columns.map((col) => ({
+      header: col.charAt(0).toUpperCase() + col.slice(1),
+      key: col,
+      width: 20,
+    }));
+
+    universities.forEach((u) => {
+      const row: Record<string, any> = {};
+      columns.forEach((col) => {
+        row[col] = (u as any)[col];
+      });
+      worksheet.addRow(row);
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return {
+      data: Buffer.from(buffer),
+      filename: `universities_${Date.now()}.xlsx`,
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
   }
 }
