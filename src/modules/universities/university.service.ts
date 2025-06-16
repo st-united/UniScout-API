@@ -34,25 +34,34 @@ export class UniversityService {
   private _applyFilters(qb: SelectQueryBuilder<UniEntity>, query: GetUniversityDto | ExportUniversityDto) {
     if (query && query.search && query.search.trim() !== '') {
       const searchTerm = query.search.trim();
-      const similarityThreshold = 0.1;
+      const similarityThreshold = 0.3;
 
       qb.andWhere(
         new Brackets((qbInner) => {
           qbInner
-            .where('similarity(uni.university, :searchTerm) > :similarityThreshold', {
+            .where('uni.university ILIKE :exactSearchTerm', { exactSearchTerm: searchTerm })
+            .orWhere('similarity(uni.university, :searchTerm) > :similarityThreshold', {
+              searchTerm,
+              similarityThreshold,
+            });
+
+          qbInner
+            .orWhere('similarity(uni.location, :searchTerm) > :similarityThreshold', {
               searchTerm,
               similarityThreshold,
             })
-            .orWhere('uni.location ILIKE :searchPattern', { searchPattern: `%${searchTerm}%` })
-            .orWhere('uni.strength ILIKE :searchPattern', { searchPattern: `%${searchTerm}%` });
+            .orWhere('similarity(uni.strength, :searchTerm) > :similarityThreshold', {
+              searchTerm,
+              similarityThreshold,
+            });
 
           qbInner.orWhere(
             `EXISTS (
               SELECT 1
               FROM jsonb_array_elements_text(uni."academicFields") AS field
-              WHERE field ILIKE :searchPattern
+              WHERE similarity(field, :searchTerm) > :similarityThreshold
             )`,
-            { searchPattern: `%${searchTerm}%` }
+            { searchTerm, similarityThreshold }
           );
         })
       );
@@ -166,10 +175,18 @@ export class UniversityService {
     }
   }
 
-  private _applySorting(qb: SelectQueryBuilder<UniEntity>, sortOrder?: SortOrderEnum) {
+  private _applySorting(qb: SelectQueryBuilder<UniEntity>, sortOrder?: SortOrderEnum, searchTerm?: string) {
     const requestedSortOrder = sortOrder?.toUpperCase() === SortOrderEnum.DESC ? SortOrderEnum.DESC : SortOrderEnum.ASC;
+    const nullsOrder = requestedSortOrder === SortOrderEnum.DESC ? 'NULLS FIRST' : 'NULLS LAST';
 
-    qb.addOrderBy('uni.rank', requestedSortOrder, 'NULLS LAST');
+    if (searchTerm) {
+      qb.addOrderBy(`similarity(uni.university, :searchTerm)`, 'DESC', 'NULLS LAST');
+      qb.addOrderBy(`similarity(uni.location, :searchTerm)`, 'DESC', 'NULLS LAST');
+      qb.addOrderBy(`similarity(uni.strength, :searchTerm)`, 'DESC', 'NULLS LAST');
+      qb.setParameter('searchTerm', searchTerm);
+    }
+
+    qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
 
     qb.addOrderBy(
       `CASE uni.country
@@ -196,7 +213,7 @@ export class UniversityService {
       const qb = this._uniRepository.createQueryBuilder('uni');
 
       this._applyFilters(qb, query);
-      this._applySorting(qb, query?.sortOrder);
+      this._applySorting(qb, query?.sortOrder, query?.search);
 
       if (query && query.search && ipAddress) {
         let country = 'Unknown';
@@ -210,7 +227,7 @@ export class UniversityService {
       }
 
       const page = query?.page ?? 1;
-      const limit = query?.limit ?? 16;
+      const limit = query?.limit ?? 18;
 
       const [universities, totalCount] = await qb
         .skip((page - 1) * limit)
