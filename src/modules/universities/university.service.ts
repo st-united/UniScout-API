@@ -31,40 +31,33 @@ export class UniversityService {
     private readonly _searchLogService: SearchLogService
   ) {}
 
-  private _applyFilters(qb: SelectQueryBuilder<UniEntity>, query: GetUniversityDto | ExportUniversityDto) {
-    if (query && query.search && query.search.trim() !== '') {
+  private async _applyFilters(qb: SelectQueryBuilder<UniEntity>, query: GetUniversityDto | ExportUniversityDto) {
+    if (query?.search?.trim()) {
       const searchTerm = query.search.trim();
-      const similarityThreshold = 0.3;
 
-      qb.andWhere(
-        new Brackets((qbInner) => {
-          qbInner
-            .where('uni.university ILIKE :exactSearchTerm', { exactSearchTerm: searchTerm })
-            .orWhere('similarity(uni.university, :searchTerm) > :similarityThreshold', {
-              searchTerm,
-              similarityThreshold,
-            });
+      const similarityThreshold = 0.4;
+      const exactMatchQb = this._uniRepository.createQueryBuilder('uni_exact');
+      exactMatchQb.andWhere('uni_exact.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
 
-          qbInner
-            .orWhere('similarity(uni.location, :searchTerm) > :similarityThreshold', {
-              searchTerm,
-              similarityThreshold,
-            })
-            .orWhere('similarity(uni.strength, :searchTerm) > :similarityThreshold', {
-              searchTerm,
-              similarityThreshold,
-            });
+      const exactCount = await exactMatchQb.getCount();
 
-          qbInner.orWhere(
-            `EXISTS (
-              SELECT 1
-              FROM jsonb_array_elements_text(uni."academicFields") AS field
-              WHERE similarity(field, :searchTerm) > :similarityThreshold
-            )`,
-            { searchTerm, similarityThreshold }
-          );
-        })
-      );
+      if (exactCount > 0) {
+        qb.andWhere('uni.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
+      } else {
+        qb.andWhere(
+          new Brackets((qbInner) => {
+            qbInner
+              .where('word_similarity(:searchTerm, uni.university) > :similarityThreshold', {
+                searchTerm,
+                similarityThreshold,
+              })
+              .orWhere('word_similarity(:searchTerm,uni.location) > :similarityThreshold', {
+                searchTerm,
+                similarityThreshold,
+              });
+          })
+        );
+      }
     }
 
     if (query?.type && query.type.length > 0) {
