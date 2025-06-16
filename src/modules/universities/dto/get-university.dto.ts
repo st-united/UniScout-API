@@ -28,7 +28,7 @@ export enum SortByEnum {
   RANK = 'rank',
 }
 export class GetUniversityDto {
-  @ApiPropertyOptional({ description: 'Generic search term for university name, location, or fields' })
+  @ApiPropertyOptional({ description: 'Generic search term for university name or location' })
   @IsOptional()
   @IsString()
   search?: string;
