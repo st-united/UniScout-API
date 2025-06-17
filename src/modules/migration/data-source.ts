@@ -2,6 +2,7 @@ import { DataSource } from 'typeorm';
 import * as dotenv from 'dotenv';
 import { UniEntity } from '@UniversitiesModule/entities/uni.entity';
 import { CreateSearchLogTable1749539773000 } from './search-table';
+import { CreateTrackingTable17185134613000 } from './tracking-table';
 import { CreateUniTable1717391676000 } from './uni-table';
 import { EnablePgTrgmAndIndexOnUni1717391677000 } from './pg-trgm';
 import { SearchIndex1749539773000 } from './search-index';
@@ -20,6 +21,7 @@ export const AppDataSource = new DataSource({
   entities: [UniEntity],
   migrations: [
     CreateSearchLogTable1749539773000,
+    CreateTrackingTable17185134613000,
     CreateUniTable1717391676000,
     EnablePgTrgmAndIndexOnUni1717391677000,
     SearchIndex1749539773000,
