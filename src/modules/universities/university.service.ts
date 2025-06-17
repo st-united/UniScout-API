@@ -31,7 +31,11 @@ export class UniversityService {
     private readonly _searchLogService: SearchLogService
   ) {}
 
-  private async _applyFilters(qb: SelectQueryBuilder<UniEntity>, query: GetUniversityDto | ExportUniversityDto) {
+  private async _applyFilters(
+    qb: SelectQueryBuilder<UniEntity>,
+    query: GetUniversityDto | ExportUniversityDto
+  ): Promise<boolean> {
+    let isExactMatch = false;
     if (query?.search?.trim()) {
       const searchTerm = query.search.trim();
 
@@ -43,6 +47,7 @@ export class UniversityService {
 
       if (exactCount > 0) {
         qb.andWhere('uni.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
+        isExactMatch = true;
       } else {
         qb.andWhere(
           new Brackets((qbInner) => {
@@ -166,30 +171,41 @@ export class UniversityService {
     if (query?.location && !query.search) {
       qb.andWhere('uni.location ILIKE :location', { location: `%${query.location}%` });
     }
+    return isExactMatch;
   }
 
-  private _applySorting(qb: SelectQueryBuilder<UniEntity>, sortOrder?: SortOrderEnum, searchTerm?: string) {
+  private _applySorting(
+    qb: SelectQueryBuilder<UniEntity>,
+    sortOrder?: SortOrderEnum,
+    searchTerm?: string,
+    isExactMatch?: boolean
+  ) {
     const requestedSortOrder = sortOrder?.toUpperCase() === SortOrderEnum.DESC ? SortOrderEnum.DESC : SortOrderEnum.ASC;
     const nullsOrder = requestedSortOrder === SortOrderEnum.DESC ? 'NULLS FIRST' : 'NULLS LAST';
 
     if (searchTerm) {
-      qb.addOrderBy(`similarity(uni.university, :searchTerm)`, 'DESC', 'NULLS LAST');
-      qb.addOrderBy(`similarity(uni.location, :searchTerm)`, 'DESC', 'NULLS LAST');
-      qb.addOrderBy(`similarity(uni.strength, :searchTerm)`, 'DESC', 'NULLS LAST');
-      qb.setParameter('searchTerm', searchTerm);
-    }
+      if (isExactMatch) {
+        qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
+      } else {
+        qb.addOrderBy(`similarity(uni.university, :searchTerm)`, 'DESC', 'NULLS LAST');
+        qb.addOrderBy(`similarity(uni.location, :searchTerm)`, 'DESC', 'NULLS LAST');
+        qb.setParameter('searchTerm', searchTerm);
 
-    qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
+        qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
+      }
+    } else {
+      qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
+    }
 
     qb.addOrderBy(
       `CASE uni.country
-        WHEN 'Vietnam' THEN 1
-        WHEN 'Korea' THEN 2
-        WHEN 'Japan' THEN 3
-        WHEN 'India' THEN 4
-        WHEN 'Australia' THEN 5
-        WHEN 'USA' THEN 6
-        ELSE 7 END`,
+            WHEN 'Vietnam' THEN 1
+            WHEN 'Korea' THEN 2
+            WHEN 'Japan' THEN 3
+            WHEN 'India' THEN 4
+            WHEN 'Australia' THEN 5
+            WHEN 'USA' THEN 6
+            ELSE 7 END`,
       'ASC',
       'NULLS LAST'
     );
@@ -205,8 +221,8 @@ export class UniversityService {
     try {
       const qb = this._uniRepository.createQueryBuilder('uni');
 
-      this._applyFilters(qb, query);
-      this._applySorting(qb, query?.sortOrder, query?.search);
+      const isExactMatch = await this._applyFilters(qb, query);
+      this._applySorting(qb, query?.sortOrder, query?.search, isExactMatch);
 
       if (query && query.search && ipAddress) {
         let country = 'Unknown';
