@@ -41,12 +41,25 @@ export class UniversityService {
 
       const similarityThreshold = 0.4;
       const exactMatchQb = this._uniRepository.createQueryBuilder('uni_exact');
-      exactMatchQb.andWhere('uni_exact.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
+
+      exactMatchQb.andWhere(
+        new Brackets((qbInner) => {
+          qbInner
+            .where('uni_exact.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+            .orWhere('uni_exact.location ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
+        })
+      );
 
       const exactCount = await exactMatchQb.getCount();
 
       if (exactCount > 0) {
-        qb.andWhere('uni.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
+        qb.andWhere(
+          new Brackets((qbInner) => {
+            qbInner
+              .where('uni.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+              .orWhere('uni.location ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
+          })
+        );
         isExactMatch = true;
       } else {
         qb.andWhere(
