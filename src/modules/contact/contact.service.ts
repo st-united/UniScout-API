@@ -70,6 +70,35 @@ export class ContactService {
 
       await this._transporter.sendMail(mailOptions);
       this._logger.log(`Contact form email sent successfully from ${senderEmail}.`);
+      const acknowledgmentMailOptions = {
+        from: `UNISCOUT <${this._configService.get<string>('EMAIL_USER')}>`, // Your company email
+        to: senderEmail,
+        subject: 'UNISCOUT - We received your message!',
+        html: `
+          <p>Dear ${name},</p>
+          <p>Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon as possible.</p>
+          <p>Here's a copy of your submission details:</p>
+          <h3>Your Details:</h3>
+          <p><strong>Name:</strong> ${name}</p>
+          <p><strong>Email:</strong> ${senderEmail}</p>
+          <p><strong>Phone Number:</strong> ${phoneNumber || 'N/A'}</p>
+          <p><strong>University Name:</strong> ${universityName || 'N/A'}</p>
+          <p><strong>Request Type:</strong> ${requestType}</p>
+          <p><strong>Country:</strong> ${country || 'N/A'}</p>
+          <h3>Your Message:</h3>
+          <p>${message}</p>
+          <p>If you have any urgent queries, feel free to reach out to us directly.</p>
+          <p>Best regards,<br>The UNISCOUT Team</p>
+        `,
+        text: `Dear ${name},\n\nThank you for contacting UNISCOUT. We have received your message and will get back to you as soon as possible.\n\nHere's a copy of your submission details:\n\nYour Details:\nName: ${name}\nEmail: ${senderEmail}\nPhone Number: ${
+          phoneNumber || 'N/A'
+        }\nUniversity Name: ${universityName || 'N/A'}\nRequest Type: ${requestType}\nCountry: ${
+          country || 'N/A'
+        }\n\nYour Message:\n${message}\n\nIf you have any urgent queries, feel free to reach out to us directly.\n\nBest regards,\nThe UNISCOUT Team`,
+      };
+
+      await this._transporter.sendMail(acknowledgmentMailOptions);
+      this._logger.log(`Acknowledgment email sent successfully to ${senderEmail}.`);
 
       const newSubmission = this._contactSubmissionRepo.create({
         email: senderEmail,
