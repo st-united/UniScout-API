@@ -11,6 +11,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ContactModule } from '@ContactModule/contact.module';
 import { UsersModule } from '@UsersModule/users.module';
 import { DashboardModule } from '@DashboardModule/dashboard.module';
+import { ChatbotModule } from './modules/chatbot/chatbot.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { DashboardModule } from '@DashboardModule/dashboard.module';
     DashboardModule,
     UniversitiesModule,
     UsersModule,
+    ChatbotModule,
   ],
   providers: [
     {
