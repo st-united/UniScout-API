@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets, SelectQueryBuilder } from 'typeorm';
+import { Repository, Brackets, SelectQueryBuilder, In } from 'typeorm';
 import { unlink } from 'fs/promises';
 import { join, basename } from 'path';
 import { stringify } from 'csv-stringify';
@@ -41,12 +41,25 @@ export class UniversityService {
 
       const similarityThreshold = 0.4;
       const exactMatchQb = this._uniRepository.createQueryBuilder('uni_exact');
-      exactMatchQb.andWhere('uni_exact.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
+
+      exactMatchQb.andWhere(
+        new Brackets((qbInner) => {
+          qbInner
+            .where('uni_exact.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+            .orWhere('uni_exact.location ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
+        })
+      );
 
       const exactCount = await exactMatchQb.getCount();
 
       if (exactCount > 0) {
-        qb.andWhere('uni.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
+        qb.andWhere(
+          new Brackets((qbInner) => {
+            qbInner
+              .where('uni.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+              .orWhere('uni.location ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
+          })
+        );
         isExactMatch = true;
       } else {
         qb.andWhere(
@@ -252,7 +265,35 @@ export class UniversityService {
       throw new InternalServerErrorException(`Failed to fetch universities: ${error.message}`);
     }
   }
+  async countAll(query?: GetUniversityDto | ExportUniversityDto): Promise<number> {
+    try {
+      const qb = this._uniRepository.createQueryBuilder('uni');
+      qb.where('uni.isDeleted = :isDeleted', { isDeleted: false }); // Always filter out soft-deleted universities
 
+      this._applyFilters(qb, query);
+
+      const totalCount = await qb.getCount();
+      return totalCount;
+    } catch (error) {
+      this._logger.error(`Error counting universities: ${error.message}`, error.stack);
+      throw new InternalServerErrorException(`Failed to count universities: ${error.message}`);
+    }
+  }
+
+  async findByIds(ids: number[]): Promise<UniEntity[]> {
+    try {
+      if (!ids || ids.length === 0) {
+        return [];
+      }
+      const universities = await this._uniRepository.find({
+        where: { id: In(ids), isDeleted: false }, // Ensure not soft-deleted
+      });
+      return universities;
+    } catch (error) {
+      this._logger.error(`Error finding universities by IDs: ${error.message}`, error.stack);
+      throw new InternalServerErrorException(`Failed to find universities by IDs: ${error.message}`);
+    }
+  }
   async getAllAvailableCountries(): Promise<string[]> {
     const countries = await this._uniRepository
       .createQueryBuilder('uni')
