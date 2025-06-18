@@ -6,26 +6,35 @@ import { JwtModule } from '@nestjs/jwt';
 
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+
+// Import your specific strategies
 import { LocalStrategy } from './strategies/local.strategy';
 import { JwtAccessTokenStrategy } from './strategies/jwt-access-token.strategy';
-import { UserEntity } from '@UsersModule/entities';
 import { JwtRefreshTokenStrategy } from './strategies/jwt-refresh-token.strategy';
+
+import { UsersModule } from '../users/users.module';
+import { UserEntity } from '@UsersModule/entities';
 
 @Module({
   imports: [
-    PassportModule,
+    PassportModule.register({ defaultStrategy: 'jwt-access-token' }),
+
     TypeOrmModule.forFeature([UserEntity]),
+
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_ACCESS_SECRETKEY'),
-        signOptions: { expiresIn: `${configService.get<number>('JWT_ACCESS_EXPIRES')}` },
+        signOptions: { expiresIn: configService.get<string>('JWT_ACCESS_EXPIRES') },
       }),
     }),
+
+    UsersModule,
+    ConfigModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, LocalStrategy, JwtAccessTokenStrategy, JwtRefreshTokenStrategy, ConfigService],
-  exports: [AuthService],
+  providers: [AuthService, LocalStrategy, JwtAccessTokenStrategy, JwtRefreshTokenStrategy],
+  exports: [AuthService, PassportModule, JwtModule],
 })
 export class AuthModule {}

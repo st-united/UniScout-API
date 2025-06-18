@@ -1,12 +1,14 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException, InternalServerErrorException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
+import { plainToClass } from 'class-transformer';
 
 import { UserEntity } from '@UsersModule/entities';
 import { CredentialsDto } from './dto/credentials.dto';
 import { StatusEnum } from '@Constant/enums';
+import { UserRole } from '@Constant/enums';
 import { UserPayloadDto } from './dto/user-payload.dto';
 import { JwtPayload } from '@Constant/types';
 import { ResponseItem } from '@app/common/dtos';
@@ -17,40 +19,84 @@ import { RegisterUserDto } from './dto/register-user.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly MAX_LOGIN_ATTEMPTS: number;
+  private readonly LOCKOUT_DURATION_MINUTES: number;
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     @InjectRepository(UserEntity)
     private userRepository: Repository<UserEntity>
-  ) {}
-
-  async register(registerDto: RegisterUserDto): Promise<ResponseItem<UserDto>> {
-    const user = await this.userRepository.create(registerDto);
-    await this.userRepository.save(user);
-    return new ResponseItem(user, 'Tạo tài khoản thành công');
+  ) {
+    this.MAX_LOGIN_ATTEMPTS = this.configService.get<number>('MAX_LOGIN_ATTEMPTS', 3);
+    this.LOCKOUT_DURATION_MINUTES = this.configService.get<number>('LOCKOUT_DURATION_MINUTES', 15);
   }
 
-  async validateUser(credentialsDto: CredentialsDto): Promise<UserPayloadDto> {
-    const user = await this.userRepository.findOneBy({
-      email: credentialsDto.email,
-      status: StatusEnum.ACTIVE,
-      deletedBy: null,
+  async register(registerDto: RegisterUserDto): Promise<ResponseItem<UserDto>> {
+    const emailExisted = await this.userRepository.findOneBy({
+      email: registerDto.email,
+      deletedAt: null,
     });
+    if (emailExisted) {
+      throw new BadRequestException('Email Already Exist!');
+    }
+    const user = await this.userRepository.create(registerDto);
+    await this.userRepository.save(user);
+    return new ResponseItem(user, 'Account Created Successful!');
+  }
+  async validateUser(credentialsDto: CredentialsDto): Promise<UserPayloadDto> {
+    try {
+      const user = await this.userRepository.findOneBy({
+        email: credentialsDto.email,
+        deletedAt: null,
+      });
 
-    if (!user) throw new UnauthorizedException('Tài khoản không đúng');
+      if (!user || user.status !== StatusEnum.ACTIVE) {
+        throw new UnauthorizedException('Invalid username or password.');
+      }
 
-    const comparePassword = await bcrypt.compareSync(credentialsDto.password, user.password);
-    if (!comparePassword) throw new UnauthorizedException('Tài khoản không đúng');
+      if (user.lockoutUntil && user.lockoutUntil > new Date()) {
+        const remainingTime = Math.ceil((user.lockoutUntil.getTime() - new Date().getTime()) / (1000 * 60));
+        throw new UnauthorizedException(`Account locked. Please try again in ${remainingTime} minutes.`);
+      }
 
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-    };
+      const comparePassword = await bcrypt.compare(credentialsDto.password, user.password);
+
+      if (!comparePassword) {
+        user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+
+        if (user.failedLoginAttempts >= this.MAX_LOGIN_ATTEMPTS) {
+          user.lockoutUntil = new Date(Date.now() + this.LOCKOUT_DURATION_MINUTES * 60 * 1000);
+          user.failedLoginAttempts = 0;
+          await this.userRepository.save(user);
+          throw new UnauthorizedException(
+            `Invalid username or password. Account locked for ${this.LOCKOUT_DURATION_MINUTES} minutes due to multiple failed attempts.`
+          );
+        } else {
+          await this.userRepository.save(user);
+          throw new UnauthorizedException('Invalid username or password.');
+        }
+      }
+
+      user.failedLoginAttempts = 0;
+      user.lockoutUntil = null;
+      await this.userRepository.save(user);
+
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      };
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Login failed due to server error. Please try again later.');
+    }
   }
 
   async login(userPayloadDto: UserPayloadDto): Promise<ResponseItem<TokenDto>> {
-    const payload: JwtPayload = { sub: userPayloadDto.id, email: userPayloadDto.email };
+    const payload: JwtPayload = { sub: userPayloadDto.id, email: userPayloadDto.email, role: userPayloadDto.role };
 
     const refreshToken = this.jwtService.sign(payload, {
       secret: this.configService.get<string>('JWT_REFRESH_SECRETKEY'),
@@ -69,16 +115,33 @@ export class AuthService {
       refreshToken,
     };
 
-    return new ResponseItem(data, 'Đăng nhập thành công');
+    return new ResponseItem(data, 'Log In Successful!');
   }
+  async logout(userId: string): Promise<ResponseItem<string | null>> {
+    try {
+      const numericUserId = parseInt(userId, 10);
 
-  async logout(userId: string) {
-    const logout = await this.userRepository.update(userId, { refreshToken: null });
-    if (!logout) {
-      throw new BadRequestException('Đăng xuất không thành công');
+      const user = await this.userRepository.findOneBy({ id: numericUserId });
+
+      if (!user) {
+        throw new BadRequestException('User not found.');
+      }
+      if (user.refreshToken === null) {
+        throw new BadRequestException('User is already logged out.');
+      }
+      const updateResult = await this.userRepository.update(numericUserId, { refreshToken: null });
+
+      if (updateResult.affected === 0) {
+        throw new InternalServerErrorException('Logout failed due to an unexpected database issue.');
+      }
+
+      return new ResponseItem(null, 'Logged Out Succesful!');
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Logout failed. Please try again.');
     }
-
-    return new ResponseItem('', 'Đăng xuất thành công');
   }
 
   async refreshToken(token: string): Promise<ResponseItem<TokenDto>> {
@@ -88,8 +151,8 @@ export class AuthService {
       deletedBy: null,
     });
 
-    if (!user) throw new UnauthorizedException('Tài khoản không đúng');
-    const payload: JwtPayload = { sub: user.id, email: user.email };
+    if (!user) throw new UnauthorizedException('Incorrect Account!');
+    const payload: JwtPayload = { sub: user.id, email: user.email, role: user.role };
 
     const data = {
       accessToken: this.jwtService.sign(payload, {
@@ -98,6 +161,6 @@ export class AuthService {
       }),
     };
 
-    return new ResponseItem(data, 'Làm mới token thành công');
+    return new ResponseItem(data, 'Refresh Token Successful!');
   }
 }

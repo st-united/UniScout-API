@@ -3,11 +3,15 @@ import { ClassSerializerInterceptor, MiddlewareConsumer, Module, NestModule, Req
 import { ConfigModule } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 
-import { UsersModule } from '@UsersModule/users.module';
+import { UniversitiesModule } from '@UniversitiesModule/university.module';
 import { DatabaseModule } from '@app/config/database.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { XMLMiddleware } from './common/middleware/xml.middleware';
 import { AuthModule } from './modules/auth/auth.module';
+import { ContactModule } from '@ContactModule/contact.module';
+import { UsersModule } from '@UsersModule/users.module';
+import { DashboardModule } from '@DashboardModule/dashboard.module';
+import { ChatbotModule } from './modules/chatbot/chatbot.module';
 
 @Module({
   imports: [
@@ -27,11 +31,18 @@ import { AuthModule } from './modules/auth/auth.module';
         JWT_ACCESS_EXPIRES: Joi.string().required(),
         JWT_REFRESH_SECRETKEY: Joi.string().required(),
         JWT_REFRESH_EXPIRES: Joi.string().required(),
+        // GEMINI_API_KEY: Joi.string().required(),
       }),
+      isGlobal: true,
+      envFilePath: '.env',
     }),
     DatabaseModule,
-    UsersModule,
     AuthModule,
+    ContactModule,
+    DashboardModule,
+    UniversitiesModule,
+    UsersModule,
+    ChatbotModule,
   ],
   providers: [
     {

@@ -2,7 +2,7 @@ import * as bcrypt from 'bcrypt';
 import { Exclude } from 'class-transformer';
 import { BeforeInsert, Column, Entity, JoinTable, ManyToMany, ManyToOne, Unique } from 'typeorm';
 
-import { StatusEnum } from '@Constant/enums';
+import { StatusEnum, UserRole } from '@Constant/enums';
 import { AbstractEntity } from '@Entity/abstract.entity';
 
 @Entity('users')
@@ -46,4 +46,17 @@ export class UserEntity extends AbstractEntity {
 
   @Column({ type: 'varchar', nullable: true })
   avatar: string;
+
+  @Column({
+    type: 'enum',
+    enum: UserRole,
+    default: UserRole.USER,
+  })
+  role: UserRole;
+
+  @Column({ type: 'int', default: 0 })
+  failedLoginAttempts: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lockoutUntil: Date | null;
 }
