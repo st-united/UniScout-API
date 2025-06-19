@@ -13,7 +13,7 @@ export class IsCountryValidConstraint implements ValidatorConstraintInterface {
   async validate(countries: any[], args: ValidationArguments): Promise<boolean> {
     try {
       if (!Array.isArray(countries)) return false;
-      const validCountries = await this._universityService.getValidCountries();
+      const validCountries = await this._universityService.getAllAvailableCountries();
       return countries.every((country) => validCountries.includes(country));
     } catch (err) {
       console.error('Error in IsCountryValidConstraint.validate:', err);

@@ -59,7 +59,7 @@ export class ChatbotService {
 
   private async initializeValidCountries() {
     try {
-      this._validCountries = await this._universityService.getValidCountries();
+      this._validCountries = await this._universityService.getAllAvailableCountries();
     } catch (error) {
       this._logger.error(`Failed to initialize valid countries: ${error.message}`, error.stack);
     }
@@ -723,9 +723,5 @@ ${index + 1}. ${uni.university}
       this._logger.error(`Error generating suggested questions: ${error.message}`, error.stack);
       return this.STANDARD_QUESTIONS;
     }
-  }
-
-  async getValidCountries(): Promise<string[]> {
-    return await this._universityService.getValidCountries();
   }
 }
