@@ -95,12 +95,12 @@ export class GetUniversityDto {
   @Type(() => Number)
   page = 1;
 
-  @ApiPropertyOptional({ description: 'Number of items per page', type: Number, default: 18, minimum: 1 })
+  @ApiPropertyOptional({ description: 'Number of items per page', type: Number, minimum: 1 })
   @IsOptional()
   @IsInt()
   @Min(1)
   @Type(() => Number)
-  limit = 18;
+  limit?: number;
 
   @ApiPropertyOptional({
     description: 'Column to sort by',

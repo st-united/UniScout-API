@@ -19,6 +19,20 @@ import { UpdateUniversityDto } from './dto/update-university.dto';
 import { GeoIpService, SearchLogService, TrackingService } from '@DashboardModule/services';
 import { ExportUniversityDto, ExportFormat } from './dto/export-university.dto';
 
+type UniversityPaginationResult = {
+  universities: UniEntity[];
+  totalCount: number;
+  currentPage: number;
+  limit: number;
+};
+
+const UniversitySizeThresholds = {
+  [UniversitySizeEnum.SMALL]: { max: 20000 },
+  [UniversitySizeEnum.MEDIUM]: { min: 20000, max: 40000 },
+  [UniversitySizeEnum.LARGE]: { min: 40000, max: 100000 },
+  [UniversitySizeEnum.EXTRA_LARGE]: { min: 100000 },
+};
+
 @Injectable()
 export class UniversityService {
   private readonly _logger = new Logger(UniversityService.name);
@@ -89,65 +103,23 @@ export class UniversityService {
     if (query?.size && query.size.length > 0) {
       qb.andWhere(
         new Brackets((qbInner) => {
-          query.size.forEach((size, index) => {
-            if (index > 0)
+          query.size.forEach((size) => {
+            const thresholds = UniversitySizeThresholds[size];
+            if (thresholds) {
               qbInner.orWhere(
                 new Brackets((subQb) => {
-                  switch (size) {
-                    case UniversitySizeEnum.SMALL:
-                      subQb.where('uni.studentPopulation < :smallThreshold', { smallThreshold: 20000 });
-                      break;
-                    case UniversitySizeEnum.MEDIUM:
-                      subQb.where(
-                        'uni.studentPopulation >= :smallThreshold AND uni.studentPopulation < :mediumThreshold',
-                        {
-                          smallThreshold: 20000,
-                          mediumThreshold: 40000,
-                        }
-                      );
-                      break;
-                    case UniversitySizeEnum.LARGE:
-                      subQb.where(
-                        'uni.studentPopulation >= :mediumThreshold AND uni.studentPopulation < :largeThreshold',
-                        {
-                          mediumThreshold: 40000,
-                          largeThreshold: 100000,
-                        }
-                      );
-                      break;
-                    case UniversitySizeEnum.EXTRA_LARGE:
-                      subQb.where('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
-                      break;
+                  if (thresholds.min !== undefined && thresholds.max !== undefined) {
+                    subQb.where('uni.studentPopulation >= :min AND uni.studentPopulation < :max', {
+                      min: thresholds.min,
+                      max: thresholds.max,
+                    });
+                  } else if (thresholds.min !== undefined) {
+                    subQb.where('uni.studentPopulation >= :min', { min: thresholds.min });
+                  } else if (thresholds.max !== undefined) {
+                    subQb.where('uni.studentPopulation < :max', { max: thresholds.max });
                   }
                 })
               );
-            else {
-              switch (size) {
-                case UniversitySizeEnum.SMALL:
-                  qbInner.where('uni.studentPopulation < :smallThreshold', { smallThreshold: 20000 });
-                  break;
-                case UniversitySizeEnum.MEDIUM:
-                  qbInner.where(
-                    'uni.studentPopulation >= :smallThreshold AND uni.studentPopulation < :mediumThreshold',
-                    {
-                      smallThreshold: 20000,
-                      mediumThreshold: 40000,
-                    }
-                  );
-                  break;
-                case UniversitySizeEnum.LARGE:
-                  qbInner.where(
-                    'uni.studentPopulation >= :mediumThreshold AND uni.studentPopulation < :largeThreshold',
-                    {
-                      mediumThreshold: 40000,
-                      largeThreshold: 100000,
-                    }
-                  );
-                  break;
-                case UniversitySizeEnum.EXTRA_LARGE:
-                  qbInner.where('uni.studentPopulation >= :largeThreshold', { largeThreshold: 100000 });
-                  break;
-              }
             }
           });
         })
@@ -226,74 +198,137 @@ export class UniversityService {
     qb.addOrderBy('uni.university', SortOrderEnum.ASC);
   }
 
-  //View University
+  private async _getUniversityById(id: number, includeDeleted = false): Promise<UniEntity> {
+    const whereClause: any = { id };
+    if (!includeDeleted) {
+      whereClause.isDeleted = false;
+    }
+
+    const university = await this._uniRepository.findOne({ where: whereClause });
+
+    if (!university) {
+      throw new NotFoundException(`University with ID ${id} not found.`);
+    }
+    return university;
+  }
+
+  private async _getUniversitiesPaginated(
+    query?: GetUniversityDto,
+    defaultLimit = 18
+  ): Promise<UniversityPaginationResult> {
+    const qb = this._uniRepository.createQueryBuilder('uni');
+
+    const isExactMatch = await this._applyFilters(qb, query);
+    this._applySorting(qb, query?.sortOrder, query?.search, isExactMatch);
+
+    const page = query?.page ?? 1;
+    const limit = query?.limit ?? defaultLimit;
+
+    const [universities, totalCount] = await qb
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return { universities, totalCount, currentPage: page, limit };
+  }
+
+  private _handleServiceError(error: any, context: string, id?: number): never {
+    const identifier = id ? ` ID ${id}` : '';
+    this._logger.error(`Error in ${context}${identifier}: ${error.message}`, error.stack);
+    if (error instanceof NotFoundException || error instanceof BadRequestException) {
+      throw error;
+    }
+    throw new InternalServerErrorException(`Operation failed in ${context}${identifier}: ${error.message}`);
+  }
+
+  private async _logSearch(searchTerm: string, ipAddress?: string): Promise<void> {
+    let country = 'Unknown';
+    if (ipAddress) {
+      country = await this._geoIpService.getCountryFromIp(ipAddress);
+      this._logger.log(`Country resolved by GeoIpService for search: ${country}`);
+    } else {
+      this._logger.warn('No IP address provided to UniversityService.findAll. Country will be Unknown.');
+    }
+    await this._searchLogService.logSearch(searchTerm, country);
+    this._logger.log(`Logging search with country: ${country}`);
+  }
+
   async findAll(
     query?: GetUniversityDto,
-    ipAddress?: string
-  ): Promise<{ universities: UniEntity[]; totalCount: number; currentPage: number; limit: number }> {
+    ipAddress?: string,
+    isAdminContext = false
+  ): Promise<UniversityPaginationResult> {
     try {
-      const qb = this._uniRepository.createQueryBuilder('uni');
+      const defaultLimit = isAdminContext ? 12 : 18;
 
-      const isExactMatch = await this._applyFilters(qb, query);
-      this._applySorting(qb, query?.sortOrder, query?.search, isExactMatch);
+      const { universities, totalCount, currentPage, limit } = await this._getUniversitiesPaginated(
+        query,
+        defaultLimit
+      );
 
-      if (query && query.search && ipAddress) {
-        let country = 'Unknown';
-        country = await this._geoIpService.getCountryFromIp(ipAddress);
-        this._logger.log(`Country resolved by GeoIpService for findAll: ${country}`);
-        this._logger.log(`Logging search with country: ${country}`);
-        await this._searchLogService.logSearch(query.search, country);
-      } else if (query && query.search) {
-        this._logger.warn('No IP address provided to UniversityService.findAll. Country will be Unknown.');
-        await this._searchLogService.logSearch(query.search, 'Unknown');
+      if (query && query.search) {
+        if (isAdminContext) {
+          this._logger.log(`Admin search performed: "${query.search}"`);
+        } else {
+          await this._logSearch(query.search, ipAddress);
+        }
       }
 
-      const page = query?.page ?? 1;
-      const limit = query?.limit ?? 18;
-
-      const [universities, totalCount] = await qb
-        .skip((page - 1) * limit)
-        .take(limit)
-        .getManyAndCount();
-
-      return { universities, totalCount, currentPage: page, limit };
+      return { universities, totalCount, currentPage, limit };
     } catch (error) {
-      this._logger.error(`Error fetching universities: ${error.message}`, error.stack);
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(`Failed to fetch universities: ${error.message}`);
+      const errorPrefix = isAdminContext ? 'Error fetching universities for admin' : 'Error fetching universities';
+      this._handleServiceError(error, errorPrefix);
     }
   }
+
+  //View University
+  async getUniversity(id: number, ipAddress?: string): Promise<UniEntity> {
+    try {
+      const university = await this._getUniversityById(id);
+
+      let country = 'Unknown';
+      if (ipAddress) {
+        country = await this._geoIpService.getCountryFromIp(ipAddress);
+        this._logger.log(`Country resolved by GeoIpService for getUniversity: ${country}`);
+        await this._trackingService.incrementCountryTraffic(country);
+      } else {
+        this._logger.warn('No IP address provided to UniversityService.getUniversity. Country will be Unknown.');
+      }
+
+      this._logger.log(`Tracking view for university ID ${id} with country: ${country}`);
+
+      return university;
+    } catch (error) {
+      this._handleServiceError(error, 'getUniversity', id);
+    }
+  }
+
+  //View University (Admin)
+  async getUniversityAdmin(id: number): Promise<UniEntity> {
+    try {
+      const university = await this._getUniversityById(id);
+      this._logger.log(`Admin fetched university ID ${id}`);
+
+      return university;
+    } catch (error) {
+      this._handleServiceError(error, 'getUniversityAdmin', id);
+    }
+  }
+
   async countAll(query?: GetUniversityDto | ExportUniversityDto): Promise<number> {
     try {
       const qb = this._uniRepository.createQueryBuilder('uni');
-      qb.where('uni.isDeleted = :isDeleted', { isDeleted: false }); // Always filter out soft-deleted universities
+      qb.where('uni.isDeleted = :isDeleted', { isDeleted: false });
 
-      this._applyFilters(qb, query);
+      await this._applyFilters(qb, query);
 
       const totalCount = await qb.getCount();
       return totalCount;
     } catch (error) {
-      this._logger.error(`Error counting universities: ${error.message}`, error.stack);
-      throw new InternalServerErrorException(`Failed to count universities: ${error.message}`);
+      this._handleServiceError(error, 'countAll');
     }
   }
 
-  async findByIds(ids: number[]): Promise<UniEntity[]> {
-    try {
-      if (!ids || ids.length === 0) {
-        return [];
-      }
-      const universities = await this._uniRepository.find({
-        where: { id: In(ids), isDeleted: false }, // Ensure not soft-deleted
-      });
-      return universities;
-    } catch (error) {
-      this._logger.error(`Error finding universities by IDs: ${error.message}`, error.stack);
-      throw new InternalServerErrorException(`Failed to find universities by IDs: ${error.message}`);
-    }
-  }
   async getAllAvailableCountries(): Promise<string[]> {
     const countries = await this._uniRepository
       .createQueryBuilder('uni')
@@ -313,44 +348,6 @@ export class UniversityService {
     return result.map((row) => row.field);
   }
 
-  async getUniversity(id: number, ipAddress?: string): Promise<UniEntity | null> {
-    try {
-      const university = await this._uniRepository.findOne({ where: { id } });
-
-      if (!university) {
-        throw new NotFoundException(`University with ID ${id} not found.`);
-      }
-
-      let country = 'Unknown';
-      if (ipAddress) {
-        country = await this._geoIpService.getCountryFromIp(ipAddress);
-        this._logger.log(`Country resolved by GeoIpService for getUniversity: ${country}`);
-        await this._trackingService.incrementCountryTraffic(country);
-      } else {
-        this._logger.warn('No IP address provided to UniversityService.getUniversity. Country will be Unknown.');
-      }
-
-      this._logger.log(`Tracking view for university ID ${id} with country: ${country}`);
-
-      return university;
-    } catch (error) {
-      this._logger.error(`Error fetching university: ${error.message}`, error.stack);
-      if (error instanceof NotFoundException) throw error;
-
-      throw new InternalServerErrorException(`Database error: ${error.message}`);
-    }
-  }
-
-  //Validator
-  async getValidCountries(): Promise<string[]> {
-    const countries = await this._uniRepository
-      .createQueryBuilder('uni')
-      .select('DISTINCT uni.country', 'country')
-      .getRawMany();
-
-    return countries.map((c) => c.country);
-  }
-
   //Create University
   async create(createDto: CreateUniversityDto & { logo: string }): Promise<UniEntity> {
     try {
@@ -359,19 +356,14 @@ export class UniversityService {
       });
       return await this._uniRepository.save(uni);
     } catch (error) {
-      this._logger.error(`Failed to create university: ${error.message}`, error.stack);
-      throw new InternalServerErrorException('Failed to create university');
+      this._handleServiceError(error, 'createUniversity');
     }
   }
 
   //Update University
   async updateUniversity(id: number, dto: UpdateUniversityDto): Promise<{ message: string; data: UniEntity }> {
     try {
-      const university = await this._uniRepository.findOne({ where: { id } });
-
-      if (!university) {
-        throw new NotFoundException(`University with ID ${id} not found.`);
-      }
+      const university = await this._getUniversityById(id);
 
       const updateData: Partial<UniEntity> = {};
 
@@ -400,11 +392,7 @@ export class UniversityService {
         data: updatedUniversity,
       };
     } catch (error) {
-      this._logger.error(`Error updating university: ${error.message}`, error.stack);
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(`Failed to update university: ${error.message}`);
+      this._handleServiceError(error, 'updateUniversity', id);
     }
   }
 
@@ -413,11 +401,7 @@ export class UniversityService {
     this._logger.log(`Deletion attempt: University ID=${id}`);
 
     try {
-      const university = await this._uniRepository.findOne({ where: { id } });
-      if (!university) {
-        this._logger.warn(`Deletion failed: University not found. ID=${id}`);
-        return { success: false, message: 'University not found.' };
-      }
+      const university = await this._getUniversityById(id, true);
 
       if (university.logo) {
         await this.deleteLogoFile(university.logo);
@@ -429,12 +413,10 @@ export class UniversityService {
         this._logger.log(`University deleted: ID=${id}`);
         return { success: true, message: 'Successfully deleted university.' };
       } else {
-        this._logger.warn(`Deletion failed (unknown reason). ID=${id}`);
-        return { success: false, message: 'Deletion failed.' };
+        throw new InternalServerErrorException('Deletion failed due to an unexpected issue.');
       }
     } catch (error) {
-      this._logger.error(`Delete error for University ID=${id}: ${error.message}`, error.stack);
-      throw new InternalServerErrorException(`Database error: ${error.message}`);
+      this._handleServiceError(error, 'deleteUniversity', id);
     }
   }
 
@@ -542,5 +524,20 @@ export class UniversityService {
       filename: `universities_${Date.now()}.xlsx`,
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     };
+  }
+
+  //Chatbot
+  async findByIds(ids: number[]): Promise<UniEntity[]> {
+    try {
+      if (!ids || ids.length === 0) {
+        return [];
+      }
+      const universities = await this._uniRepository.find({
+        where: { id: In(ids), isDeleted: false },
+      });
+      return universities;
+    } catch (error) {
+      this._handleServiceError(error, 'findByIds');
+    }
   }
 }
