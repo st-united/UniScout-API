@@ -31,7 +31,7 @@ import { ChatbotModule } from './modules/chatbot/chatbot.module';
         JWT_ACCESS_EXPIRES: Joi.string().required(),
         JWT_REFRESH_SECRETKEY: Joi.string().required(),
         JWT_REFRESH_EXPIRES: Joi.string().required(),
-        // GEMINI_API_KEY: Joi.string().required(),
+        GEMINI_API_KEY: Joi.string().required(),
       }),
       isGlobal: true,
       envFilePath: '.env',

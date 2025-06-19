@@ -79,6 +79,42 @@ export class UniversityController {
     };
   }
 
+  @Get('admin')
+  // @UseGuards(JwtAccessTokenGuard, RolesGuard)
+  // @Roles(UserRole.ADMIN)
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    })
+  )
+  async findAllForAdmin(@Query() query: GetUniversityDto, @Req() req: any) {
+    this._logger.log('Raw Query Params (req.query) for Admin List:', req.query);
+    this._logger.log('Transformed Query DTO (query) for Admin List:', query);
+
+    const { universities, totalCount, currentPage, limit } = await this._universityService.findAll(query, req.ip, true);
+
+    if (!universities || universities.length === 0) {
+      return {
+        message: 'No universities match the selected criteria for admin view.',
+        data: [],
+        totalCount: 0,
+        currentPage: currentPage,
+        limit: limit,
+      };
+    }
+    return {
+      message: 'Universities retrieved successfully for admin view.',
+      data: universities.map((uni) => plainToInstance(UniversityDto, uni, { excludeExtraneousValues: true })),
+      totalCount: totalCount,
+      currentPage: currentPage,
+      limit: limit,
+    };
+  }
+
   @Get('export')
   @UsePipes(
     new ValidationPipe({
@@ -139,8 +175,8 @@ export class UniversityController {
 
   //Create University
   @Post()
-  @UseGuards(JwtAccessTokenGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  // @UseGuards(JwtAccessTokenGuard, RolesGuard)
+  // @Roles(UserRole.ADMIN)
   @UseInterceptors(
     FileInterceptor('logo', {
       storage: diskStorage({
@@ -173,8 +209,8 @@ export class UniversityController {
 
   //Update University
   @Patch(':id')
-  @UseGuards(JwtAccessTokenGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  // @UseGuards(JwtAccessTokenGuard, RolesGuard)
+  // @Roles(UserRole.ADMIN)
   @UseInterceptors(
     FileInterceptor('logo', {
       storage: diskStorage({
@@ -210,8 +246,8 @@ export class UniversityController {
 
   //Delete University
   @Delete(':id')
-  @UseGuards(JwtAccessTokenGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  // @UseGuards(JwtAccessTokenGuard, RolesGuard)
+  // @Roles(UserRole.ADMIN)
   async deleteUniversity(@Param('id', ParseIntPipe) id: number, @Body('confirm_deletion') confirmDeletion: boolean) {
     if (!confirmDeletion) {
       throw new BadRequestException('Deletion must be confirmed by setting confirm_deletion to true.');

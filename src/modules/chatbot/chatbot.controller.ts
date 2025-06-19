@@ -1,13 +1,17 @@
 import { Body, Controller, Post, Res, BadRequestException, ValidationPipe, UsePipes } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ChatbotService } from './chatbot.service';
+import { UniversityService } from '@UniversitiesModule/university.service';
 import { ChatRequestDto, ChatResponseData, ChatResponseDto, ChatMessageDto } from './dto/chat-request.dto';
 import { ChatMessage } from './dto/chatbot.dto';
 
 @ApiTags('chatbot')
 @Controller('chatbot')
 export class ChatbotController {
-  constructor(private readonly _chatbotService: ChatbotService) {}
+  constructor(
+    private readonly _chatbotService: ChatbotService,
+    private readonly _universityService: UniversityService
+  ) {}
 
   @Post()
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
@@ -41,7 +45,7 @@ export class ChatbotController {
   @Post('countries')
   async getValidCountries() {
     try {
-      const countries = await this._chatbotService.getValidCountries();
+      const countries = await this._universityService.getAllAvailableCountries();
       return {
         success: true,
         message: 'Valid countries retrieved successfully',
