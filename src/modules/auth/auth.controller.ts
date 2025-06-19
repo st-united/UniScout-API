@@ -9,8 +9,8 @@ import { LocalAuthGuard } from './guards/local-auth.guard';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { UserDto } from '@UsersModule/dto/user.dto';
 import { UserRole } from '@Constant/enums';
-import { Roles } from '@Decorators/roles.decorator';
-import { RolesGuard } from '@Guards/roles.guard';
+import { Roles } from './decorators/roles.decorator';
+import { RolesGuard } from './guards/roles.guard';
 
 @Controller('auth')
 export class AuthController {

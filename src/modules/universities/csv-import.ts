@@ -31,7 +31,7 @@ export class CsvImport {
 
     for (let i = 0; i < totalRecords; i++) {
       const record = records[i];
-      const entity = this.mapCsvToEntity(record, i);
+      const entity = this.mapCsvToEntity(record);
 
       await this.uniRepo.upsert(entity, ['university']);
       this._logger.log(`Processed record ${i + 1}/${totalRecords}: ${entity.university}`);
@@ -41,7 +41,7 @@ export class CsvImport {
     this._logger.log(`Import completed! Total records: ${totalCount}`);
   }
 
-  private mapCsvToEntity(record: any, importOrder?: number): Partial<UniEntity> {
+  private mapCsvToEntity(record: any): Partial<UniEntity> {
     const academicFields: string[] = [];
 
     const fieldColumns = [
