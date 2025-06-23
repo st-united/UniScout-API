@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, MaxLength, IsOptional, IsEnum, IsNumberString } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MaxLength, IsEnum, IsNumberString } from 'class-validator';
 import { RequestTypeEnum } from '@Constant/enums';
 
 export class CreateContactDto {

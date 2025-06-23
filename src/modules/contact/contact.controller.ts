@@ -57,7 +57,15 @@ export class ContactController {
     let attachmentPaths: string[] = [];
 
     try {
-      const { files: _, ...createContactData } = body;
+      const createContactData: Partial<CreateContactDto> = {
+        name: body.name,
+        email: body.email,
+        message: body.message,
+        country: body.country,
+        universityName: body.universityName,
+        phoneNumber: body.phoneNumber,
+        requestType: body.requestType,
+      };
       const createContactDto = plainToClass(CreateContactDto, createContactData);
 
       const errors = await validate(createContactDto);
