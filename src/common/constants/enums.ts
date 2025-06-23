@@ -16,7 +16,7 @@ export enum SortEnum {
 export enum UserRole {
   ADMIN = 'admin',
   USER = 'user',
-  MODERATOR = 'moderator', // You can add more roles here if needed
+  SUPER = 'super', // You can add more roles here if needed
 }
 
 export enum RequestTypeEnum {

@@ -8,6 +8,9 @@ import { JwtRefreshTokenGuard } from './guards/jwt-refresh-token.guard';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { UserDto } from '@UsersModule/dto/user.dto';
+import { UserRole } from '@Constant/enums';
+import { Roles } from '@Decorators/roles.decorator';
+import { RolesGuard } from '@Guards/roles.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -36,6 +39,8 @@ export class AuthController {
 
   @HttpCode(200)
   @Post('register')
+  @UseGuards(JwtAccessTokenGuard, RolesGuard)
+  @Roles(UserRole.SUPER)
   async register(@Body() registerDto: RegisterUserDto): Promise<ResponseItem<UserDto>> {
     return this.authService.register(registerDto);
   }
