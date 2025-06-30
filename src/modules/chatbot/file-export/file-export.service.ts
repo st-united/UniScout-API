@@ -10,7 +10,7 @@ export class FileExportService {
 
   // Helper function to check if an academic field exists in the array
   private _hasAcademicField(uni: UniEntity, fieldName: string): string {
-    return uni.academicFields && uni.academicFields.includes(fieldName) ? 'Yes' : 'No';
+    return uni.academicFields && uni.academicFields.some((field) => field.name === fieldName) ? 'Yes' : 'No';
   }
 
   async generateExcel(data: UniEntity[], filename: string): Promise<string> {

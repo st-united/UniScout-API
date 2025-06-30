@@ -12,88 +12,136 @@ import {
   Max,
   Validate,
   IsArray,
+  ValidateIf,
 } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
-import { IsCountryValidConstraint } from '@UniversitiesModule/validator';
+import { Type } from 'class-transformer';
+import { IsCountryValidConstraint, IsSubjectValid } from '../validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { UniversityTypeEnum } from './get-university.dto';
+import { AcademicFieldEnum } from '../entities/uni.entity';
 
 export class CreateUniversityDto {
+  @ApiProperty({ description: 'Full name of university' })
   @IsNotEmpty({ message: 'University name is required' })
   @IsString()
   university: string;
 
-  @IsNotEmpty()
+  @ApiPropertyOptional({ description: 'Geographical latitude of university' })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({}, { message: 'Latitude must be a number' })
   latitude?: number;
 
-  @IsNotEmpty()
+  @ApiPropertyOptional({ description: 'Geographical longitude of university' })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({}, { message: 'Longitude must be a number' })
   longitude?: number;
 
+  @ApiPropertyOptional({ description: 'University rank' })
   @IsOptional()
   @Type(() => Number)
-  @IsInt({ message: 'Rank must be a number' })
-  rank: number;
+  @IsInt({ message: 'Rank must be an integer' })
+  @Min(1, { message: 'Rank must be a positive number' })
+  rank?: number;
 
-  @IsNotEmpty({ message: 'Type is required' })
-  @IsIn(['public', 'private'], { message: 'Type must be public or private' })
-  type: 'public' | 'private';
-
+  @ApiPropertyOptional({ description: 'Logo URL of university' })
   @IsOptional()
-  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
-  @IsArray()
-  @IsString({ each: true })
-  @Validate(IsCountryValidConstraint, {
-    message: 'Country is not valid or supported',
-  })
+  @IsString({ message: 'Logo must be a string (URL)' })
+  logo?: string;
+
+  @ApiProperty({ description: 'Type of university', enum: UniversityTypeEnum })
+  @IsNotEmpty({ message: 'University type is required' })
+  @IsString()
+  @IsIn(Object.values(UniversityTypeEnum), { message: 'Invalid university type selected' })
+  type: UniversityTypeEnum;
+
+  @ApiProperty({ description: 'Country of university' })
+  @IsNotEmpty({ message: 'Country is required' })
+  @IsString()
+  @Validate(IsCountryValidConstraint)
   country: string;
 
-  @IsNotEmpty({ message: 'Location is required' })
+  @ApiPropertyOptional({ description: 'Location or city name' })
+  @IsOptional()
   @IsString()
-  location: string;
+  location?: string;
 
-  @IsNotEmpty({ message: 'Size is required' })
+  @ApiProperty({ description: 'Student population' })
+  @IsNotEmpty({ message: 'Student population is required' })
+  @IsInt({ message: 'Student population must be an integer' })
+  @Min(0, { message: 'Student population cannot be negative' })
   @Type(() => Number)
-  @IsInt({ message: 'Size must be a number' })
   studentPopulation: number;
 
-  @IsNotEmpty({ message: 'Year founded is required' })
+  @ApiProperty({ description: 'Year of establishment' })
+  @IsNotEmpty({ message: 'Year is required' })
+  @IsInt({ message: 'Year must be an integer' })
+  @Min(1000, { message: 'Year must be a valid year' })
+  @Max(new Date().getFullYear(), { message: 'Year cannot be in the future' })
   @Type(() => Number)
-  @IsInt({ message: 'Year founded must be a number' })
-  @Min(1000, { message: 'Year founded must be at least 1000' })
-  @Max(9999, { message: 'Year founded must be a valid 4-digit year' })
   year: number;
 
-  @IsNotEmpty({ message: 'Phone is required' })
+  @ApiProperty({ description: 'Contact number' })
+  @IsNotEmpty({ message: 'Contact is required' })
   @IsString()
   contact: string;
 
+  @ApiProperty({ description: 'Email address' })
   @IsNotEmpty({ message: 'Email is required' })
-  @IsEmail({}, { message: 'Please enter a valid email address' })
+  @IsEmail({}, { message: 'Invalid email format' })
   email: string;
 
+  @ApiProperty({ description: 'Website URL' })
   @IsNotEmpty({ message: 'Website is required' })
   @Matches(/^https?:\/\//, {
     message: 'Website must start with http:// or https://',
   })
   website: string;
 
+  @ApiPropertyOptional({ description: 'Key strengths or notable aspects of the university' })
   @IsOptional()
   @IsString()
   strength?: string;
 
+  @ApiPropertyOptional({ description: 'General description of the university' })
   @IsOptional()
   @IsString()
   description?: string;
 
-  @IsOptional()
+  @ApiProperty({ description: 'Whether or not the university offers exchange programs within Asia' })
+  @IsNotEmpty({ message: 'Exchange is required' })
   @IsBoolean()
   @Type(() => Boolean)
   exchange?: boolean;
 
-  @IsOptional()
+  @ApiProperty({
+    description: 'List of academic field names offered by the university',
+    enum: AcademicFieldEnum,
+    isArray: true,
+  })
+  @IsNotEmpty({ message: 'Academic fields are required' })
   @IsArray()
-  @IsString({ each: true })
-  academicFields?: string[];
+  @IsIn(Object.values(AcademicFieldEnum), { each: true, message: 'Invalid academic field selected' })
+  academicFields: AcademicFieldEnum[];
+
+  @ApiPropertyOptional({
+    description: 'Details for "other" academic fields, required if "others" is selected in academicFields',
+  })
+  @ValidateIf((o) => o.academicFields && o.academicFields.includes(AcademicFieldEnum.OTHERS))
+  @IsNotEmpty({ message: 'Other academic field details are required when "others" is selected' })
+  @IsString({ message: 'Other academic field details must be a string' })
+  otherAcademicFieldsDetail?: string;
+
+  @ApiProperty({
+    description: 'List of subject names offered by the university. Must align with selected academic fields.',
+    type: [String],
+  })
+  @IsNotEmpty({ message: 'Subject names are required' })
+  @IsArray({ message: 'Subject names must be an array' })
+  @IsString({ each: true, message: 'Each subject name must be a string' })
+  @Validate(IsSubjectValid, {
+    message: 'One or more subjects are invalid or do not belong to the selected academic fields.',
+  })
+  subjects: string[];
 }

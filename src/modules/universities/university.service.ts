@@ -13,6 +13,8 @@ import { stringify } from 'csv-stringify';
 import * as ExcelJS from 'exceljs';
 
 import { UniEntity } from './entities/uni.entity';
+import { SubjectEntity } from './entities/subject.entity';
+import { AcademicFieldEntity } from './entities/academic-field.entity';
 import { GetUniversityDto, UniversitySizeEnum, SortOrderEnum } from './dto/get-university.dto';
 import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
@@ -40,6 +42,10 @@ export class UniversityService {
   constructor(
     @InjectRepository(UniEntity)
     private readonly _uniRepository: Repository<UniEntity>,
+    @InjectRepository(SubjectEntity)
+    private readonly _subjectRepository: Repository<SubjectEntity>,
+    @InjectRepository(AcademicFieldEntity)
+    private readonly _academicFieldRepository: Repository<AcademicFieldEntity>,
     private readonly _trackingService: TrackingService,
     private readonly _geoIpService: GeoIpService,
     private readonly _searchLogService: SearchLogService
@@ -351,41 +357,111 @@ export class UniversityService {
   //Create University
   async create(createDto: CreateUniversityDto & { logo: string }): Promise<UniEntity> {
     try {
+      const { academicFields, subjects, ...uniDetails } = createDto;
+
+      let academicFieldEntities: AcademicFieldEntity[] = [];
+      if (academicFields && academicFields.length > 0) {
+        academicFieldEntities = await this._academicFieldRepository.find({
+          where: { name: In(academicFields) },
+        });
+
+        if (academicFieldEntities.length !== academicFields.length) {
+          const foundNames = new Set(academicFieldEntities.map((af) => af.name));
+          const missingNames = academicFields.filter((name) => !foundNames.has(name));
+          throw new NotFoundException(`Academic field(s) not found: ${missingNames.join(', ')}`);
+        }
+      }
+
+      let subjectEntities: SubjectEntity[] = [];
+      if (subjects && subjects.length > 0) {
+        subjectEntities = await this._subjectRepository.find({
+          where: { name: In(subjects) },
+        });
+
+        if (subjectEntities.length !== subjects.length) {
+          const foundNames = new Set(subjectEntities.map((s) => s.name));
+          const missingNames = subjects.filter((name) => !foundNames.has(name));
+          throw new NotFoundException(`Subject(s) not found: ${missingNames.join(', ')}`);
+        }
+      }
+
       const uni = this._uniRepository.create({
-        ...createDto,
+        ...uniDetails,
+        academicFields: academicFieldEntities,
+        subjects: subjectEntities,
       });
+
       return await this._uniRepository.save(uni);
     } catch (error) {
       this._handleServiceError(error, 'createUniversity');
     }
   }
 
+  private async _getUniversityByIdWithRelations(id: number): Promise<UniEntity> {
+    const university = await this._uniRepository.findOne({
+      where: { id },
+      relations: ['academicFields', 'subjects'], // Ensure relations are loaded
+    });
+    if (!university) {
+      this._handleServiceError(
+        new NotFoundException(`University with ID ${id} not found`),
+        '_getUniversityByIdWithRelations',
+        id
+      );
+    }
+    return university;
+  }
+
   //Update University
   async updateUniversity(id: number, dto: UpdateUniversityDto): Promise<{ message: string; data: UniEntity }> {
     try {
-      const university = await this._getUniversityById(id);
+      const university = await this._getUniversityByIdWithRelations(id);
 
-      const updateData: Partial<UniEntity> = {};
+      Object.assign(university, dto);
 
-      for (const key in dto) {
-        if (Object.prototype.hasOwnProperty.call(dto, key)) {
-          if (key === 'country') {
-            updateData.country = dto.country && dto.country.length > 0 ? dto.country[0] : null;
-          } else if (key === 'academicFields' && Array.isArray(dto.academicFields)) {
-            updateData.academicFields = dto.academicFields;
-          } else {
-            (updateData as any)[key] = (dto as any)[key];
+      if (dto.academicFields !== undefined) {
+        if (dto.academicFields.length === 0) {
+          university.academicFields = [];
+        } else {
+          const academicFieldEntities = await this._academicFieldRepository.find({
+            where: { name: In(dto.academicFields) },
+          });
+
+          if (academicFieldEntities.length !== dto.academicFields.length) {
+            const foundNames = new Set(academicFieldEntities.map((af) => af.name));
+            const missingNames = dto.academicFields.filter((name) => !foundNames.has(name));
+            this._handleServiceError(
+              new NotFoundException(`Academic field(s) not found: ${missingNames.join(', ')}`),
+              'updateUniversity',
+              id
+            );
           }
+          university.academicFields = academicFieldEntities;
         }
       }
 
-      const updateResult = await this._uniRepository.update({ id }, updateData);
+      if (dto.subjectNames !== undefined) {
+        if (dto.subjectNames.length === 0) {
+          university.subjects = [];
+        } else {
+          const subjectEntities = await this._subjectRepository.find({
+            where: { name: In(dto.subjectNames) },
+          });
 
-      if (updateResult.affected === 0) {
-        throw new BadRequestException('University found but no changes were applied.');
+          if (subjectEntities.length !== dto.subjectNames.length) {
+            const foundNames = new Set(subjectEntities.map((s) => s.name));
+            const missingNames = dto.subjectNames.filter((name) => !foundNames.has(name));
+            this._handleServiceError(
+              new NotFoundException(`Subject(s) not found: ${missingNames.join(', ')}`),
+              'updateUniversity',
+              id
+            );
+          }
+          university.subjects = subjectEntities;
+        }
       }
 
-      const updatedUniversity = await this._uniRepository.findOne({ where: { id } });
+      const updatedUniversity = await this._uniRepository.save(university);
 
       return {
         message: 'University updated successfully',

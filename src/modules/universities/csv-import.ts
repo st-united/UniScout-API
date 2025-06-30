@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UniEntity } from './entities/uni.entity';
+import { UniEntity, SubjectEntity, AcademicFieldEntity } from './entities';
 import * as fs from 'fs';
 import * as Papa from 'papaparse';
 
@@ -9,9 +9,13 @@ import * as Papa from 'papaparse';
 export class CsvImport {
   private readonly _logger = new Logger(CsvImport.name);
 
-  constructor(@InjectRepository(UniEntity) private uniRepo: Repository<UniEntity>) {}
+  constructor(
+    @InjectRepository(UniEntity) private uniRepo: Repository<UniEntity>,
+    @InjectRepository(SubjectEntity) private subjectRepo: Repository<SubjectEntity>,
+    @InjectRepository(AcademicFieldEntity) private academicFieldRepo: Repository<AcademicFieldEntity>
+  ) {}
 
-  async importCsv(filePath: string): Promise<void> {
+  async importUniCsv(filePath: string): Promise<void> {
     const csvData = fs.readFileSync(filePath, 'utf8');
 
     this._logger.log(`\nImporting universities from: ${filePath}`);
@@ -19,7 +23,7 @@ export class CsvImport {
       Papa.parse(csvData, {
         header: true,
         skipEmptyLines: true,
-        dynamicTyping: true,
+        dynamicTyping: false,
         transformHeader: (header: string) => header.trim().toLowerCase(),
         complete: resolve,
         error: reject,
@@ -28,62 +32,180 @@ export class CsvImport {
 
     const records = results.data;
     const totalRecords = records.length;
+    const uniCsvHeaders = results.meta.fields || [];
 
-    for (let i = 0; i < totalRecords; i++) {
-      const record = records[i];
-      const entity = this.mapCsvToEntity(record, i);
-
-      await this.uniRepo.upsert(entity, ['university']);
-      this._logger.log(`Processed record ${i + 1}/${totalRecords}: ${entity.university}`);
-    }
-
-    const totalCount = await this.uniRepo.count();
-    this._logger.log(`Import completed! Total records: ${totalCount}`);
-  }
-
-  private mapCsvToEntity(record: any, importOrder?: number): Partial<UniEntity> {
-    const academicFields: string[] = [];
-
-    const fieldColumns = [
-      'agricultural_food_science',
+    const newAcademicFieldNames = [
+      'agricultural_veterinary_science',
       'arts_design',
-      'economics_business_management',
-      'law_political_science',
-      'medicine_pharmacy_health_sciences',
-      'science_engineering',
-      'social_sciences_humanities',
-      'sports_physical_education',
-      'technology',
+      'business_management_law',
+      'education_training',
+      'engineering_technology',
+      'health_medicine',
+      'humanities_languages',
+      'ict',
+      'natural_science',
+      'social_behavioral_science',
+      'services',
+      'transport_safety_security_military',
       'others',
     ];
 
-    fieldColumns.forEach((column) => {
-      const parsedBoolean = this.parseBoolean(record[column]);
-      if (parsedBoolean === true) {
-        const fieldName = column.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
-        academicFields.push(fieldName);
+    const academicFieldEntities: AcademicFieldEntity[] = [];
+    for (const name of newAcademicFieldNames) {
+      let field = await this.academicFieldRepo.findOne({ where: { name } });
+      if (!field) {
+        field = this.academicFieldRepo.create({ name });
+        await this.academicFieldRepo.save(field);
       }
+      academicFieldEntities.push(field);
+    }
+    const academicFieldMap = new Map<string, AcademicFieldEntity>(
+      academicFieldEntities.map((field) => [field.name, field])
+    );
+
+    for (let i = 0; i < totalRecords; i++) {
+      const record = records[i];
+      const uniAcademicFields: AcademicFieldEntity[] = [];
+
+      newAcademicFieldNames.forEach((fieldName) => {
+        const recordValue = record[fieldName];
+        const parsedBoolean = this.parseBoolean(recordValue);
+
+        if (parsedBoolean) {
+          if (academicFieldMap.has(fieldName)) {
+            uniAcademicFields.push(academicFieldMap.get(fieldName));
+          } else {
+            this._logger.warn(`Academic field '${fieldName}' not found in map for university '${record.university}'.`);
+          }
+        }
+      });
+
+      const entity = this.uniRepo.create({
+        university: record.university?.toString().trim() || null,
+        abbreviation: record.abbreviation?.toString().trim() || null,
+        latitude: this.parseNumber(record.latitude),
+        longitude: this.parseNumber(record.longitude),
+        logo: record.logo?.toString().trim() || null,
+        rank: this.parseNumber(record.rank),
+        type: record.type?.toString().trim() || null,
+        country: record.country?.toString().trim() || null,
+        location: record.location?.toString().trim() || null,
+        studentPopulation: this.parseNumber(record.studentPopulation) ?? 0,
+        year: this.parseNumber(record.year),
+        contact: this.parseContact(record.contact),
+        email: this.parseStringOrNull(record.email),
+        website: record.website?.toString().trim() || null,
+        strength: record.strength?.toString().trim() || null,
+        description: record.description?.toString().trim() || null,
+        exchange: this.parseBoolean(record.exchange),
+      });
+
+      if (entity.university) {
+        const existingUni = await this.uniRepo.findOne({ where: { university: entity.university } });
+
+        if (existingUni) {
+          existingUni.abbreviation = entity.abbreviation;
+          existingUni.latitude = entity.latitude;
+          existingUni.longitude = entity.longitude;
+          existingUni.logo = entity.logo;
+          existingUni.rank = entity.rank;
+          existingUni.type = entity.type;
+          existingUni.country = entity.country;
+          existingUni.location = entity.location;
+          existingUni.studentPopulation = entity.studentPopulation;
+          existingUni.year = entity.year;
+          existingUni.contact = entity.contact;
+          existingUni.email = entity.email;
+          existingUni.website = entity.website;
+          existingUni.strength = entity.strength;
+          existingUni.description = entity.description;
+          existingUni.exchange = entity.exchange;
+          existingUni.academicFields = entity.academicFields;
+          await this.uniRepo.save(existingUni);
+          this._logger.log(`Updated university record ${i + 1}/${totalRecords}: ${entity.university}`);
+        } else {
+          await this.uniRepo.save(entity);
+          this._logger.log(`Inserted university record ${i + 1}/${totalRecords}: ${entity.university}`);
+        }
+      } else {
+        this._logger.warn(`Skipping university record ${i + 1} due to missing university name.`);
+      }
+    }
+
+    const totalCount = await this.uniRepo.count();
+    this._logger.log(`University import completed! Total records: ${totalCount}`);
+  }
+
+  async importSubjectsCsv(filePath: string): Promise<void> {
+    const csvData = fs.readFileSync(filePath, 'utf8');
+
+    this._logger.log(`\nImporting subjects from: ${filePath}`);
+    const results = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
+      Papa.parse(csvData, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: false,
+        transformHeader: (header: string) => header.trim().toLowerCase(),
+        complete: resolve,
+        error: reject,
+      });
     });
 
-    return {
-      university: record.university?.toString().trim() || '',
-      latitude: this.parseNumber(record.latitude),
-      longitude: this.parseNumber(record.longitude),
-      logo: record.logo?.toString().trim() || null,
-      rank: this.parseNumber(record.rank),
-      type: record.type?.toString().trim() || null,
-      country: record.country?.toString().trim() || '',
-      location: record.location?.toString().trim() || null,
-      studentPopulation: this.parseNumber(record.student),
-      year: this.parseNumber(record.year),
-      contact: record.contact?.toString().trim() || null,
-      email: record.email?.toString().trim() || null,
-      website: record.website?.toString().trim() || null,
-      strength: record.strength?.toString().trim() || null,
-      description: record.description?.toString().trim() || null,
-      exchange: this.parseBoolean(record.exchange),
-      academicFields: academicFields,
-    };
+    const records = results.data;
+    const headers = results.meta.fields || [];
+    const totalRecords = records.length;
+    let subjectsImported = 0;
+
+    const allAcademicFieldNamesFromSubjectsCsv = headers.filter((header) => header.trim() !== '');
+    const academicFieldEntities: AcademicFieldEntity[] = [];
+    for (const name of allAcademicFieldNamesFromSubjectsCsv) {
+      let field = await this.academicFieldRepo.findOne({ where: { name } });
+      if (!field) {
+        field = this.academicFieldRepo.create({ name });
+        await this.academicFieldRepo.save(field);
+      }
+      academicFieldEntities.push(field);
+    }
+    const academicFieldMap = new Map<string, AcademicFieldEntity>(
+      academicFieldEntities.map((field) => [field.name, field])
+    );
+
+    for (let i = 0; i < totalRecords; i++) {
+      const record = records[i];
+      for (const header of headers) {
+        const subjectName = record[header];
+        if (
+          subjectName &&
+          typeof subjectName === 'string' &&
+          subjectName.trim() !== '' &&
+          subjectName.trim().toLowerCase() !== 'na'
+        ) {
+          const academicField = academicFieldMap.get(header.trim());
+          if (!academicField) {
+            this._logger.warn(
+              `Academic field "${header.trim()}" not found for subject "${subjectName.trim()}", skipping.`
+            );
+            continue;
+          }
+          const entity: Partial<SubjectEntity> = {
+            name: subjectName.trim(),
+            academicField: academicField,
+          };
+          try {
+            await this.subjectRepo.upsert(entity, ['name']);
+            subjectsImported++;
+            this._logger.log(`Processed subject: ${entity.name} (${academicField.name})`);
+          } catch (error) {
+            this._logger.error(`Failed to upsert subject ${entity.name}: ${error.message}`);
+          }
+        }
+      }
+    }
+
+    const totalCount = await this.subjectRepo.count();
+    this._logger.log(
+      `Subject import completed! Total subjects imported in this run: ${subjectsImported}. Total subjects in database: ${totalCount}`
+    );
   }
 
   private parseNumber(value: any): number | null {
@@ -106,8 +228,19 @@ export class CsvImport {
       : null;
   }
 
-  async getStats(): Promise<any> {
-    const totalCount = await this.uniRepo.count();
-    return { totalCount };
+  private parseContact(value: any): string | null {
+    const str = value?.toString().trim();
+    if (!str || str.toLowerCase() === 'na') {
+      return null;
+    }
+    return str;
+  }
+
+  private parseStringOrNull(value: any): string | null {
+    const str = value?.toString().trim();
+    if (!str || str.toLowerCase() === 'na') {
+      return null;
+    }
+    return str;
   }
 }
