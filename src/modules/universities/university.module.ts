@@ -1,16 +1,18 @@
-import { forwardRef, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UniversityController } from './university.controller';
 import { UniversityService } from './university.service';
-import { IsCountryValidConstraint } from './validator';
+import { IsCountryValidConstraint, IsUniqueConstraint } from './validator';
 import { CsvImport } from './csv-import';
-import { UniEntity } from './entities';
+import { UniEntity } from './entities/uni.entity';
+import { SubjectEntity } from './entities/subject.entity';
+import { AcademicFieldEntity } from './entities/academic-field.entity';
 import { DashboardModule } from '@DashboardModule/dashboard.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UniEntity]), DashboardModule],
+  imports: [TypeOrmModule.forFeature([UniEntity, SubjectEntity, AcademicFieldEntity]), DashboardModule],
   controllers: [UniversityController],
-  providers: [UniversityService, CsvImport, IsCountryValidConstraint],
+  providers: [UniversityService, CsvImport, IsCountryValidConstraint, IsUniqueConstraint],
   exports: [UniversityService, CsvImport],
 })
 export class UniversitiesModule {}

@@ -12,9 +12,12 @@ import {
   Max,
   Validate,
   IsArray,
+  ValidateIf,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-import { IsCountryValidConstraint } from '@UniversitiesModule/validator';
+import { IsCountryValidConstraint, IsSubjectValid } from '../validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { UniversityTypeEnum } from './get-university.dto';
 
 export class UpdateUniversityDto {
   @IsOptional()
@@ -40,10 +43,11 @@ export class UpdateUniversityDto {
   @Min(1)
   rank?: number;
 
+  @ApiPropertyOptional({ description: 'Type of university', enum: UniversityTypeEnum })
   @IsOptional()
-  @IsNotEmpty({ message: 'Type cannot be empty' })
-  @IsIn(['public', 'private'], { message: 'Type must be public or private' })
-  type?: 'public' | 'private';
+  @IsString()
+  @IsIn(Object.values(UniversityTypeEnum), { message: 'Invalid university type selected' })
+  type?: UniversityTypeEnum;
 
   @IsOptional()
   @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
@@ -102,8 +106,34 @@ export class UpdateUniversityDto {
   @IsBoolean()
   exchange?: boolean;
 
+  @ApiPropertyOptional({
+    description: 'List of academic field names offered by the university',
+    type: [String],
+  })
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
+  @IsArray({ message: 'Academic fields must be an array' })
+  @IsString({ each: true, message: 'Each academic field must be a string' })
   academicFields?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Details for "other" academic fields, required if "others" is selected in academicFields',
+  })
+  @ValidateIf((o) => o.academicFields && o.academicFields.includes('others'))
+  @IsNotEmpty({ message: 'Details for "others" academic field are required' })
+  @IsString()
+  otherAcademicFieldsDetails?: string;
+
+  @ApiPropertyOptional({
+    description: 'List of subject names offered by the university. Must align with selected academic fields.',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray({ message: 'Subject names must be an array' })
+  @IsString({ each: true, message: 'Each subject name must be a string' })
+  @ValidateIf((o) => o.academicFields !== undefined || o.subjectNames !== undefined)
+  @Validate(IsSubjectValid, {
+    message:
+      'Selected subjects must be valid for the chosen academic fields, and each academic field must have at least one associated subject.',
+  })
+  subjectNames?: string[];
 }

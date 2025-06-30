@@ -24,14 +24,13 @@ export class ChatbotService {
     'agriculturalFoodScience',
     'artsDesign',
     'economicsBusinessManagement',
-    'engineering',
     'lawPoliticalScience',
     'medicinePharmacyHealthSciences',
-    'physicalScience',
+    'scienceEngineering',
     'socialSciencesHumanities',
     'sportsPhysicalEducation',
     'technology',
-    'theology',
+    'others',
   ];
 
   constructor(
@@ -199,9 +198,31 @@ export class ChatbotService {
                 largestStudentBodySample.university
               } (${largestStudentBodySample.studentPopulation.toLocaleString()} students)\n`;
             }
-            responseText += `* **Diverse Types:** Including ${
-              universitiesSampleForOverview.some((u) => u.type === 'Public') ? 'Public' : ''
-            } and ${universitiesSampleForOverview.some((u) => u.type === 'Private') ? 'Private' : ''} institutions.\n`;
+            const presentTypes = new Set<UniversityTypeEnum>();
+            universitiesSampleForOverview.forEach((u) => {
+              if (Object.values(UniversityTypeEnum).includes(u.type)) {
+                presentTypes.add(u.type);
+              }
+            });
+
+            let typesOverview = '';
+            if (presentTypes.size > 0) {
+              const typeNames = Array.from(presentTypes)
+                .map((type) => type.charAt(0).toUpperCase() + type.slice(1))
+                .sort();
+
+              if (typeNames.length === 1) {
+                typesOverview = typeNames[0];
+              } else if (typeNames.length === 2) {
+                typesOverview = `${typeNames[0]} and ${typeNames[1]}`;
+              } else {
+                const lastType = typeNames.pop();
+                typesOverview = `${typeNames.join(', ')}, and ${lastType}`;
+              }
+              responseText += `* **Diverse Types:** Including ${typesOverview} institutions.\n`;
+            } else {
+              responseText += `* **Diverse Types:** Specific types not found in sample.\n`;
+            }
             responseText += `* **Common Fields:** You'll find universities specializing in ${this.getCommonFieldsFromSample(
               universitiesSampleForOverview
             )}.\n\n`;
@@ -595,14 +616,13 @@ ${index + 1}. ${uni.university}
       agriculturalFoodScience: 'Agricultural & Food Science',
       artsDesign: 'Arts & Design',
       economicsBusinessManagement: 'Economics & Business',
-      engineering: 'Engineering',
       lawPoliticalScience: 'Law & Political Science',
       medicinePharmacyHealthSciences: 'Medicine & Health Sciences',
-      physicalScience: 'Physical Science',
+      scienceEngineering: 'Science & Engineering',
       socialSciencesHumanities: 'Social Sciences & Humanities',
       sportsPhysicalEducation: 'Sports & Physical Education',
       technology: 'Technology',
-      theology: 'Theology',
+      others: 'Others',
     };
 
     this.CANONICAL_UNIVERSITY_FIELDS.forEach((key) => {

@@ -19,7 +19,7 @@
     "prepare": "husky install",
     "seed": "node dist/seed",
     "typeorm-ts": "ts-node -r tsconfig-paths/register typeorm-cli.ts",
-    "migration:run": "yarn typeorm-ts migration:run --dataSource src/modules/migration/data-source.ts",
+    "migration:run": "set NODE_OPTIONS=-r tsconfig-paths/register && yarn typeorm-ts migration:run --dataSource src/modules/migration/data-source.ts",
     "migration:revert": "yarn typeorm-ts migration:revert --dataSource src/modules/migration/data-source.ts"
   },
   "dependencies": {

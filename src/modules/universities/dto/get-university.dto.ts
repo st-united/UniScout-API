@@ -1,6 +1,6 @@
 import { IsOptional, IsString, IsEnum, IsInt, Min, IsArray, Validate } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-import { IsCountryValidConstraint } from '@UniversitiesModule/validator';
+import { IsCountryValidConstraint } from '../validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Logger } from '@nestjs/common';
 

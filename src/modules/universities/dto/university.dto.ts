@@ -1,4 +1,4 @@
-import { Expose } from 'class-transformer';
+import { Expose, Transform } from 'class-transformer';
 
 export class UniversityDto {
   @Expose() id: number;
@@ -25,5 +25,7 @@ export class UniversityDto {
   @Expose() strength?: string;
   @Expose() description?: string;
   @Expose() exchange?: boolean;
-  @Expose() academicFields?: string[];
+  @Expose()
+  @Transform(({ obj }) => obj.academicFields?.map((field: any) => field.name) || [])
+  academicFields?: string[];
 }

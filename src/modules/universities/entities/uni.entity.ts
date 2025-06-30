@@ -1,5 +1,24 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, JoinTable, ManyToMany } from 'typeorm';
 import { AbstractEntity } from '@Entity/abstract.entity';
+import { UniversityTypeEnum } from '../dto/get-university.dto';
+import { AcademicFieldEntity } from './academic-field.entity';
+import { SubjectEntity } from './subject.entity';
+
+export enum AcademicFieldEnum {
+  AGRICULTURAL_VETERINARY_SCIENCE = 'agricultural_veterinary_science',
+  ARTS_DESIGN = 'arts_design',
+  BUSINESS_MANAGEMENT_LAW = 'business_management_law',
+  EDUCATION_TRAINING = 'education_training',
+  ENGINEERING_TECHNOLOGY = 'engineering_technology',
+  HEALTH_MEDICINE = 'health_medicine',
+  HUMANITIES_LANGUAGES = 'humanities_languages',
+  ICT = 'ict',
+  NATURAL_SCIENCE = 'natural_science',
+  SOCIAL_BEHAVIORAL_SCIENCE = 'social_behavioral_science',
+  SERVICES = 'services',
+  TRANSPORT_SAFETY_SECURITY_MILITARY = 'transport_safety_security_military',
+  OTHERS = 'others',
+}
 
 @Entity('uni')
 export class UniEntity extends AbstractEntity {
@@ -8,6 +27,9 @@ export class UniEntity extends AbstractEntity {
 
   @Column({ type: 'text', unique: true })
   university: string;
+
+  @Column({ type: 'text' })
+  abbreviation: string;
 
   @Column({ type: 'double precision' })
   latitude: number;
@@ -22,7 +44,7 @@ export class UniEntity extends AbstractEntity {
   rank: number;
 
   @Column({ type: 'text' })
-  type: string;
+  type: UniversityTypeEnum;
 
   @Column({ type: 'text' })
   country: string;
@@ -48,13 +70,13 @@ export class UniEntity extends AbstractEntity {
   @Column({ type: 'int' })
   year: number;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', unique: true, nullable: true })
   contact: string;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', unique: true, nullable: true })
   email: string;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', unique: true })
   website: string;
 
   @Column({ type: 'text', nullable: true })
@@ -66,8 +88,21 @@ export class UniEntity extends AbstractEntity {
   @Column({ type: 'boolean', nullable: true })
   exchange: boolean;
 
-  @Column({ type: 'jsonb', nullable: true, default: [] })
-  academicFields: string[];
+  @ManyToMany(() => AcademicFieldEntity, (academicField) => academicField.universities)
+  @JoinTable({
+    name: 'university_academic_fields',
+    joinColumn: { name: 'uniId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'academicFieldId', referencedColumnName: 'id' },
+  })
+  academicFields: AcademicFieldEntity[];
+
+  @ManyToMany(() => SubjectEntity, (subject) => subject.universities)
+  @JoinTable({
+    name: 'university_subjects',
+    joinColumn: { name: 'uniId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'subjectId', referencedColumnName: 'id' },
+  })
+  subjects: SubjectEntity[];
 
   @Column({ default: false })
   isDeleted: boolean;

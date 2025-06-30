@@ -1,18 +1,21 @@
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from '../../app.module';
+import { AppModule } from '@app/app.module';
 import { CsvImport } from './csv-import';
 
-async function importUniversities() {
+async function runImports() {
   const app = await NestFactory.createApplicationContext(AppModule);
   const csvImportService = app.get(CsvImport);
 
   try {
-    console.log('\n Importing all universities from uni.csv...');
-    await csvImportService.importCsv('./dataset/uni.csv');
+    console.log('\n Importing all academic fields, universities, and subjects...');
 
-    console.log('\n Final Statistics:');
-    const stats = await csvImportService.getStats();
-    console.table(stats);
+    console.log('\n Importing universities from university.csv...');
+    await csvImportService.importUniCsv('./dataset/university.csv');
+
+    console.log('\n Importing subjects from subjects.csv...');
+    await csvImportService.importSubjectsCsv('./dataset/subjects.csv');
+
+    console.log('\n All imports completed successfully!');
   } catch (error) {
     console.error('Import process failed:', error);
   } finally {
@@ -20,4 +23,4 @@ async function importUniversities() {
   }
 }
 
-importUniversities().catch(console.error);
+runImports().catch(console.error);
