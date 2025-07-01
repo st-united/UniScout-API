@@ -22,7 +22,7 @@ export class DashboardGateway implements OnGatewayInit, OnGatewayConnection, OnG
   constructor(private readonly _dashboardService: DashboardService) {}
 
   afterInit(server: Server) {
-    console.log('WebSocket gateway initialized');
+    console.log(`WebSocket gateway initialized:${server}`);
   }
 
   handleConnection(client: Socket) {
