@@ -13,7 +13,7 @@ export class FileExportService {
     return uni.academicFields && uni.academicFields.some((field) => field.name === fieldName) ? 'Yes' : 'No';
   }
 
-  async generateExcel(data: UniEntity[], filename: string): Promise<string> {
+  async generateExcel(data: UniEntity[]): Promise<string> {
     try {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Universities');
@@ -73,7 +73,7 @@ export class FileExportService {
     }
   }
 
-  async generatePdf(data: UniEntity[], filename: string): Promise<string> {
+  async generatePdf(data: UniEntity[]): Promise<string> {
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });
 
