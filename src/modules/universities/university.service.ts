@@ -439,6 +439,13 @@ export class UniversityService {
       const university = await this._getUniversityByIdWithRelations(id);
 
       Object.assign(university, dto);
+      if (dto.country) {
+        university.country = dto.country;
+      }
+
+      if (dto.otherAcademicFieldsDetail !== undefined) {
+        university.otherAcademicFieldsDetail = dto.otherAcademicFieldsDetail;
+      }
 
       if (dto.academicFields !== undefined) {
         if (dto.academicFields.length === 0) {
@@ -457,6 +464,7 @@ export class UniversityService {
               id
             );
           }
+
           university.academicFields = academicFieldEntities;
         }
       }
@@ -478,6 +486,7 @@ export class UniversityService {
               id
             );
           }
+
           university.subjects = subjectEntities;
         }
       }

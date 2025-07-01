@@ -67,6 +67,34 @@ export function IsUnique(entity: EntityTarget<any>, validationOptions?: Validati
   };
 }
 
+@Injectable()
+@ValidatorConstraint({ name: 'IsOtherFieldUnique', async: true })
+export class IsOtherFieldUnique implements ValidatorConstraintInterface {
+  constructor(
+    @InjectRepository(SubjectEntity)
+    private readonly subjectRepo: Repository<SubjectEntity>
+  ) {}
+
+  async validate(value: string, args: ValidationArguments): Promise<boolean> {
+    if (!value) return true;
+
+    const input = value.trim().toLowerCase();
+
+    const subject = await this.subjectRepo
+      .createQueryBuilder('subject')
+      .leftJoinAndSelect('subject.academicField', 'academicField')
+      .where('LOWER(subject.name) = :name', { name: input })
+      .andWhere('LOWER(academicField.name) != :others', { others: 'others' })
+      .getOne();
+
+    return !subject;
+  }
+
+  defaultMessage(args: ValidationArguments) {
+    return 'This subject already exists under a defined academic field (not "others"). Please check your entry.';
+  }
+}
+
 @ValidatorConstraint({ name: 'IsSubjectValid', async: true })
 @Injectable()
 export class IsSubjectValid implements ValidatorConstraintInterface {
