@@ -88,6 +88,16 @@ export class GetUniversityDto {
   @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
   fieldNames?: string[];
 
+  @ApiPropertyOptional({
+    description: 'Array of subject names to filter by',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  subjectNames?: string[];
+
   @ApiPropertyOptional({ description: 'Page number', type: Number, default: 1, minimum: 1 })
   @IsOptional()
   @IsInt()

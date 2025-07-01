@@ -26,7 +26,7 @@ import { plainToInstance } from 'class-transformer';
 import { Response } from 'express';
 
 import { UniversityService } from './university.service';
-import { GetUniversityDto } from './dto/get-university.dto';
+import { GetUniversityDto, UniversityTypeEnum } from './dto/get-university.dto';
 import { UniversityDto } from './dto/university.dto';
 import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
@@ -153,6 +153,14 @@ export class UniversityController {
     };
   }
 
+  @Get('types')
+  getUniversityTypes() {
+    return {
+      message: 'University types retrieved successfully.',
+      data: Object.values(UniversityTypeEnum),
+    };
+  }
+
   @Get('academic-fields')
   async getAcademicFields() {
     const fields = await this._universityService.getAllAvailableAcademicFields();
@@ -160,6 +168,11 @@ export class UniversityController {
       message: 'Academic fields retrieved successfully.',
       data: fields,
     };
+  }
+
+  @Get('subjects')
+  async getSubjects(@Query('field') field: string) {
+    return this._universityService.getSubjectsByField(field);
   }
 
   @Get(':id')

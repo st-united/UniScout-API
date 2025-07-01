@@ -2,6 +2,7 @@ import { DataSource } from 'typeorm';
 import * as dotenv from 'dotenv';
 import { EnablePgTrgmAndIndexOnUni1717391677000 } from './pg-trgm';
 import { SearchIndex1749539773000 } from './search-index';
+import { LinkUniversitiesToAcademicFields1710000000000 } from './link-field';
 
 dotenv.config();
 
@@ -14,5 +15,9 @@ export default new DataSource({
   database: process.env.DB_POSTGRE_DATABASE,
   synchronize: false,
   logging: process.env.DB_POSTGRE_LOGGING === 'true',
-  migrations: [EnablePgTrgmAndIndexOnUni1717391677000, SearchIndex1749539773000],
+  migrations: [
+    EnablePgTrgmAndIndexOnUni1717391677000,
+    SearchIndex1749539773000,
+    LinkUniversitiesToAcademicFields1710000000000,
+  ],
 });

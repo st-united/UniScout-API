@@ -26,6 +26,11 @@ export class CreateUniversityDto {
   @IsString()
   university: string;
 
+  @ApiProperty({ description: 'Abbreviation of university' })
+  @IsNotEmpty({ message: 'Abbreviated name is required' })
+  @IsString()
+  abbreviation: string;
+
   @ApiPropertyOptional({ description: 'Geographical latitude of university' })
   @IsOptional()
   @Type(() => Number)
@@ -82,9 +87,13 @@ export class CreateUniversityDto {
   @Type(() => Number)
   year: number;
 
-  @ApiProperty({ description: 'Contact number' })
+  @ApiProperty({ description: 'Contact number (e.g., 84 123456789)' })
   @IsNotEmpty({ message: 'Contact is required' })
   @IsString()
+  @Matches(/^\d{1,3}\d{6,14}$/, {
+    message:
+      'Invalid contact format. Must start with a country code (1-3 digits), followed by contact number (e.g., 84123456789).',
+  })
   contact: string;
 
   @ApiProperty({ description: 'Email address' })
