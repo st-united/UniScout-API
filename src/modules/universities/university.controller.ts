@@ -31,6 +31,7 @@ import { UniversityDto } from './dto/university.dto';
 import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
 import { ExportUniversityDto } from './dto/export-university.dto';
+import { ConfirmDeleteDto } from './dto/confirm-delete.dto';
 import { Readable } from 'stream';
 import { JwtAccessTokenGuard } from '@AuthModule/guards/jwt-access-token.guard';
 import { UserRole } from '@Constant/enums';
@@ -206,7 +207,7 @@ export class UniversityController {
   )
   async create(
     @Body(new ValidationPipe({ transform: true, whitelist: true })) createDto: CreateUniversityDto,
-    @UploadedFile() logo: Express.Multer.File
+    @UploadedFile() logo: Express.Multer.File // logo?
   ) {
     if (!logo) {
       throw new BadRequestException('Logo file is required.');
@@ -214,6 +215,7 @@ export class UniversityController {
     const createdUniversity = await this._universityService.create({
       ...createDto,
       logo: logo.filename,
+      // logo: logo ? logo.filename : null,
     });
     return plainToInstance(UniversityDto, createdUniversity, {
       excludeExtraneousValues: true,
@@ -261,8 +263,8 @@ export class UniversityController {
   @Delete(':id')
   // @UseGuards(JwtAccessTokenGuard, RolesGuard)
   // @Roles(UserRole.ADMIN)
-  async deleteUniversity(@Param('id', ParseIntPipe) id: number, @Body('confirm_deletion') confirmDeletion: boolean) {
-    if (!confirmDeletion) {
+  async deleteUniversity(@Param('id', ParseIntPipe) id: number, @Body() confirmDeleteDto: ConfirmDeleteDto) {
+    if (!confirmDeleteDto.confirm_deletion) {
       throw new BadRequestException('Deletion must be confirmed by setting confirm_deletion to true.');
     }
 
