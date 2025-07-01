@@ -302,10 +302,7 @@ export class ChatbotService {
 
         try {
           if (queryParams.exportFormat === 'excel') {
-            const excelBase64 = await this._fileExportService.generateExcel(
-              universitiesToExport,
-              `universities_export_${new Date().toISOString().slice(0, 10)}.xlsx`
-            );
+            const excelBase64 = await this._fileExportService.generateExcel(universitiesToExport);
             fileData = {
               type: 'excel',
               base64: excelBase64,
@@ -313,10 +310,7 @@ export class ChatbotService {
             };
             responseText = `${exportMessage}You should see a download prompt.`;
           } else if (queryParams.exportFormat === 'pdf') {
-            const pdfBase64 = await this._fileExportService.generatePdf(
-              universitiesToExport,
-              `universities_export_${new Date().toISOString().slice(0, 10)}.pdf`
-            );
+            const pdfBase64 = await this._fileExportService.generatePdf(universitiesToExport);
             fileData = {
               type: 'pdf',
               base64: pdfBase64,
@@ -368,10 +362,7 @@ export class ChatbotService {
     if (universities.length === 0) {
       throw new InternalServerErrorException('No universities found for the provided IDs to export to Excel.');
     }
-    return this._fileExportService.generateExcel(
-      universities,
-      `universities_export_${new Date().toISOString().slice(0, 10)}.xlsx`
-    );
+    return this._fileExportService.generateExcel(universities);
   }
 
   async exportUniversitiesAsPdf(universityIds: number[]): Promise<string> {
@@ -379,10 +370,7 @@ export class ChatbotService {
     if (universities.length === 0) {
       throw new InternalServerErrorException('No universities found for the provided IDs to export to PDF.');
     }
-    return this._fileExportService.generatePdf(
-      universities,
-      `universities_export_${new Date().toISOString().slice(0, 10)}.pdf`
-    );
+    return this._fileExportService.generatePdf(universities);
   }
 
   private getCommonFieldsFromSample(universities: UniEntity[]): string {

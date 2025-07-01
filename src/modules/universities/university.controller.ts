@@ -34,8 +34,8 @@ import { ExportUniversityDto } from './dto/export-university.dto';
 import { Readable } from 'stream';
 import { JwtAccessTokenGuard } from '@AuthModule/guards/jwt-access-token.guard';
 import { UserRole } from '@Constant/enums';
-import { Roles } from '@Decorators/roles.decorator';
-import { RolesGuard } from '@Guards/roles.guard';
+import { Roles } from '@AuthModule/decorators/roles.decorator';
+import { RolesGuard } from '@AuthModule/guards/roles.guard';
 
 @Controller('universities')
 export class UniversityController {
