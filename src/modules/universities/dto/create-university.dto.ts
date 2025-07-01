@@ -15,7 +15,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { IsCountryValidConstraint, IsSubjectValid } from '../validator';
+import { IsCountryValidConstraint, IsOtherFieldUnique, IsSubjectValid } from '../validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UniversityTypeEnum } from './get-university.dto';
 import { AcademicFieldEnum } from '../entities/uni.entity';
@@ -134,19 +134,22 @@ export class CreateUniversityDto {
   @IsIn(Object.values(AcademicFieldEnum), { each: true, message: 'Invalid academic field selected' })
   academicFields: AcademicFieldEnum[];
 
-  @ApiPropertyOptional({
-    description: 'Details for "other" academic fields, required if "others" is selected in academicFields',
-  })
   @ValidateIf((o) => o.academicFields && o.academicFields.includes(AcademicFieldEnum.OTHERS))
   @IsNotEmpty({ message: 'Other academic field details are required when "others" is selected' })
   @IsString({ message: 'Other academic field details must be a string' })
+  @Validate(IsOtherFieldUnique)
   otherAcademicFieldsDetail?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'List of subject names offered by the university. Must align with selected academic fields.',
     type: [String],
   })
-  @IsNotEmpty({ message: 'Subject names are required' })
+  @ValidateIf(
+    (o) =>
+      Array.isArray(o.academicFields) &&
+      o.academicFields.filter((field) => field !== AcademicFieldEnum.OTHERS).length > 0
+  )
+  @IsNotEmpty({ message: 'Subject names are required when non-"others" academic fields are selected' })
   @IsArray({ message: 'Subject names must be an array' })
   @IsString({ each: true, message: 'Each subject name must be a string' })
   @Validate(IsSubjectValid, {

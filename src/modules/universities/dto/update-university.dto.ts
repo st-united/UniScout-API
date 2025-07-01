@@ -14,7 +14,7 @@ import {
   IsArray,
   ValidateIf,
 } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import { IsCountryValidConstraint, IsSubjectValid } from '../validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { UniversityTypeEnum } from './get-university.dto';
@@ -24,6 +24,11 @@ export class UpdateUniversityDto {
   @IsNotEmpty({ message: 'University name cannot be empty' })
   @IsString()
   university?: string;
+
+  @IsOptional()
+  @IsNotEmpty({ message: 'Abbreviation cannot be empty' })
+  @IsString()
+  abbreviation?: string;
 
   @IsOptional()
   @IsNotEmpty({ message: 'Latitude cannot be empty' })
@@ -50,11 +55,9 @@ export class UpdateUniversityDto {
   type?: UniversityTypeEnum;
 
   @IsOptional()
-  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
-  @IsArray()
-  @IsString({ each: true })
+  @IsString()
   @Validate(IsCountryValidConstraint)
-  country?: string[];
+  country?: string;
 
   @IsOptional()
   @IsNotEmpty({ message: 'Location cannot be empty' })
@@ -62,9 +65,9 @@ export class UpdateUniversityDto {
   location?: string;
 
   @IsOptional()
-  @IsNotEmpty({ message: 'Student cannot be empty' })
+  @IsNotEmpty({ message: 'Student population cannot be empty' })
   @Type(() => Number)
-  @IsInt({ message: 'Student must be a number' })
+  @IsInt({ message: 'Student population must be a number' })
   @Min(0)
   studentPopulation?: number;
 
@@ -73,12 +76,16 @@ export class UpdateUniversityDto {
   @Type(() => Number)
   @IsInt()
   @Min(1000)
-  @Max(9999)
+  @Max(new Date().getFullYear())
   year?: number;
 
   @IsOptional()
   @IsNotEmpty({ message: 'Contact cannot be empty' })
   @IsString()
+  @Matches(/^\d{1,3}\d{6,14}$/, {
+    message:
+      'Invalid contact format. Must start with a country code (1–3 digits), followed by contact number (e.g., 84123456789).',
+  })
   contact?: string;
 
   @IsOptional()
@@ -116,12 +123,12 @@ export class UpdateUniversityDto {
   academicFields?: string[];
 
   @ApiPropertyOptional({
-    description: 'Details for "other" academic fields, required if "others" is selected in academicFields',
+    description: 'Details for "others" academic field, if selected',
   })
   @ValidateIf((o) => o.academicFields && o.academicFields.includes('others'))
-  @IsNotEmpty({ message: 'Details for "others" academic field are required' })
+  @IsOptional()
   @IsString()
-  otherAcademicFieldsDetails?: string;
+  otherAcademicFieldsDetail?: string;
 
   @ApiPropertyOptional({
     description: 'List of subject names offered by the university. Must align with selected academic fields.',

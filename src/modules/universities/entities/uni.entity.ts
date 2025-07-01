@@ -104,6 +104,9 @@ export class UniEntity extends AbstractEntity {
   })
   subjects: SubjectEntity[];
 
+  @Column({ nullable: true })
+  otherAcademicFieldsDetail?: string;
+
   @Column({ default: false })
   isDeleted: boolean;
 }
