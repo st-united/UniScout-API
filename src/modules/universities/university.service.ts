@@ -58,6 +58,8 @@ export class UniversityService {
     query: GetUniversityDto | ExportUniversityDto
   ): Promise<boolean> {
     let isExactMatch = false;
+    qb.andWhere('uni.isDeleted = :isDeleted', { isDeleted: false });
+
     if (query?.search?.trim()) {
       const searchTerm = query.search.trim();
 
@@ -71,6 +73,7 @@ export class UniversityService {
             .orWhere('uni_exact.location ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
         })
       );
+      exactMatchQb.andWhere('uni_exact.isDeleted = :isDeleted', { isDeleted: false });
 
       const exactCount = await exactMatchQb.getCount();
 
@@ -504,22 +507,21 @@ export class UniversityService {
 
   //Delete University
   async deleteUniversity(id: number): Promise<{ success: boolean; message: string }> {
-    this._logger.log(`Deletion attempt: University ID=${id}`);
+    this._logger.log(`Soft deletion attempt: University ID=${id}`);
 
     try {
-      const university = await this._getUniversityById(id, true);
-
+      const university = await this._getUniversityById(id, false);
       if (university.logo) {
         await this.deleteLogoFile(university.logo);
       }
 
-      const result = await this._uniRepository.delete({ id });
+      const result = await this._uniRepository.update(id, { isDeleted: true });
 
       if (result.affected && result.affected > 0) {
-        this._logger.log(`University deleted: ID=${id}`);
-        return { success: true, message: 'Successfully deleted university.' };
+        this._logger.log(`University soft deleted: ID=${id}`);
+        return { success: true, message: 'Successfully soft deleted university.' };
       } else {
-        throw new InternalServerErrorException('Deletion failed due to an unexpected issue.');
+        throw new NotFoundException(`University with ID ${id} not found or already deleted.`);
       }
     } catch (error) {
       this._handleServiceError(error, 'deleteUniversity', id);
