@@ -12,15 +12,15 @@ export class ContactSubmissionEntity {
   @Column({ nullable: true })
   name: string;
 
-  @Column()
+  @Column({ nullable: true })
   universityName: string;
 
-  @Column()
+  @Column({ nullable: true })
   phoneNumber: string;
-  @Column({ type: 'enum', enum: RequestTypeEnum })
+  @Column({ type: 'enum', enum: RequestTypeEnum, default: RequestTypeEnum.NEW_UNIVERSITY })
   requestType: RequestTypeEnum;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', default: '' })
   message: string;
 
   @Column({ nullable: true })

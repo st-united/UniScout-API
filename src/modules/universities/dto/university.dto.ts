@@ -3,6 +3,7 @@ import { Expose, Transform } from 'class-transformer';
 export class UniversityDto {
   @Expose() id: number;
   @Expose() university: string;
+  @Expose() abbreviation: string;
   @Expose() latitude: number;
   @Expose() longitude: number;
   @Expose() logo?: string;
