@@ -11,6 +11,7 @@ import { unlink } from 'fs/promises';
 import { join, basename } from 'path';
 import { stringify } from 'csv-stringify';
 import * as ExcelJS from 'exceljs';
+import { plainToInstance } from 'class-transformer';
 
 import { UniEntity } from './entities/uni.entity';
 import { SubjectEntity } from './entities/subject.entity';
@@ -20,6 +21,7 @@ import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
 import { GeoIpService, SearchLogService, TrackingService } from '@DashboardModule/services';
 import { ExportUniversityDto, ExportFormat } from './dto/export-university.dto';
+import { UniversityDto } from './dto/university.dto';
 
 type UniversityPaginationResult = {
   universities: UniEntity[];
@@ -133,19 +135,14 @@ export class UniversityService {
     }
 
     if (query?.fieldNames && query.fieldNames.length > 0) {
-      query.fieldNames.forEach((fieldName, index) => {
-        qb.andWhere(
-          new Brackets((subQb) => {
-            subQb.where(
-              `EXISTS (
-                  SELECT 1
-                  FROM jsonb_array_elements_text(uni."academicFields") AS field
-                  WHERE field ILIKE :fieldName${index}
-                )`,
-              { [`fieldName${index}`]: `%${fieldName}%` }
-            );
-          })
-        );
+      qb.andWhere('LOWER(academicField.name) IN (:...fieldNames)', {
+        fieldNames: query.fieldNames.map((name) => name.toLowerCase()),
+      });
+    }
+
+    if ((query as any)?.subjectNames && (query as any).subjectNames.length > 0) {
+      qb.andWhere('LOWER(subject.name) IN (:...subjectNames)', {
+        subjectNames: (query as any).subjectNames.map((name: string) => name.toLowerCase()),
       });
     }
 
@@ -175,21 +172,20 @@ export class UniversityService {
     const nullsOrder = requestedSortOrder === SortOrderEnum.DESC ? 'NULLS FIRST' : 'NULLS LAST';
 
     if (searchTerm) {
+      qb.setParameter('searchTerm', searchTerm);
+
       if (isExactMatch) {
         qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
       } else {
         qb.addOrderBy(`similarity(uni.university, :searchTerm)`, 'DESC', 'NULLS LAST');
         qb.addOrderBy(`similarity(uni.location, :searchTerm)`, 'DESC', 'NULLS LAST');
-        qb.setParameter('searchTerm', searchTerm);
-
-        qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
       }
     } else {
       qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
     }
 
-    qb.addOrderBy(
-      `CASE uni.country
+    qb.addSelect(
+      `CASE "uni"."country"
             WHEN 'Vietnam' THEN 1
             WHEN 'Korea' THEN 2
             WHEN 'Japan' THEN 3
@@ -197,10 +193,10 @@ export class UniversityService {
             WHEN 'Australia' THEN 5
             WHEN 'USA' THEN 6
             ELSE 7 END`,
-      'ASC',
-      'NULLS LAST'
+      'country_order'
     );
 
+    qb.addOrderBy('country_order', 'ASC');
     qb.addOrderBy('uni.university', SortOrderEnum.ASC);
   }
 
@@ -222,7 +218,10 @@ export class UniversityService {
     query?: GetUniversityDto,
     defaultLimit = 18
   ): Promise<UniversityPaginationResult> {
-    const qb = this._uniRepository.createQueryBuilder('uni');
+    const qb = this._uniRepository
+      .createQueryBuilder('uni')
+      .leftJoinAndSelect('uni.academicFields', 'academicField')
+      .leftJoinAndSelect('uni.subjects', 'subject');
 
     const isExactMatch = await this._applyFilters(qb, query);
     this._applySorting(qb, query?.sortOrder, query?.search, isExactMatch);
@@ -326,6 +325,14 @@ export class UniversityService {
       const qb = this._uniRepository.createQueryBuilder('uni');
       qb.where('uni.isDeleted = :isDeleted', { isDeleted: false });
 
+      if (query?.fieldNames && query.fieldNames.length > 0) {
+        qb.leftJoin('uni.academicFields', 'academicField');
+      }
+
+      if ((query as any)?.subjectNames && (query as any).subjectNames.length > 0) {
+        qb.leftJoin('uni.subjects', 'subject');
+      }
+
       await this._applyFilters(qb, query);
 
       const totalCount = await qb.getCount();
@@ -346,12 +353,26 @@ export class UniversityService {
   }
 
   async getAllAvailableAcademicFields(): Promise<string[]> {
-    const result = await this._uniRepository
+    const result = await this._academicFieldRepository
       .createQueryBuilder('uni')
-      .select('DISTINCT jsonb_array_elements_text(uni.academicFields)', 'field')
+      .innerJoin('uni.academicFields', 'academicField')
+      .select('DISTINCT academicField.name', 'field')
       .orderBy('field', 'ASC')
       .getRawMany();
     return result.map((row) => row.field);
+  }
+
+  async getSubjectsByField(fieldName: string): Promise<string[]> {
+    const field = await this._academicFieldRepository.findOne({
+      where: { name: fieldName.toLowerCase() },
+      relations: ['subjects'],
+    });
+
+    if (!field) {
+      throw new NotFoundException(`Academic field "${fieldName}" not found`);
+    }
+
+    return field.subjects.map((s) => s.name);
   }
 
   //Create University
@@ -400,7 +421,7 @@ export class UniversityService {
   private async _getUniversityByIdWithRelations(id: number): Promise<UniEntity> {
     const university = await this._uniRepository.findOne({
       where: { id },
-      relations: ['academicFields', 'subjects'], // Ensure relations are loaded
+      relations: ['academicFields', 'subjects'],
     });
     if (!university) {
       this._handleServiceError(
@@ -510,12 +531,19 @@ export class UniversityService {
     format: ExportFormat
   ): Promise<{ data: Buffer; filename: string; contentType: string }> {
     try {
-      const qb = this._uniRepository.createQueryBuilder('uni');
+      const qb = this._uniRepository
+        .createQueryBuilder('uni')
+        .leftJoinAndSelect('uni.academicFields', 'academicField')
+        .leftJoinAndSelect('uni.subjects', 'subject');
 
       this._applyFilters(qb, query);
       this._applySorting(qb, query?.sortOrder);
 
-      const universities = await qb.getMany();
+      const uniEntities = await qb.getMany();
+
+      console.log('Fetched UniEntities before DTO transformation:', JSON.stringify(uniEntities, null, 2));
+
+      const universities = plainToInstance(UniversityDto, uniEntities);
 
       let columnsToInclude: string[];
 
@@ -542,7 +570,7 @@ export class UniversityService {
     }
   }
 
-  private async exportCSV(universities: UniEntity[], columns: string[]) {
+  private async exportCSV(universities: UniversityDto[], columns: string[]) {
     return new Promise<{ data: Buffer; filename: string; contentType: string }>((resolve, reject) => {
       const stringifier = stringify({ header: true, columns });
       const chunks: Buffer[] = [];
@@ -576,7 +604,7 @@ export class UniversityService {
     });
   }
 
-  private async exportExcel(universities: UniEntity[], columns: string[]) {
+  private async exportExcel(universities: UniversityDto[], columns: string[]) {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Universities');
 

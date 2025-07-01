@@ -3,6 +3,7 @@ import { Expose, Transform } from 'class-transformer';
 export class UniversityDto {
   @Expose() id: number;
   @Expose() university: string;
+  @Expose() abbreviation: string;
   @Expose() latitude: number;
   @Expose() longitude: number;
   @Expose() logo?: string;
@@ -25,7 +26,18 @@ export class UniversityDto {
   @Expose() strength?: string;
   @Expose() description?: string;
   @Expose() exchange?: boolean;
-  @Expose()
-  @Transform(({ obj }) => obj.academicFields?.map((field: any) => field.name) || [])
-  academicFields?: string[];
+
+  @Expose({ name: 'academic_fields' })
+  @Transform(({ obj }) => {
+    if (Array.isArray(obj.academicFields)) {
+      return (
+        obj.academicFields
+          .map((field: any) => field.name)
+          ?.filter(Boolean)
+          .join(', ') || 'NA'
+      );
+    }
+    return 'NA';
+  })
+  academicFields?: string;
 }
