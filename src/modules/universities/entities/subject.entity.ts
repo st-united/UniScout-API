@@ -14,6 +14,9 @@ export class SubjectEntity extends AbstractEntity {
   @ManyToOne(() => AcademicFieldEntity, (academicField) => academicField.subjects)
   academicField: AcademicFieldEntity;
 
+  @Column({ nullable: false })
+  academicFieldId: number;
+
   @ManyToMany(() => UniEntity, (uni) => uni.subjects)
   universities: UniEntity[];
 }

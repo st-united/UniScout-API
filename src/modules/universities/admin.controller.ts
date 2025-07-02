@@ -35,8 +35,8 @@ import { ExportUniversityDto } from './dto/export-university.dto';
 import { ConfirmDeleteDto } from './dto/confirm-delete.dto';
 import { JwtAccessTokenGuard } from '@AuthModule/guards/jwt-access-token.guard';
 import { UserRole } from '@Constant/enums';
-import { Roles } from '@Decorators/roles.decorator';
-import { RolesGuard } from '@Guards/roles.guard';
+import { Roles } from '@AuthModule/decorators/roles.decorator';
+import { RolesGuard } from '@AuthModule/guards/roles.guard';
 import { ApiOperation } from '@nestjs/swagger';
 
 @Controller('admin/universities')
