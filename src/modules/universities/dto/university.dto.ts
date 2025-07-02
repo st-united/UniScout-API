@@ -13,7 +13,10 @@ export class UniversityDto {
   @Expose() location?: string;
   @Expose() studentPopulation?: number;
   @Expose()
-  get size(): 'small' | 'medium' | 'large' | 'extra large' {
+  get size(): 'small' | 'medium' | 'large' | 'extra large' | null {
+    if (this.studentPopulation === undefined || this.studentPopulation === null) {
+      return null;
+    }
     if (this.studentPopulation < 20000) return 'small';
     if (this.studentPopulation < 40000) return 'medium';
     if (this.studentPopulation < 100000) return 'large';
@@ -27,17 +30,40 @@ export class UniversityDto {
   @Expose() description?: string;
   @Expose() exchange?: boolean;
 
-  @Expose({ name: 'academic_fields' })
-  @Transform(({ obj }) => {
-    if (Array.isArray(obj.academicFields)) {
-      return (
-        obj.academicFields
-          .map((field: any) => field.name)
-          ?.filter(Boolean)
-          .join(', ') || 'NA'
-      );
-    }
-    return 'NA';
+  @Expose()
+  @Transform(({ value }) => {
+    return value === null || value === undefined || value === '' ? 'NA' : value;
   })
-  academicFields?: string;
+  academicFieldsCommaSeparated?: string;
+
+  @Expose()
+  @Transform(({ value }) => {
+    return value === null || value === undefined || value === '' ? 'NA' : value;
+  })
+  subjectsList?: string;
+}
+
+export interface UniversityDisplayDto {
+  id: number;
+  university: string;
+  abbreviation: string;
+  latitude: number;
+  longitude: number;
+  logo?: string;
+  rank?: number;
+  type?: string;
+  country: string;
+  location?: string;
+  studentPopulation?: number;
+  size: 'small' | 'medium' | 'large' | 'extra large' | null;
+  year?: number;
+  contact?: string;
+  email?: string;
+  website?: string;
+  strength?: string;
+  description?: string;
+  exchange?: string;
+  academicFieldsCommaSeparated?: string;
+  subjectsList?: string;
+  [key: string]: any;
 }

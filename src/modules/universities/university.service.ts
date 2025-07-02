@@ -21,10 +21,10 @@ import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
 import { GeoIpService, SearchLogService, TrackingService } from '@DashboardModule/services';
 import { ExportUniversityDto, ExportFormat } from './dto/export-university.dto';
-import { UniversityDto } from './dto/university.dto';
+import { UniversityDto, UniversityDisplayDto } from './dto/university.dto';
 
 type UniversityPaginationResult = {
-  universities: UniEntity[];
+  universities: UniversityDisplayDto[];
   totalCount: number;
   currentPage: number;
   limit: number;
@@ -209,7 +209,10 @@ export class UniversityService {
       whereClause.isDeleted = false;
     }
 
-    const university = await this._uniRepository.findOne({ where: whereClause });
+    const university = await this._uniRepository.findOne({
+      where: whereClause,
+      relations: ['academicFields', 'subjects'],
+    });
 
     if (!university) {
       throw new NotFoundException(`University with ID ${id} not found.`);
@@ -232,10 +235,15 @@ export class UniversityService {
     const page = query?.page ?? 1;
     const limit = query?.limit ?? defaultLimit;
 
-    const [universities, totalCount] = await qb
+    const [uniEntities, totalCount] = await qb
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
+
+    const allAcademicFieldNames = await this.getAllAcademicFieldNamesDefined();
+    const universities = await Promise.all(
+      uniEntities.map(async (uniEntity) => this._transformUniEntityToDisplayDto(uniEntity, allAcademicFieldNames))
+    );
 
     return { universities, totalCount, currentPage: page, limit };
   }
@@ -259,6 +267,50 @@ export class UniversityService {
     }
     await this._searchLogService.logSearch(searchTerm, country);
     this._logger.log(`Logging search with country: ${country}`);
+  }
+
+  private async _transformUniEntityToDisplayDto(
+    uniEntity: UniEntity,
+    allAcademicFieldNames: string[]
+  ): Promise<UniversityDisplayDto> {
+    const uniDto = plainToInstance(UniversityDto, uniEntity);
+
+    const { exchange: uniDtoExchange, size, ...restUniDto } = uniDto;
+
+    const transformedUni: UniversityDisplayDto = { ...restUniDto, size };
+
+    const universityAcademicFields = new Set(uniEntity.academicFields?.map((af) => af.name.toLowerCase()) || []);
+
+    allAcademicFieldNames.forEach((fieldName) => {
+      const fieldHeader = fieldName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      transformedUni[fieldHeader] = universityAcademicFields.has(fieldName.toLowerCase()) ? 'Yes' : 'No';
+    });
+
+    transformedUni.academicFieldsCommaSeparated = uniEntity.academicFields?.map((af) => af.name).join(', ') || 'NA';
+
+    transformedUni.subjectsList = uniEntity.subjects?.map((s) => s.name).join(', ') || 'NA';
+
+    if (uniDtoExchange === true) {
+      transformedUni.exchange = 'Yes';
+    } else if (uniDtoExchange === false) {
+      transformedUni.exchange = 'No';
+    } else {
+      transformedUni.exchange = '-';
+    }
+
+    for (const key in transformedUni) {
+      if (key === 'exchange' || key === 'size' || key === 'academicFieldsCommaSeparated' || key === 'subjectsList') {
+        continue;
+      }
+
+      if (transformedUni[key] === null || transformedUni[key] === undefined || transformedUni[key] === '') {
+        transformedUni[key] = '-';
+      }
+    }
+
+    console.log('Debug: Final transformedUni object:', JSON.stringify(transformedUni, null, 2));
+
+    return transformedUni;
   }
 
   async findAll(
@@ -290,7 +342,7 @@ export class UniversityService {
   }
 
   //View University
-  async getUniversity(id: number, ipAddress?: string): Promise<UniEntity> {
+  async getUniversity(id: number, ipAddress?: string): Promise<UniversityDisplayDto> {
     try {
       const university = await this._getUniversityById(id);
 
@@ -305,19 +357,21 @@ export class UniversityService {
 
       this._logger.log(`Tracking view for university ID ${id} with country: ${country}`);
 
-      return university;
+      const allAcademicFieldNames = await this.getAllAcademicFieldNamesDefined();
+      return this._transformUniEntityToDisplayDto(university, allAcademicFieldNames);
     } catch (error) {
       this._handleServiceError(error, 'getUniversity', id);
     }
   }
 
   //View University (Admin)
-  async getUniversityAdmin(id: number): Promise<UniEntity> {
+  async getUniversityAdmin(id: number): Promise<UniversityDisplayDto> {
     try {
       const university = await this._getUniversityById(id);
       this._logger.log(`Admin fetched university ID ${id}`);
 
-      return university;
+      const allAcademicFieldNames = await this.getAllAcademicFieldNamesDefined();
+      return this._transformUniEntityToDisplayDto(university, allAcademicFieldNames);
     } catch (error) {
       this._handleServiceError(error, 'getUniversityAdmin', id);
     }
@@ -346,19 +400,33 @@ export class UniversityService {
   }
 
   async getAllAvailableCountries(): Promise<string[]> {
-    const countries = await this._uniRepository
-      .createQueryBuilder('uni')
-      .select('DISTINCT uni.country', 'country')
-      .orderBy('uni.country', 'ASC')
+    try {
+      const countries = await this._uniRepository
+        .createQueryBuilder('uni')
+        .select('DISTINCT uni.country', 'country')
+        .orderBy('uni.country', 'ASC')
+        .getRawMany();
+
+      return countries.map((c) => c.country);
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to fetch available countries from database.');
+    }
+  }
+
+  async getAllAcademicFieldNamesDefined(): Promise<string[]> {
+    const academicFields = await this._academicFieldRepository
+      .createQueryBuilder('academicField')
+      .select('academicField.name', 'name')
+      .distinct(true)
+      .orderBy('academicField.name', 'ASC')
       .getRawMany();
 
-    return countries.map((c) => c.country);
+    return academicFields.map((field) => field.name);
   }
 
   async getAllAvailableAcademicFields(): Promise<string[]> {
     const result = await this._academicFieldRepository
-      .createQueryBuilder('uni')
-      .innerJoin('uni.academicFields', 'academicField')
+      .createQueryBuilder('academicField')
       .select('DISTINCT academicField.name', 'field')
       .orderBy('field', 'ASC')
       .getRawMany();
@@ -379,129 +447,124 @@ export class UniversityService {
   }
 
   //Create University
-  async create(createDto: CreateUniversityDto & { logo: string }): Promise<UniEntity> {
-    try {
-      const { academicFields, subjects, ...uniDetails } = createDto;
+  async create(dto: CreateUniversityDto): Promise<UniversityDto> {
+    const uni = this._uniRepository.create({
+      university: dto.university,
+      abbreviation: dto.abbreviation,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+      logo: dto.logo,
+      rank: dto.rank,
+      type: dto.type,
+      country: dto.country,
+      location: dto.location,
+      studentPopulation: dto.studentPopulation,
+      year: dto.year,
+      contact: dto.contact,
+      email: dto.email,
+      website: dto.website,
+      strength: dto.strength,
+      description: dto.description,
+      exchange: dto.exchange,
+    });
 
-      let academicFieldEntities: AcademicFieldEntity[] = [];
-      if (academicFields && academicFields.length > 0) {
-        academicFieldEntities = await this._academicFieldRepository.find({
-          where: { name: In(academicFields) },
-        });
-
-        if (academicFieldEntities.length !== academicFields.length) {
-          const foundNames = new Set(academicFieldEntities.map((af) => af.name));
-          const missingNames = academicFields.filter((name) => !foundNames.has(name));
-          throw new NotFoundException(`Academic field(s) not found: ${missingNames.join(', ')}`);
-        }
-      }
-
-      let subjectEntities: SubjectEntity[] = [];
-      if (subjects && subjects.length > 0) {
-        subjectEntities = await this._subjectRepository.find({
-          where: { name: In(subjects) },
-        });
-
-        if (subjectEntities.length !== subjects.length) {
-          const foundNames = new Set(subjectEntities.map((s) => s.name));
-          const missingNames = subjects.filter((name) => !foundNames.has(name));
-          throw new NotFoundException(`Subject(s) not found: ${missingNames.join(', ')}`);
-        }
-      }
-
-      const uni = this._uniRepository.create({
-        ...uniDetails,
-        academicFields: academicFieldEntities,
-        subjects: subjectEntities,
+    if (dto.academicFields && dto.academicFields.length > 0) {
+      const academicFieldEntities = await this._academicFieldRepository.find({
+        where: { name: In(dto.academicFields) },
       });
 
-      return await this._uniRepository.save(uni);
-    } catch (error) {
-      this._handleServiceError(error, 'createUniversity');
+      if (academicFieldEntities.length !== dto.academicFields.length) {
+        const foundNames = new Set(academicFieldEntities.map((af) => af.name));
+        const missingNames = dto.academicFields.filter((name) => !foundNames.has(name));
+        throw new NotFoundException(`Academic field(s) not found: ${missingNames.join(', ')}`);
+      }
+      uni.academicFields = academicFieldEntities;
+    } else {
+      uni.academicFields = [];
     }
-  }
 
-  private async _getUniversityByIdWithRelations(id: number): Promise<UniEntity> {
-    const university = await this._uniRepository.findOne({
-      where: { id },
-      relations: ['academicFields', 'subjects'],
-    });
-    if (!university) {
-      this._handleServiceError(
-        new NotFoundException(`University with ID ${id} not found`),
-        '_getUniversityByIdWithRelations',
-        id
-      );
+    if (dto.subjects && dto.subjects.length > 0) {
+      const subjectEntities = await this._subjectRepository.find({
+        where: { name: In(dto.subjects) },
+      });
+
+      if (subjectEntities.length !== dto.subjects.length) {
+        const foundNames = new Set(subjectEntities.map((s) => s.name));
+        const missingNames = dto.subjects.filter((name) => !foundNames.has(name));
+        throw new NotFoundException(`Subject(s) not found: ${missingNames.join(', ')}`);
+      }
+      uni.subjects = subjectEntities;
+    } else {
+      uni.subjects = [];
     }
-    return university;
-  }
 
-  //Update University
-  async updateUniversity(id: number, dto: UpdateUniversityDto): Promise<{ message: string; data: UniEntity }> {
     try {
-      const university = await this._getUniversityByIdWithRelations(id);
-
-      Object.assign(university, dto);
-      if (dto.country) {
-        university.country = dto.country;
-      }
-
-      if (dto.otherAcademicFieldsDetail !== undefined) {
-        university.otherAcademicFieldsDetail = dto.otherAcademicFieldsDetail;
-      }
-
-      if (dto.academicFields !== undefined) {
-        if (dto.academicFields.length === 0) {
-          university.academicFields = [];
-        } else {
-          const academicFieldEntities = await this._academicFieldRepository.find({
-            where: { name: In(dto.academicFields) },
-          });
-
-          if (academicFieldEntities.length !== dto.academicFields.length) {
-            const foundNames = new Set(academicFieldEntities.map((af) => af.name));
-            const missingNames = dto.academicFields.filter((name) => !foundNames.has(name));
-            this._handleServiceError(
-              new NotFoundException(`Academic field(s) not found: ${missingNames.join(', ')}`),
-              'updateUniversity',
-              id
-            );
-          }
-
-          university.academicFields = academicFieldEntities;
-        }
-      }
-
-      if (dto.subjectNames !== undefined) {
-        if (dto.subjectNames.length === 0) {
-          university.subjects = [];
-        } else {
-          const subjectEntities = await this._subjectRepository.find({
-            where: { name: In(dto.subjectNames) },
-          });
-
-          if (subjectEntities.length !== dto.subjectNames.length) {
-            const foundNames = new Set(subjectEntities.map((s) => s.name));
-            const missingNames = dto.subjectNames.filter((name) => !foundNames.has(name));
-            this._handleServiceError(
-              new NotFoundException(`Subject(s) not found: ${missingNames.join(', ')}`),
-              'updateUniversity',
-              id
-            );
-          }
-
-          university.subjects = subjectEntities;
-        }
-      }
-
-      const updatedUniversity = await this._uniRepository.save(university);
-
-      return {
-        message: 'University updated successfully',
-        data: updatedUniversity,
-      };
+      const savedUni = await this._uniRepository.save(uni);
+      return plainToInstance(UniversityDto, savedUni);
     } catch (error) {
-      this._handleServiceError(error, 'updateUniversity', id);
+      if (error.code === '23505') {
+        throw new BadRequestException('University with this name already exists.');
+      }
+      Logger.error(`Error creating university: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Failed to create university.');
+    }
+  }
+
+  async updateUniversity(id: number, dto: UpdateUniversityDto): Promise<UniversityDto> {
+    const university = await this._uniRepository.findOne({ where: { id } });
+
+    if (!university) {
+      throw new NotFoundException(`University with ID ${id} not found`);
+    }
+
+    const updateData: Partial<UpdateUniversityDto> = { ...dto };
+    delete updateData.academicFields;
+    delete updateData.subjectNames;
+
+    Object.assign(university, updateData);
+    if (dto.academicFields !== undefined) {
+      if (dto.academicFields.length > 0) {
+        const academicFieldEntities = await this._academicFieldRepository.find({
+          where: { name: In(dto.academicFields) },
+        });
+
+        if (academicFieldEntities.length !== dto.academicFields.length) {
+          const foundNames = new Set(academicFieldEntities.map((af) => af.name));
+          const missingNames = dto.academicFields.filter((name) => !foundNames.has(name));
+          throw new NotFoundException(`Academic field(s) not found: ${missingNames.join(', ')}`);
+        }
+        university.academicFields = academicFieldEntities;
+      } else {
+        university.academicFields = [];
+      }
+    }
+
+    if (dto.subjectNames !== undefined) {
+      if (dto.subjectNames.length > 0) {
+        const subjectEntities = await this._subjectRepository.find({
+          where: { name: In(dto.subjectNames) },
+        });
+
+        if (subjectEntities.length !== dto.subjectNames.length) {
+          const foundNames = new Set(subjectEntities.map((s) => s.name));
+          const missingNames = dto.subjectNames.filter((name) => !foundNames.has(name));
+          throw new NotFoundException(`Subject(s) not found: ${missingNames.join(', ')}`);
+        }
+        university.subjects = subjectEntities;
+      } else {
+        university.subjects = [];
+      }
+    }
+
+    try {
+      const savedUniversity = await this._uniRepository.save(university);
+      return plainToInstance(UniversityDto, savedUniversity);
+    } catch (error) {
+      if (error.code === '23505') {
+        throw new BadRequestException('University with this name already exists.');
+      }
+      Logger.error(`Error updating university: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Failed to update university.');
     }
   }
 
@@ -554,18 +617,45 @@ export class UniversityService {
 
       console.log('Fetched UniEntities before DTO transformation:', JSON.stringify(uniEntities, null, 2));
 
-      const universities = plainToInstance(UniversityDto, uniEntities);
+      const allAcademicFieldNames = await this.getAllAcademicFieldNamesDefined();
+
+      const universities = await Promise.all(
+        uniEntities.map(async (uniEntity) => {
+          return this._transformUniEntityToDisplayDto(uniEntity, allAcademicFieldNames);
+        })
+      );
 
       let columnsToInclude: string[];
 
       if (query.columns && query.columns.length > 0) {
         columnsToInclude = query.columns;
       } else {
-        if (universities.length > 0) {
-          columnsToInclude = Object.keys(universities[0]);
-        } else {
-          columnsToInclude = [];
-        }
+        const academicFieldHeaders = allAcademicFieldNames.map((name) => name.toLowerCase().replace(/[^a-z0-9]/g, '_'));
+
+        columnsToInclude = [
+          'id',
+          'university',
+          'abbreviation',
+          'latitude',
+          'longitude',
+          'logo',
+          'rank',
+          'type',
+          'country',
+          'location',
+          'studentPopulation',
+          'size',
+          'year',
+          'contact',
+          'email',
+          'website',
+          'strength',
+          'description',
+          'exchange',
+          ...academicFieldHeaders,
+          'subjects',
+          'academicFieldsCommaSeparated',
+        ];
       }
 
       if (format === ExportFormat.CSV) {
@@ -581,9 +671,24 @@ export class UniversityService {
     }
   }
 
-  private async exportCSV(universities: UniversityDto[], columns: string[]) {
+  private async exportCSV(universities: UniversityDisplayDto[], columns: string[]) {
     return new Promise<{ data: Buffer; filename: string; contentType: string }>((resolve, reject) => {
-      const stringifier = stringify({ header: true, columns });
+      const csvColumns = columns.map((col) => {
+        if (col.includes('_')) {
+          return col
+            .split('_')
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+        }
+        if (col === 'id') return 'ID';
+        if (col === 'academicFieldsCommaSeparated') return 'Academic Fields';
+        return col.charAt(0).toUpperCase() + col.slice(1);
+      });
+
+      const stringifier = stringify({
+        header: true,
+        columns: columns.map((col, index) => ({ key: col, header: csvColumns[index] })),
+      });
       const chunks: Buffer[] = [];
 
       stringifier.on('readable', () => {
@@ -606,7 +711,7 @@ export class UniversityService {
       universities.forEach((u) => {
         const row: Record<string, any> = {};
         columns.forEach((col) => {
-          row[col] = (u as any)[col];
+          row[col] = u[col];
         });
         stringifier.write(row);
       });
@@ -615,20 +720,33 @@ export class UniversityService {
     });
   }
 
-  private async exportExcel(universities: UniversityDto[], columns: string[]) {
+  private async exportExcel(universities: UniversityDisplayDto[], columns: string[]) {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Universities');
 
-    worksheet.columns = columns.map((col) => ({
-      header: col.charAt(0).toUpperCase() + col.slice(1),
-      key: col,
-      width: 20,
-    }));
+    worksheet.columns = columns.map((col) => {
+      let headerText = col;
+      if (col.includes('_')) {
+        headerText = col
+          .split('_')
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+      } else {
+        if (col === 'id') headerText = 'ID';
+        else if (col === 'academicFieldsCommaSeparated') headerText = 'Academic Fields';
+        else headerText = col.charAt(0).toUpperCase() + col.slice(1);
+      }
+      return {
+        header: headerText,
+        key: col,
+        width: 20,
+      };
+    });
 
     universities.forEach((u) => {
       const row: Record<string, any> = {};
       columns.forEach((col) => {
-        row[col] = (u as any)[col];
+        row[col] = u[col];
       });
       worksheet.addRow(row);
     });

@@ -66,22 +66,29 @@ export class DashboardService {
 
   async subjectStats() {
     const fields = [
-      'agriculturalFoodScience',
-      'artsDesign',
-      'economicsBusinessManagement',
-      'engineering',
-      'lawPoliticalScience',
-      'medicinePharmacyHealthSciences',
-      'physicalScience',
-      'socialSciencesHumanities',
-      'sportsPhysicalEducation',
-      'technology',
-      'theology',
+      'agricultural_veterinary_sciences',
+      'arts_design',
+      'business_management_law',
+      'education_training',
+      'engineering_technology',
+      'health_medicine',
+      'humanities_languages',
+      'ict',
+      'natural_sciences',
+      'social_behavioral_sciences',
+      'services',
+      'transport_safety_security_military',
+      'others',
     ];
 
     const results: Record<string, number> = {};
     for (const field of fields) {
-      const count = await this._uniRepo.count({ where: { [field]: true } });
+      const count = await this._uniRepo
+        .createQueryBuilder('uni')
+        .leftJoin('uni.academicFields', 'academicField')
+        .where('LOWER(academicField.name) = :fieldName', { fieldName: field })
+        .getCount();
+
       results[field] = count;
     }
 

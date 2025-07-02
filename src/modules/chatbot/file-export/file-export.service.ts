@@ -1,19 +1,20 @@
-// src/modules/chatbot/file-export/file-export.service.ts
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import * as PDFDocument from 'pdfkit';
-import { UniEntity } from '@UniversitiesModule/entities'; // Make sure this path is correct based on your aliases
+import { UniversityDisplayDto } from '@UniversitiesModule/dto/university.dto';
 
 @Injectable()
 export class FileExportService {
   private readonly _logger = new Logger(FileExportService.name);
 
-  // Helper function to check if an academic field exists in the array
-  private _hasAcademicField(uni: UniEntity, fieldName: string): string {
-    return uni.academicFields && uni.academicFields.some((field) => field.name === fieldName) ? 'Yes' : 'No';
+  private _hasAcademicField(uni: UniversityDisplayDto, fieldName: string): string {
+    if (uni.academicFieldsCommaSeparated) {
+      const academicFieldsArray = uni.academicFieldsCommaSeparated.split(', ').map((s) => s.trim());
+      return academicFieldsArray.includes(fieldName) ? 'Yes' : 'No';
+    }
+    return 'No';
   }
-
-  async generateExcel(data: UniEntity[]): Promise<string> {
+  async generateExcel(data: UniversityDisplayDto[], filename: string): Promise<string> {
     try {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Universities');
@@ -27,17 +28,19 @@ export class FileExportService {
         { header: 'Student Population', key: 'studentPopulation', width: 20 },
         { header: 'Website', key: 'website', width: 30 },
         { header: 'Contact', key: 'contact', width: 25 },
-        { header: 'Agricultural & Food Science', key: 'agriculturalFoodScience', width: 10 }, // Keep header for consistency
-        { header: 'Arts & Design', key: 'artsDesign', width: 10 },
-        { header: 'Economics & Business', key: 'economicsBusinessManagement', width: 10 },
-        { header: 'Engineering', key: 'engineering', width: 10 },
-        { header: 'Law & Political Science', key: 'lawPoliticalScience', width: 10 },
-        { header: 'Medicine & Health Sciences', key: 'medicinePharmacyHealthSciences', width: 10 },
-        { header: 'Physical Science', key: 'physicalScience', width: 10 },
-        { header: 'Social Sciences & Humanities', key: 'socialSciencesHumanities', width: 10 },
-        { header: 'Sports & Physical Education', key: 'sportsPhysicalEducation', width: 10 },
-        { header: 'Technology', key: 'technology', width: 10 },
-        { header: 'Theology', key: 'theology', width: 10 },
+        { header: 'Agricultural & Veterinary Sciences', key: 'agricultural_veterinary_sciences', width: 10 },
+        { header: 'Arts & Design', key: 'arts_design', width: 10 },
+        { header: 'Business, Management & Law', key: 'business_management_law', width: 10 },
+        { header: 'Education & Training', key: 'education_training', width: 10 },
+        { header: 'Engineering & Technology', key: 'engineering_technology', width: 10 },
+        { header: 'Health & Medicine', key: 'health_medicine', width: 10 },
+        { header: 'Humanities & Languages', key: 'humanities_languages', width: 10 },
+        { header: 'Information & Communication Technologies (ICT)', key: 'ict', width: 10 },
+        { header: 'Natural Sciences', key: 'natural_sciences', width: 10 },
+        { header: 'Social & Behavioral Sciences', key: 'social_behavioral_sciences', width: 10 },
+        { header: 'Services', key: 'services', width: 10 },
+        { header: 'Transport, Safety & Security, Military', key: 'transport_safety_security_military', width: 10 },
+        { header: 'Others', key: 'others', width: 10 },
       ];
 
       data.forEach((uni) => {
@@ -51,17 +54,19 @@ export class FileExportService {
           website: uni.website,
           contact: uni.email || uni.contact,
           // Now dynamically check academicFields array
-          agriculturalFoodScience: this._hasAcademicField(uni, 'Agricultural & Food Science'),
-          artsDesign: this._hasAcademicField(uni, 'Arts & Design'),
-          economicsBusinessManagement: this._hasAcademicField(uni, 'Economics & Business'), // Use the specific string
-          engineering: this._hasAcademicField(uni, 'Engineering'),
-          lawPoliticalScience: this._hasAcademicField(uni, 'Law & Political Science'),
-          medicinePharmacyHealthSciences: this._hasAcademicField(uni, 'Medicine & Health Sciences'), // Use the specific string
-          physicalScience: this._hasAcademicField(uni, 'Physical Science'),
-          socialSciencesHumanities: this._hasAcademicField(uni, 'Social Sciences & Humanities'),
-          sportsPhysicalEducation: this._hasAcademicField(uni, 'Sports & Physical Education'),
-          technology: this._hasAcademicField(uni, 'Technology'),
-          theology: this._hasAcademicField(uni, 'Theology'),
+          agricultural_veterinary_sciences: this._hasAcademicField(uni, 'Agricultural & Veterinary Sciences'),
+          arts_design: this._hasAcademicField(uni, 'Arts & Design'),
+          business_management_law: this._hasAcademicField(uni, 'Business, Management & Law'),
+          education_training: this._hasAcademicField(uni, 'Education & Training'),
+          engineering_technology: this._hasAcademicField(uni, 'Engineering & Technology'),
+          health_medicine: this._hasAcademicField(uni, 'Health & Medicine'),
+          humanities_languages: this._hasAcademicField(uni, 'Humanities & Languages'),
+          ict: this._hasAcademicField(uni, 'Information & Communication Technologies (ICT)'),
+          natural_sciences: this._hasAcademicField(uni, 'Natural Sciences'),
+          social_behavioral_sciences: this._hasAcademicField(uni, 'Social & Behavioral Sciences'),
+          services: this._hasAcademicField(uni, 'Services'),
+          transport_safety_security_military: this._hasAcademicField(uni, 'Transport, Safety & Security, Military'),
+          others: this._hasAcademicField(uni, 'Others'),
         });
       });
 
@@ -73,7 +78,7 @@ export class FileExportService {
     }
   }
 
-  async generatePdf(data: UniEntity[]): Promise<string> {
+  async generatePdf(data: UniversityDisplayDto[], filename: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });
 

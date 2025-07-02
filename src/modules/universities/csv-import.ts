@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { UniEntity, SubjectEntity, AcademicFieldEntity } from './entities';
 import * as fs from 'fs';
 import * as Papa from 'papaparse';
@@ -32,10 +32,9 @@ export class CsvImport {
 
     const records = results.data;
     const totalRecords = records.length;
-    const uniCsvHeaders = results.meta.fields || [];
 
-    const newAcademicFieldNames = [
-      'agricultural_veterinary_science',
+    const academicFieldHeadersInCsv = [
+      'agricultural_veterinary_sciences',
       'arts_design',
       'business_management_law',
       'education_training',
@@ -43,15 +42,15 @@ export class CsvImport {
       'health_medicine',
       'humanities_languages',
       'ict',
-      'natural_science',
-      'social_behavioral_science',
+      'natural_sciences',
+      'social_behavioral_sciences',
       'services',
       'transport_safety_security_military',
       'others',
     ];
 
     const academicFieldEntities: AcademicFieldEntity[] = [];
-    for (const name of newAcademicFieldNames) {
+    for (const name of academicFieldHeadersInCsv) {
       let field = await this.academicFieldRepo.findOne({ where: { name } });
       if (!field) {
         field = this.academicFieldRepo.create({ name });
@@ -66,19 +65,54 @@ export class CsvImport {
     for (let i = 0; i < totalRecords; i++) {
       const record = records[i];
       const uniAcademicFields: AcademicFieldEntity[] = [];
+      const subjectsToLinkToUni: SubjectEntity[] = [];
 
-      newAcademicFieldNames.forEach((fieldName) => {
+      for (const fieldName of academicFieldHeadersInCsv) {
         const recordValue = record[fieldName];
-        const parsedBoolean = this.parseBoolean(recordValue);
 
-        if (parsedBoolean) {
-          if (academicFieldMap.has(fieldName)) {
-            uniAcademicFields.push(academicFieldMap.get(fieldName));
+        if (
+          recordValue &&
+          typeof recordValue === 'string' &&
+          recordValue.trim() !== '' &&
+          recordValue.trim().toLowerCase() !== 'na'
+        ) {
+          const academicField = academicFieldMap.get(fieldName);
+          if (academicField) {
+            uniAcademicFields.push(academicField);
+
+            const rawSubjectNames = recordValue.split(',').map((s: string) => s.trim());
+
+            const validSubjectNames = rawSubjectNames.filter(
+              (name: string) => name !== '' && name.toLowerCase() !== 'na'
+            );
+
+            if (validSubjectNames.length > 0) {
+              try {
+                const foundSubjects = await this.subjectRepo.find({
+                  where: {
+                    name: In(validSubjectNames),
+                    academicField: { id: academicField.id },
+                  },
+                });
+
+                foundSubjects.forEach((subject) => {
+                  if (!subjectsToLinkToUni.some((s) => s.id === subject.id)) {
+                    subjectsToLinkToUni.push(subject);
+                  }
+                });
+              } catch (error) {
+                this._logger.error(
+                  `Error fetching subjects for academic field ${academicField.name}: ${error.message}`
+                );
+              }
+            }
           } else {
-            this._logger.warn(`Academic field '${fieldName}' not found in map for university '${record.university}'.`);
+            this._logger.warn(
+              `Academic field header '${fieldName}' from CSV not found in academicFieldMap for university '${record.university}'. Check CSV headers and academicFieldHeadersInCsv array.`
+            );
           }
         }
-      });
+      }
 
       const entity = this.uniRepo.create({
         university: record.university?.toString().trim() || null,
@@ -98,10 +132,15 @@ export class CsvImport {
         strength: record.strength?.toString().trim() || null,
         description: record.description?.toString().trim() || null,
         exchange: this.parseBoolean(record.exchange),
+        academicFields: uniAcademicFields,
+        subjects: subjectsToLinkToUni,
       });
 
       if (entity.university) {
-        const existingUni = await this.uniRepo.findOne({ where: { university: entity.university } });
+        const existingUni = await this.uniRepo.findOne({
+          where: { university: entity.university },
+          relations: ['academicFields', 'subjects'],
+        });
 
         if (existingUni) {
           existingUni.abbreviation = entity.abbreviation;
@@ -120,7 +159,8 @@ export class CsvImport {
           existingUni.strength = entity.strength;
           existingUni.description = entity.description;
           existingUni.exchange = entity.exchange;
-          existingUni.academicFields = entity.academicFields;
+          existingUni.academicFields = uniAcademicFields;
+          existingUni.subjects = subjectsToLinkToUni;
           await this.uniRepo.save(existingUni);
           this._logger.log(`Updated university record ${i + 1}/${totalRecords}: ${entity.university}`);
         } else {
