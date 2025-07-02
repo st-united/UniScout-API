@@ -9,11 +9,11 @@ async function runImports() {
   try {
     console.log('\n Importing all academic fields, universities, and subjects...');
 
-    console.log('\n Importing universities from university.csv...');
-    await csvImportService.importUniCsv('./dataset/university.csv');
-
     console.log('\n Importing subjects from subjects.csv...');
     await csvImportService.importSubjectsCsv('./dataset/subjects.csv');
+
+    console.log('\n Importing universities from university.csv...');
+    await csvImportService.importUniCsv('./dataset/university.csv');
 
     console.log('\n All imports completed successfully!');
   } catch (error) {

@@ -24,65 +24,31 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { plainToInstance } from 'class-transformer';
 import { Response } from 'express';
+import { Readable } from 'stream';
 
 import { UniversityService } from './university.service';
-import { GetUniversityDto, UniversityTypeEnum } from './dto/get-university.dto';
+import { GetUniversityDto } from './dto/get-university.dto';
 import { UniversityDto } from './dto/university.dto';
 import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
 import { ExportUniversityDto } from './dto/export-university.dto';
-import { Readable } from 'stream';
+import { ConfirmDeleteDto } from './dto/confirm-delete.dto';
 import { JwtAccessTokenGuard } from '@AuthModule/guards/jwt-access-token.guard';
 import { UserRole } from '@Constant/enums';
 import { Roles } from '@Decorators/roles.decorator';
 import { RolesGuard } from '@Guards/roles.guard';
-import { ConfirmDeleteDto } from './dto/confirm-delete.dto';
+import { ApiOperation } from '@nestjs/swagger';
 
-@Controller('universities')
-export class UniversityController {
-  private readonly _logger = new Logger(UniversityController.name);
+@Controller('admin/universities')
+// @UseGuards(JwtAccessTokenGuard, RolesGuard)
+// @Roles(UserRole.ADMIN)
+export class AdminController {
+  private readonly _logger = new Logger(AdminController.name);
 
   constructor(private readonly _universityService: UniversityService) {}
 
-  //View University
   @Get()
-  @UsePipes(
-    new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      transformOptions: {
-        enableImplicitConversion: true,
-      },
-    })
-  )
-  async findAll(@Query() query: GetUniversityDto, @Req() req: any) {
-    this._logger.log('Raw Query Params (req.query):', req.query);
-    this._logger.log('Transformed Query DTO (query):', query);
-    this._logger.log('Query.fieldNames:', query.fieldNames);
-
-    const { universities, totalCount, currentPage, limit } = await this._universityService.findAll(query, req.ip);
-
-    if (!universities || universities.length === 0) {
-      return {
-        message: 'No universities match the selected criteria.',
-        data: [],
-        totalCount: 0,
-        currentPage: currentPage,
-        limit: limit,
-      };
-    }
-    return {
-      message: 'Universities retrieved successfully.',
-      data: universities.map((uni) => plainToInstance(UniversityDto, uni, { excludeExtraneousValues: true })),
-      totalCount: totalCount,
-      currentPage: currentPage,
-      limit: limit,
-    };
-  }
-
-  @Get('admin')
-  // @UseGuards(JwtAccessTokenGuard, RolesGuard)
-  // @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'View universities (Admin)' })
   @UsePipes(
     new ValidationPipe({
       transform: true,
@@ -117,6 +83,7 @@ export class UniversityController {
   }
 
   @Get('export')
+  @ApiOperation({ summary: 'Export universities (Admin)' })
   @UsePipes(
     new ValidationPipe({
       transform: true,
@@ -145,38 +112,8 @@ export class UniversityController {
     }
   }
 
-  @Get('countries')
-  async getCountries() {
-    const countries = await this._universityService.getAllAvailableCountries();
-    return {
-      message: 'Countries retrieved successfully.',
-      data: countries,
-    };
-  }
-
-  @Get('types')
-  getUniversityTypes() {
-    return {
-      message: 'University types retrieved successfully.',
-      data: Object.values(UniversityTypeEnum),
-    };
-  }
-
-  @Get('academic-fields')
-  async getAcademicFields() {
-    const fields = await this._universityService.getAllAvailableAcademicFields();
-    return {
-      message: 'Academic fields retrieved successfully.',
-      data: fields,
-    };
-  }
-
-  @Get('subjects')
-  async getSubjects(@Query('field') field: string) {
-    return this._universityService.getSubjectsByField(field);
-  }
-
   @Get(':id')
+  @ApiOperation({ summary: 'Get university by ID (Admin)' })
   async getUniversity(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
     const university = await this._universityService.getUniversity(id, req.ip);
     if (!university) {
@@ -187,10 +124,9 @@ export class UniversityController {
     });
   }
 
-  //Create University
+  // Create University
   @Post()
-  // @UseGuards(JwtAccessTokenGuard, RolesGuard)
-  // @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Create university (Admin)' })
   @UseInterceptors(
     FileInterceptor('logo', {
       storage: diskStorage({
@@ -207,7 +143,7 @@ export class UniversityController {
   )
   async create(
     @Body(new ValidationPipe({ transform: true, whitelist: true })) createDto: CreateUniversityDto,
-    @UploadedFile() logo: Express.Multer.File // logo?
+    @UploadedFile() logo: Express.Multer.File
   ) {
     if (!logo) {
       throw new BadRequestException('Logo file is required.');
@@ -215,17 +151,15 @@ export class UniversityController {
     const createdUniversity = await this._universityService.create({
       ...createDto,
       logo: logo.filename,
-      // logo: logo ? logo.filename : null,
     });
     return plainToInstance(UniversityDto, createdUniversity, {
       excludeExtraneousValues: true,
     });
   }
 
-  //Update University
+  // Update University
   @Patch(':id')
-  // @UseGuards(JwtAccessTokenGuard, RolesGuard)
-  // @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Edit university details (Admin)' })
   @UseInterceptors(
     FileInterceptor('logo', {
       storage: diskStorage({
@@ -254,15 +188,14 @@ export class UniversityController {
     if (!updatedUniversity) {
       throw new NotFoundException(`University with ID ${id} not found.`);
     }
-    return plainToInstance(UniversityDto, updatedUniversity.data, {
+    return plainToInstance(UniversityDto, updatedUniversity, {
       excludeExtraneousValues: true,
     });
   }
 
-  //Delete University
+  // Delete University
   @Delete(':id')
-  // @UseGuards(JwtAccessTokenGuard, RolesGuard)
-  // @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Delete university (Admin)' })
   async deleteUniversity(@Param('id', ParseIntPipe) id: number, @Body() confirmDeleteDto: ConfirmDeleteDto) {
     if (!confirmDeleteDto.confirm_deletion) {
       throw new BadRequestException('Deletion must be confirmed by setting confirm_deletion to true.');
