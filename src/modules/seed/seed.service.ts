@@ -1,7 +1,6 @@
 import { Injectable, OnApplicationBootstrap, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
 import { UserEntity } from '../users/entities/user.entity';
 import { StatusEnum, UserRole } from '@Constant/enums';
 import { ConfigService } from '@nestjs/config';
@@ -21,18 +20,18 @@ export class SeedService implements OnApplicationBootstrap {
 
   private async seedUsers(): Promise<void> {
     try {
-      const superUserEmail = 'super@gmail.com';
+      const superUserEmail = 'superadmin@gmail.com';
       const existingUser = await this.userRepository.findOneBy({
         email: superUserEmail,
       });
 
       if (!existingUser) {
         this.logger.log(`Seeding initial SUPER user: ${superUserEmail}`);
-        const hashedPassword = await bcrypt.hash(this.configService.get<string>('RESET_PASSWORD') || 'password', 10);
+        const plainTextPassword = this.configService.get<string>('RESET_PASSWORD') || 'password';
 
         const newUser = this.userRepository.create({
           email: superUserEmail,
-          password: hashedPassword,
+          password: plainTextPassword,
           name: 'Super Administrator',
           role: UserRole.SUPER,
           status: StatusEnum.ACTIVE,
