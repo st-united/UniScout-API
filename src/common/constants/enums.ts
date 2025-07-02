@@ -16,10 +16,10 @@ export enum SortEnum {
 export enum UserRole {
   ADMIN = 'admin',
   USER = 'user',
-  MODERATOR = 'moderator', // You can add more roles here if needed
+  SUPER = 'super',
 }
 
 export enum RequestTypeEnum {
-  CHANGE_INFORMATION = 'CHANGE_INFORMATION',
-  COOPERATION = 'COOPERATION',
+  NEW_UNIVERSITY = 'New University',
+  UPDATE_INFORMATION = 'Update Information',
 }

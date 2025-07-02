@@ -34,5 +34,10 @@
     "strictBindCallApply": false,
     "strictNullChecks": false,
     "target": "es2017"
-  }
+  },
+  "include": [
+    "src/**/*.ts", // This includes all your main application TypeScript files
+    "src/seed.ts" // <--- ADD THIS LINE to explicitly include your seed file
+  ],
+  "exclude": ["node_modules", "dist"]
 }

@@ -12,6 +12,7 @@ import { ContactModule } from '@ContactModule/contact.module';
 import { UsersModule } from '@UsersModule/users.module';
 import { DashboardModule } from '@DashboardModule/dashboard.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
+import { FieldsModule } from './modules/fields/fields.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ChatbotModule } from './modules/chatbot/chatbot.module';
     UniversitiesModule,
     UsersModule,
     ChatbotModule,
+    FieldsModule,
   ],
   providers: [
     {

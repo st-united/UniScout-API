@@ -50,7 +50,7 @@ export class UserEntity extends AbstractEntity {
   @Column({
     type: 'enum',
     enum: UserRole,
-    default: UserRole.USER,
+    default: UserRole.ADMIN,
   })
   role: UserRole;
 
