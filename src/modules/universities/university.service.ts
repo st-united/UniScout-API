@@ -69,7 +69,8 @@ export class UniversityService {
       exactMatchQb.andWhere(
         new Brackets((qbInner) => {
           qbInner
-            .where('uni_exact.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+            .where('uni_exact.abbreviation ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+            .orWhere('uni_exact.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
             .orWhere('uni_exact.location ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
         })
       );
@@ -81,7 +82,8 @@ export class UniversityService {
         qb.andWhere(
           new Brackets((qbInner) => {
             qbInner
-              .where('uni.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+              .where('uni.abbreviation ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+              .orWhere('uni.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
               .orWhere('uni.location ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
           })
         );
@@ -158,10 +160,6 @@ export class UniversityService {
     if (query?.rank) {
       qb.andWhere('uni.rank = :rank', { rank: query.rank });
     }
-
-    if (query?.location && !query.search) {
-      qb.andWhere('uni.location ILIKE :location', { location: `%${query.location}%` });
-    }
     return isExactMatch;
   }
 
@@ -180,6 +178,7 @@ export class UniversityService {
       if (isExactMatch) {
         qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
       } else {
+        qb.addOrderBy(`similarity(uni.abbreviation, :searchTerm)`, 'DESC', 'NULLS LAST');
         qb.addOrderBy(`similarity(uni.university, :searchTerm)`, 'DESC', 'NULLS LAST');
         qb.addOrderBy(`similarity(uni.location, :searchTerm)`, 'DESC', 'NULLS LAST');
       }
