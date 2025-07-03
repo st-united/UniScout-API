@@ -102,6 +102,9 @@ export class UniversityService {
               });
           })
         );
+        qb.addSelect(`similarity(uni.abbreviation, :searchTerm)`, 'abbreviation_similarity');
+        qb.addSelect(`similarity(uni.university, :searchTerm)`, 'university_similarity');
+        qb.addSelect(`similarity(uni.location, :searchTerm)`, 'location_similarity');
       }
     }
 
@@ -178,9 +181,9 @@ export class UniversityService {
       if (isExactMatch) {
         qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
       } else {
-        qb.addOrderBy(`similarity(uni.abbreviation, :searchTerm)`, 'DESC', 'NULLS LAST');
-        qb.addOrderBy(`similarity(uni.university, :searchTerm)`, 'DESC', 'NULLS LAST');
-        qb.addOrderBy(`similarity(uni.location, :searchTerm)`, 'DESC', 'NULLS LAST');
+        qb.addOrderBy('abbreviation_similarity', 'DESC', 'NULLS LAST');
+        qb.addOrderBy('university_similarity', 'DESC', 'NULLS LAST');
+        qb.addOrderBy('location_similarity', 'DESC', 'NULLS LAST');
       }
     } else {
       qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
@@ -306,8 +309,6 @@ export class UniversityService {
         transformedUni[key] = '-';
       }
     }
-
-    console.log('Debug: Final transformedUni object:', JSON.stringify(transformedUni, null, 2));
 
     return transformedUni;
   }
@@ -613,8 +614,6 @@ export class UniversityService {
       this._applySorting(qb, query?.sortOrder);
 
       const uniEntities = await qb.getMany();
-
-      console.log('Fetched UniEntities before DTO transformation:', JSON.stringify(uniEntities, null, 2));
 
       const allAcademicFieldNames = await this.getAllAcademicFieldNamesDefined();
 

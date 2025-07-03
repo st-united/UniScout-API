@@ -124,7 +124,7 @@ export class CsvImport {
         type: record.type?.toString().trim() || null,
         country: record.country?.toString().trim() || null,
         location: record.location?.toString().trim() || null,
-        studentPopulation: this.parseNumber(record.studentPopulation) ?? 0,
+        studentPopulation: this.parseNumber(record.studentpopulation),
         year: this.parseNumber(record.year),
         contact: this.parseContact(record.contact),
         email: this.parseStringOrNull(record.email),
