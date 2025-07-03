@@ -21,12 +21,16 @@ export class IsCountryValidConstraint implements ValidatorConstraintInterface {
     private readonly _universityService: UniversityService
   ) {}
 
-  async validate(country: string, args: ValidationArguments): Promise<boolean> {
+  async validate(countries: string | string[], args: ValidationArguments): Promise<boolean> {
     try {
       const validCountries = await this._universityService.getAllAvailableCountries();
-      return validCountries.includes(country);
+
+      const countriesToValidate = Array.isArray(countries) ? countries : [countries];
+
+      const allValid = countriesToValidate.every((country) => validCountries.includes(country));
+
+      return allValid;
     } catch (err) {
-      console.error('Error in IsCountryValidConstraint.validate:', err);
       throw new Error('Failed to validate country due to internal service error');
     }
   }

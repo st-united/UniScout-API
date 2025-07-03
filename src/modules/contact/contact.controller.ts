@@ -57,7 +57,26 @@ export class ContactController {
     let attachmentPaths: string[] = [];
 
     try {
-      const { files: _, ...createContactData } = body;
+      const createContactData: Partial<CreateContactDto> = {
+        name: body.name,
+        email: body.email,
+        message: body.message,
+        requestType: body.requestType,
+
+        universityName: body.universityName,
+        phoneNumber: body.phoneNumber,
+        country: body.country,
+        location: body.location,
+        type: body.type,
+        universityEmail: body.universityEmail,
+        website: body.website,
+        broadFieldOfStudy: body.broadFieldOfStudy,
+        specificFieldOfStudy: body.specificFieldOfStudy,
+
+        rank: body.rank ? parseInt(body.rank, 10) : undefined,
+        numberOfStudents: body.numberOfStudents ? parseInt(body.numberOfStudents, 10) : undefined,
+      };
+
       const createContactDto = plainToClass(CreateContactDto, createContactData);
 
       const errors = await validate(createContactDto);
@@ -74,7 +93,6 @@ export class ContactController {
         );
       }
 
-      // Handle optional file attachments
       if (files && files.length > 0) {
         attachmentPaths = files.map((file) => file.path);
       }
@@ -89,6 +107,17 @@ export class ContactController {
               console.error(`Failed to delete temporary file during error cleanup: ${filePath}, Error: ${err.message}`);
           });
         });
+      }
+
+      if (error instanceof multer.MulterError) {
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: `File upload error: ${error.message}`,
+            error: 'Bad Request',
+          },
+          HttpStatus.BAD_REQUEST
+        );
       }
 
       throw new HttpException(

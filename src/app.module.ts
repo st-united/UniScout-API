@@ -2,6 +2,7 @@ import * as Joi from '@hapi/joi';
 import { ClassSerializerInterceptor, MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { UniversitiesModule } from '@UniversitiesModule/university.module';
 import { DatabaseModule } from '@app/config/database.module';
@@ -12,6 +13,9 @@ import { ContactModule } from '@ContactModule/contact.module';
 import { UsersModule } from '@UsersModule/users.module';
 import { DashboardModule } from '@DashboardModule/dashboard.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
+import { FieldsModule } from './modules/fields/fields.module';
+import { UserEntity } from './modules/users/entities/user.entity'; // Adjust this path if necessary
+import { SeedService } from './modules/seed/seed.service';
 
 @Module({
   imports: [
@@ -37,18 +41,21 @@ import { ChatbotModule } from './modules/chatbot/chatbot.module';
       envFilePath: '.env',
     }),
     DatabaseModule,
+    TypeOrmModule.forFeature([UserEntity]),
     AuthModule,
     ContactModule,
     DashboardModule,
     UniversitiesModule,
     UsersModule,
     ChatbotModule,
+    FieldsModule,
   ],
   providers: [
     {
       provide: APP_INTERCEPTOR,
       useClass: ClassSerializerInterceptor,
     },
+    SeedService,
   ],
 })
 export class AppModule implements NestModule {

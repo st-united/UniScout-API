@@ -3,9 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ChatMessage, UniversityQuery, ChatResponseDataWithFile } from './dto/chatbot.dto';
 import { UniversityService } from '@UniversitiesModule/university.service';
-import { UniEntity } from '@UniversitiesModule/entities';
 import { GetUniversityDto, UniversityTypeEnum } from '@UniversitiesModule/dto/get-university.dto';
 import { FileExportService } from './file-export/file-export.service';
+import { UniversityDisplayDto } from '@UniversitiesModule/dto/university.dto';
 
 @Injectable()
 export class ChatbotService {
@@ -21,15 +21,18 @@ export class ChatbotService {
   private _validCountries: string[] = [];
 
   private readonly CANONICAL_UNIVERSITY_FIELDS: string[] = [
-    'agriculturalFoodScience',
-    'artsDesign',
-    'economicsBusinessManagement',
-    'lawPoliticalScience',
-    'medicinePharmacyHealthSciences',
-    'scienceEngineering',
-    'socialSciencesHumanities',
-    'sportsPhysicalEducation',
-    'technology',
+    'agricultural_veterinary_sciences',
+    'arts_design',
+    'business_management_law',
+    'education_training',
+    'engineering_technology',
+    'health_medicine',
+    'humanities_languages',
+    'ict',
+    'natural_sciences',
+    'social_behavioral_sciences',
+    'services',
+    'transport_safety_security_military',
     'others',
   ];
 
@@ -80,7 +83,7 @@ export class ChatbotService {
       const isUniversityRelated = await this.isUniversityRelatedQuery(message, conversationHistory);
 
       if (!isUniversityRelated) {
-        dynamicSuggestedQuestions = await this.generateSuggestedQuestions(message, conversationHistory, true); // Added 'true' to indicate general suggestions
+        dynamicSuggestedQuestions = await this.generateSuggestedQuestions(message, conversationHistory, true);
         return {
           response:
             "I'm DevBot, your personal university assistant. I can only provide information about universities. Please ask me something related to universities, like finding specific programs, rankings, or export options. If you need general assistance, please try again with a university-related question or contact DevPlus support.",
@@ -200,8 +203,8 @@ export class ChatbotService {
             }
             const presentTypes = new Set<UniversityTypeEnum>();
             universitiesSampleForOverview.forEach((u) => {
-              if (Object.values(UniversityTypeEnum).includes(u.type)) {
-                presentTypes.add(u.type);
+              if (Object.values(UniversityTypeEnum).includes(u.type as UniversityTypeEnum)) {
+                presentTypes.add(u.type as UniversityTypeEnum);
               }
             });
 
@@ -224,7 +227,15 @@ export class ChatbotService {
               responseText += `* **Diverse Types:** Specific types not found in sample.\n`;
             }
             responseText += `* **Common Fields:** You'll find universities specializing in ${this.getCommonFieldsFromSample(
-              universitiesSampleForOverview
+              universitiesSampleForOverview.map((uni) => ({
+                ...uni,
+                exchange: String(uni.exchange),
+                size: this.categorizeUniversitySize(uni.studentPopulation),
+                subjects:
+                  uni.subjects && Array.isArray(uni.subjects)
+                    ? (uni.subjects as any[]).map((s) => s.name).join(', ')
+                    : '',
+              }))
             )}.\n\n`;
           }
 
@@ -300,10 +311,18 @@ export class ChatbotService {
 
         const { universities: universitiesToExport } = await this._universityService.findAll(universitySearchParams);
 
+        const universitiesDisplayDto: UniversityDisplayDto[] = universitiesToExport.map((uni) => ({
+          ...uni,
+          exchange: String(uni.exchange),
+          size: this.categorizeUniversitySize(uni.studentPopulation),
+          subjects:
+            uni.subjects && Array.isArray(uni.subjects) ? (uni.subjects as any[]).map((s) => s.name).join(', ') : '',
+        }));
+
         try {
           if (queryParams.exportFormat === 'excel') {
             const excelBase64 = await this._fileExportService.generateExcel(
-              universitiesToExport,
+              universitiesDisplayDto,
               `universities_export_${new Date().toISOString().slice(0, 10)}.xlsx`
             );
             fileData = {
@@ -314,7 +333,7 @@ export class ChatbotService {
             responseText = `${exportMessage}You should see a download prompt.`;
           } else if (queryParams.exportFormat === 'pdf') {
             const pdfBase64 = await this._fileExportService.generatePdf(
-              universitiesToExport,
+              universitiesDisplayDto,
               `universities_export_${new Date().toISOString().slice(0, 10)}.pdf`
             );
             fileData = {
@@ -344,7 +363,18 @@ export class ChatbotService {
           suggestedQuestions: dynamicSuggestedQuestions,
         };
       }
-      responseText = await this.generateUniversityResponse(message, universities, conversationHistory);
+      const universitiesDisplayDtoForResponse: UniversityDisplayDto[] = universities.map((uni) => ({
+        ...uni,
+        exchange: String(uni.exchange),
+        size: this.categorizeUniversitySize(uni.studentPopulation),
+        subjects:
+          uni.subjects && Array.isArray(uni.subjects) ? (uni.subjects as any[]).map((s) => s.name).join(', ') : '',
+      }));
+      responseText = await this.generateUniversityResponse(
+        message,
+        universitiesDisplayDtoForResponse,
+        conversationHistory
+      );
 
       return {
         response: responseText,
@@ -368,8 +398,15 @@ export class ChatbotService {
     if (universities.length === 0) {
       throw new InternalServerErrorException('No universities found for the provided IDs to export to Excel.');
     }
+    const universitiesDisplayDto: UniversityDisplayDto[] = universities.map((uni) => ({
+      ...uni,
+      exchange: String(uni.exchange),
+      size: this.categorizeUniversitySize(uni.studentPopulation),
+      subjects:
+        uni.subjects && Array.isArray(uni.subjects) ? (uni.subjects as any[]).map((s) => s.name).join(', ') : '',
+    }));
     return this._fileExportService.generateExcel(
-      universities,
+      universitiesDisplayDto,
       `universities_export_${new Date().toISOString().slice(0, 10)}.xlsx`
     );
   }
@@ -379,266 +416,104 @@ export class ChatbotService {
     if (universities.length === 0) {
       throw new InternalServerErrorException('No universities found for the provided IDs to export to PDF.');
     }
+    const universitiesDisplayDto: UniversityDisplayDto[] = universities.map((uni) => ({
+      ...uni,
+      exchange: String(uni.exchange),
+      size: this.categorizeUniversitySize(uni.studentPopulation),
+      subjects:
+        uni.subjects && Array.isArray(uni.subjects) ? (uni.subjects as any[]).map((s) => s.name).join(', ') : '',
+    }));
     return this._fileExportService.generatePdf(
-      universities,
+      universitiesDisplayDto,
       `universities_export_${new Date().toISOString().slice(0, 10)}.pdf`
     );
   }
 
-  private getCommonFieldsFromSample(universities: UniEntity[]): string {
-    const fieldCounts: { [key: string]: number } = {};
+  private categorizeUniversitySize(
+    studentPopulation: number | null
+  ): 'small' | 'medium' | 'large' | 'extra large' | null {
+    if (studentPopulation === null || studentPopulation === undefined) {
+      return null;
+    }
+    if (studentPopulation < 5000) {
+      return 'small';
+    } else if (studentPopulation >= 5000 && studentPopulation < 15000) {
+      return 'medium';
+    } else if (studentPopulation >= 15000 && studentPopulation < 30000) {
+      return 'large';
+    } else {
+      return 'extra large';
+    }
+  }
+
+  private getCommonFieldsFromSample(universities: UniversityDisplayDto[]): string {
+    const allAcademicFieldsFound: string[] = [];
+    const subjectsFromDto: string[] = [];
+
     universities.forEach((uni) => {
-      const fields = this.getUniversityFields(uni);
-      fields.forEach((field) => {
-        fieldCounts[field] = (fieldCounts[field] || 0) + 1;
+      this.CANONICAL_UNIVERSITY_FIELDS.forEach((fieldKey) => {
+        if (uni[fieldKey as keyof UniversityDisplayDto] === true) {
+          allAcademicFieldsFound.push(this.formatFieldKeyForDisplay(fieldKey));
+        }
       });
+
+      if (uni.academicFieldsCommaSeparated && uni.academicFieldsCommaSeparated !== 'NA') {
+        allAcademicFieldsFound.push(...uni.academicFieldsCommaSeparated.split(', ').map((field) => field.trim()));
+      }
+
+      if (uni.subjects && uni.subjects !== 'NA') {
+        subjectsFromDto.push(...uni.subjects.split(', ').map((subject) => subject.trim()));
+      }
     });
 
-    const sortedFields = Object.entries(fieldCounts)
-      .sort(([, countA], [, countB]) => countB - countA)
-      .map(([field]) => field);
+    const uniqueAcademicFields = [...new Set(allAcademicFieldsFound)].filter(Boolean);
+    const uniqueSubjects = [...new Set(subjectsFromDto)].filter(Boolean);
 
-    return sortedFields.slice(0, 3).join(', ') + (sortedFields.length > 3 ? ', etc.' : '');
-  }
-
-  private async isUniversityRelatedQuery(message: string, conversationHistory: ChatMessage[]): Promise<boolean> {
-    const historyForPrompt = this.formatConversationHistory(conversationHistory);
-    const prompt = `
-    Analyze the following user message and recent conversation history. Determine if the user's intent is primarily related to universities, colleges, higher education, academic programs, rankings, admissions, or exporting university data.
-
-    Respond with "YES" if it is university-related, and "NO" if it is not.
-    Provide ONLY "YES" or "NO". Do not add any other text or explanation.
-
-    Conversation History:
-    ${historyForPrompt}
-
-    User's last message: "${message}"
-
-    Is this message university-related?
-    `;
-
-    try {
-      const result = await this._model.generateContent(prompt);
-      const responseText = result.response.text().trim().toUpperCase();
-      return responseText === 'YES';
-    } catch (error) {
-      const universityKeywords = [
-        'university',
-        'universities',
-        'college',
-        'school',
-        'education',
-        'study',
-        'degree',
-        'ranking',
-        'rank',
-        'student',
-        'campus',
-        'engineering',
-        'medicine',
-        'business',
-        'arts',
-        'science',
-        'location',
-        'country',
-        'exchange',
-        'program',
-        'field',
-        'recommend',
-        'suggest',
-        'best',
-        'top',
-        'find',
-        'how many',
-        'number of',
-        'all universities',
-        'export',
-        'download',
-        'file',
-        'spreadsheet',
-        'excel',
-        'pdf',
-      ];
-      const lowerMessage = message.toLowerCase();
-      return universityKeywords.some((keyword) => lowerMessage.includes(keyword));
+    let commonFieldsText = '';
+    if (uniqueAcademicFields.length > 0) {
+      commonFieldsText += `academic fields like ${uniqueAcademicFields.slice(0, 3).join(', ')}`;
+      if (uniqueAcademicFields.length > 3) {
+        commonFieldsText += ` and more`;
+      }
     }
-  }
 
-  private async extractUniversityQuery(message: string, conversationHistory: ChatMessage[]): Promise<UniversityQuery> {
-    const historyForPrompt = this.formatConversationHistory(conversationHistory);
-
-    const prompt = `
-    You are a highly precise JSON extraction bot. Your task is to analyze user requests for university searches or data exports and return ONLY a single JSON object.
-
-    Strict Rules for JSON Output:
-    1.  Output ONLY the JSON object. Do not include any other text, markdown formatting (like triple backticks), or comments outside the JSON.
-    2.  If a field's value cannot be inferred from the user message, OMIT that field from the JSON object. Do not use null for missing fields.
-    3.  **For country names, extract them as literally as possible from the user's message. Do NOT perform any normalization like "USA" to "United States" internally.** The application will handle normalization based on its valid countries.
-    4.  If the user asks for a specific number of results (e.g., "top 5", "show me 10"), set the 'limit' field. Default conversational limit is 10 if not specified and not an export request.
-    5.  **CRITICAL FOR EXPORT:**
-        * Set 'exportFormat' ONLY if the user explicitly asks to "export", "download", "get a file", "spreadsheet", "excel file", or "PDF".
-        * If 'exportFormat' is set, you MUST also set 'exportLimit'. If the user does not specify a number for export (e.g., "export all", "get a spreadsheet"), set 'exportLimit' to a large number like 1000.
-        * If 'exportFormat' is set, DO NOT set the 'limit' field. 'exportLimit' takes precedence for file exports.
-    6.  **For pure count queries (e.g., "How many universities in Canada?"):** Only return the 'country' field. Do NOT return 'limit' or 'exportFormat' or 'exportLimit'.
-    7.  **For academic fields:** If the user mentions a field of study (e.g., "computer science", "medicine", "business"), map it to the closest possible canonical field name from the provided list. Return this as a boolean true for the corresponding field key in the 'fields' object.
-        **Canonical Academic Fields:** ${this.CANONICAL_UNIVERSITY_FIELDS.map((f) => `"${f}"`).join(', ')}
-
-    Possible JSON fields:
-    - search: string (e.g., "Seoul National University")
-    - country: string[] (array of country names, e.g., ["United States", "Canada"])
-    - type: string[] (array of type strings, e.g., ["Public", "Private"])
-    - minRank: number (e.g., 1 for "top 10")
-    - maxRank: number (e.g., 10 for "top 10")
-    - rank: number (specific rank, e.g., 5)
-    - location: string (city or region)
-    - size: "small" | "medium" | "large" | "mega_large"
-    - fields: Record<string, boolean> (e.g., {"engineering": true, "medicinePharmacyHealthSciences": true})
-    - limit: number (for conversational display, e.g., "show 5", "list 10")
-    - exportFormat: "excel" | "pdf" (set for file export requests)
-    - exportLimit: number (number of items for export, e.g., 30 for "top 30")
-
-    Conversation History:
-    ${historyForPrompt}
-
-    User message: "${message}"
-
-    Examples for academic fields:
-    - "I want to study computer science in Korea" -> {"country": ["Korea"], "fields": {"technology": true}}
-    - "Looking for medical schools in USA" -> {"country": ["USA"], "fields": {"medicinePharmacyHealthSciences": true}}
-    - "Universities with good economics programs" -> {"fields": {"economicsBusinessManagement": true}}
-
-    JSON output:
-    `;
-
-    try {
-      const result = await this._model.generateContent(prompt);
-      let response = result.response.text().trim();
-
-      if (response.startsWith('```json')) {
-        response = response.substring(7, response.lastIndexOf('```')).trim();
-      } else if (response.startsWith('```')) {
-        response = response.substring(3, response.lastIndexOf('```')).trim();
+    if (uniqueSubjects.length > 0) {
+      if (commonFieldsText) {
+        commonFieldsText += ' and ';
       }
-
-      let parsed: UniversityQuery;
-      try {
-        parsed = JSON.parse(response);
-      } catch (parseError) {
-        this._logger.error(`Failed to parse AI's JSON output for query extraction: "${response}"`, parseError.stack);
-        return {};
+      commonFieldsText += `subjects such as ${uniqueSubjects.slice(0, 3).join(', ')}`;
+      if (uniqueSubjects.length > 3) {
+        commonFieldsText += ` and more`;
       }
-
-      const isPureCountryCountQuery =
-        parsed.country &&
-        parsed.country.length === 1 &&
-        !parsed.search &&
-        !parsed.minRank &&
-        !parsed.maxRank &&
-        !parsed.type &&
-        !parsed.location &&
-        !parsed.size &&
-        !parsed.fields &&
-        !parsed.limit &&
-        !parsed.exportFormat;
-
-      if (parsed.limit === undefined && !parsed.exportFormat && !isPureCountryCountQuery) {
-        parsed.limit = 10;
-      }
-
-      if (parsed.exportFormat && parsed.exportLimit === undefined) {
-        parsed.exportLimit = 1000;
-      }
-      if (parsed.exportFormat) {
-        delete parsed.limit;
-      }
-
-      this._logger.log(`[DEBUG] Parsed UniversityQuery: ${JSON.stringify(parsed)}`);
-      return parsed;
-    } catch (error) {
-      this._logger.error(`Error extracting query parameters: ${error.message}`, error.stack);
-      return {};
     }
+
+    return commonFieldsText || 'various fields';
   }
 
-  private async generateUniversityResponse(
-    userMessage: string,
-    universities: UniEntity[],
-    conversationHistory: ChatMessage[]
-  ): Promise<string> {
-    const universityContext = this.formatUniversitiesForAI(universities);
-
-    const prompt = `
-    You are a helpful university advisor chatbot. Based on the user's question and the university data provided, give a comprehensive and helpful response.
-
-    User Question: "${userMessage}"
-
-    University Data Found (${universities.length} results):
-    ${universityContext}
-
-    Previous Conversation:
-    ${this.formatConversationHistory(conversationHistory)}
-
-    Guidelines:
-    1. If universities were found, provide detailed information about them.
-    2. Highlight key features like rankings, locations, specializations.
-    3. Make recommendations based on the user's apparent needs.
-    4. Be conversational and helpful.
-    5. Include specific details from the database when relevant.
-    6. If the user asks for comparisons, provide comparative analysis.
-    7. Mention contact information if available and relevant.
-    8. **IMPORTANT: This function assumes universities are found and will generate a response based on the provided data. The scenario where no universities are found is handled before this function is called.**
-
-    Provide a helpful, informative response:
-    `;
-
-    try {
-      const result = await this._model.generateContent(prompt);
-      return result.response.text();
-    } catch (error) {
-      this._logger.error(`Error generating university response: ${error.message}`);
-      return `I found ${universities.length} universities that might match your criteria, but I'm having trouble generating a detailed response right now. Please try rephrasing your question.`;
-    }
+  private formatFieldKeyForDisplay(fieldKey: string): string {
+    return fieldKey.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
   }
 
-  private formatUniversitiesForAI(universities: UniEntity[]): string {
-    const maxUniversitiesForAI = 10;
-    return universities
-      .slice(0, maxUniversitiesForAI)
-      .map((uni, index) => {
-        const fields = this.getUniversityFields(uni);
-        return `
-${index + 1}. ${uni.university}
-    - Rank: ${uni.rank || 'Not ranked'}
-    - Country: ${uni.country}
-    - Location: ${uni.location || 'Not specified'}
-    - Type: ${uni.type || 'Not specified'}
-    - Student Population: ${uni.studentPopulation ? uni.studentPopulation.toLocaleString() : 'Not available'}
-    - Specializations: ${fields.length > 0 ? fields.join(', ') : 'General'}
-    - Website: ${uni.website || 'Not available'}
-    - Contact: ${uni.email || uni.contact || 'Not available'}
-    ${uni.description ? `- Description: ${uni.description.substring(0, 200)}...` : ''}
-      `.trim();
-      })
-      .join('\n\n');
-  }
-
-  private getUniversityFields(uni: UniEntity): string[] {
+  private getUniversityFields(uni: UniversityDisplayDto): string[] {
     const fields = [];
     const fieldMap: { [key: string]: string } = {
-      agriculturalFoodScience: 'Agricultural & Food Science',
-      artsDesign: 'Arts & Design',
-      economicsBusinessManagement: 'Economics & Business',
-      lawPoliticalScience: 'Law & Political Science',
-      medicinePharmacyHealthSciences: 'Medicine & Health Sciences',
-      scienceEngineering: 'Science & Engineering',
-      socialSciencesHumanities: 'Social Sciences & Humanities',
-      sportsPhysicalEducation: 'Sports & Physical Education',
-      technology: 'Technology',
+      agricultural_veterinary_sciences: 'Agricultural & Veterinary Sciences',
+      arts_design: 'Arts & Design',
+      business_management_law: 'Business Management & Law',
+      education_training: 'Education & Training',
+      engineering_technology: 'Engineering & Technology',
+      health_medicine: 'Health & Medicine',
+      humanities_languages: 'Humanities & Languages',
+      ict: 'ICT',
+      natural_sciences: 'Natural Sciences',
+      social_behavioral_sciences: 'Social & Behavioral Sciences',
+      services: 'Services',
+      transport_safety_security_military: 'Transport, Safety, Security & Military',
       others: 'Others',
     };
 
     this.CANONICAL_UNIVERSITY_FIELDS.forEach((key) => {
-      if (uni[key as keyof UniEntity] === true) {
+      if (uni[key as keyof UniversityDisplayDto] === true) {
         fields.push(fieldMap[key]);
       }
     });
@@ -681,11 +556,6 @@ ${index + 1}. ${uni.university}
       return foundValidCountry;
     }
 
-    const titleCased = lowerInput.replace(/\b\w/g, (char) => char.toUpperCase());
-    if (this._validCountries.includes(titleCased)) {
-      return titleCased;
-    }
-
     this._logger.warn(`Could not normalize country "${country}" to a valid database country.`);
     return null;
   }
@@ -700,15 +570,165 @@ ${index + 1}. ${uni.university}
       )
       .join('\n');
   }
+
+  private async isUniversityRelatedQuery(message: string, conversationHistory: ChatMessage[]): Promise<boolean> {
+    const prompt = `
+    Given the following conversation history and the latest user message, determine if the user's intent is related to querying or discussing universities. Respond with 'yes' or 'no'.
+
+    Conversation History:
+    ${this.formatConversationHistory(conversationHistory)}
+
+    User's latest message: "${message}"
+
+    Is the user's intent related to universities? (yes/no)
+    `;
+
+    try {
+      const result = await this._model.generateContent(prompt);
+      const response = result.response.text().trim().toLowerCase();
+      return response.includes('yes');
+    } catch (error) {
+      this._logger.error(`Error in isUniversityRelatedQuery: ${error.message}`, error.stack);
+      return true;
+    }
+  }
+
+  private async extractUniversityQuery(message: string, conversationHistory: ChatMessage[]): Promise<UniversityQuery> {
+    const validCountriesList = this._validCountries.join(', ');
+    const validAcademicFields = this.CANONICAL_UNIVERSITY_FIELDS.map((field) =>
+      field.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+    ).join(', ');
+
+    const prompt = `
+    You are an expert at extracting university search parameters from natural language.
+    Based on the following conversation history and the latest user message, extract specific parameters for a university search.
+    If a parameter is not explicitly mentioned or clearly implied, leave it as undefined.
+    Infer boolean values (e.g., for 'exchange' or specific academic fields) as true if mentioned.
+    If the user asks for "top" universities, infer minRank: 1 and a reasonable maxRank (e.g., 100).
+    If the user asks for "all" universities or an export without a limit, infer exportLimit: null.
+    If the user asks to "export" as "pdf" or "excel", set exportFormat accordingly.
+
+    Available university types: Public, Private, For-Profit, Non-Profit.
+    Available academic fields (use these exact strings as boolean flags if inferred): ${this.CANONICAL_UNIVERSITY_FIELDS.join(
+      ', '
+    )}.
+    Available countries: ${validCountriesList}
+
+    Example of expected JSON output:
+    {
+      "search": "engineering",
+      "country": ["USA", "Canada"],
+      "minRank": 1,
+      "maxRank": 50,
+      "type": ["Public"],
+      "location": "New York",
+      "size": "medium",
+      "limit": 10,
+      "exportFormat": "pdf",
+      "exportLimit": 100,
+      "agricultural_veterinary_sciences": true,
+      "arts_design": true
+    }
+
+    Conversation History:
+    ${this.formatConversationHistory(conversationHistory)}
+
+    User's latest message: "${message}"
+
+    Extracted parameters (JSON format):
+    `;
+
+    try {
+      const result = await this._model.generateContent(prompt);
+      const jsonResponse = result.response.text().trim();
+      this._logger.log(`[DEBUG] Extracted query JSON: ${jsonResponse}`);
+      const parsed = JSON.parse(jsonResponse) as UniversityQuery;
+
+      if (parsed.country && Array.isArray(parsed.country)) {
+        parsed.country = parsed.country.map((c) => this.normalizeCountryName(c)).filter((c) => c !== null) as string[];
+      }
+
+      if (parsed.fields && Array.isArray(parsed.fields)) {
+        (parsed.fields as string[]).some((field) => {
+          this.CANONICAL_UNIVERSITY_FIELDS.forEach((canonicalField) => {
+            if (
+              field.toLowerCase().includes(canonicalField.replace(/_/g, ' ').toLowerCase()) ||
+              canonicalField.replace(/_/g, ' ').toLowerCase().includes(field.toLowerCase())
+            ) {
+              (parsed as any)[canonicalField] = true;
+            }
+          });
+          return false;
+        });
+        delete parsed.fields;
+      }
+      return parsed;
+    } catch (error) {
+      this._logger.error(
+        `Error extracting university query: ${error.message}. Raw response: ${error.response?.text()}`,
+        error.stack
+      );
+      return {};
+    }
+  }
+
+  private async generateUniversityResponse(
+    userMessage: string,
+    universities: UniversityDisplayDto[],
+    conversationHistory: ChatMessage[]
+  ): Promise<string> {
+    const formattedUniversities = universities
+      .map((uni, index) => {
+        const fields = this.getUniversityFields(uni);
+        const academicFields = fields.length > 0 ? ` - Fields: ${fields.join(', ')}` : '';
+        const rank = uni.rank ? `Rank: ${uni.rank}` : 'Rank: N/A';
+        const studentPopulation = uni.studentPopulation ? `Students: ${uni.studentPopulation.toLocaleString()}` : '';
+        const type = uni.type ? `Type: ${uni.type}` : '';
+        const location = uni.location
+          ? `Location: ${uni.location}, ${uni.country}`
+          : `Location: ${uni.country || 'N/A'}`;
+        const website = uni.website ? `Website: ${uni.website}` : '';
+
+        return `${index + 1}. **${
+          uni.university
+        }** (${rank}, ${location}, ${studentPopulation}, ${type}${academicFields}). ${website}`;
+      })
+      .join('\n\n');
+
+    const prompt = `
+    The user asked: "${userMessage}"
+    Here is the previous conversation history:
+    ${this.formatConversationHistory(conversationHistory)}
+    I found the following universities:
+    ${formattedUniversities}
+
+    Please provide a concise and helpful response summarizing the found universities.
+    Highlight key information for the user and offer a follow-up.
+    Do not just list them. Make it conversational.
+    If less than 3 universities are found, mention that.
+    Suggest to the user if they want to export the list as PDF or Excel.
+
+    Response:
+    `;
+
+    try {
+      const result = await this._model.generateContent(prompt);
+      return result.response.text().trim();
+    } catch (error) {
+      this._logger.error(`Error generating university response: ${error.message}`, error.stack);
+      return `I found ${universities.length} universities matching your criteria. Here are some details:\n\n${formattedUniversities}\n\nWould you like to export this list as a PDF or Excel file?`;
+    }
+  }
+
   private async generateSuggestedQuestions(
     message: string,
     conversationHistory: ChatMessage[],
-    forceGeneral = false
+    isFallback = false
   ): Promise<string[]> {
     const historyForPrompt = this.formatConversationHistory(conversationHistory);
-
     let prompt: string;
-    if (forceGeneral) {
+
+    if (isFallback) {
       prompt = `
       The user's last message was not directly related to universities. Provide 3 short and concise questions that encourage the user to ask about universities or related topics (like rankings, programs, or specific countries). Ensure they are in a numbered list format.
 

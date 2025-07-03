@@ -5,7 +5,7 @@ import { AcademicFieldEntity } from './academic-field.entity';
 import { SubjectEntity } from './subject.entity';
 
 export enum AcademicFieldEnum {
-  AGRICULTURAL_VETERINARY_SCIENCE = 'agricultural_veterinary_science',
+  AGRICULTURAL_VETERINARY_SCIENCES = 'agricultural_veterinary_sciences',
   ARTS_DESIGN = 'arts_design',
   BUSINESS_MANAGEMENT_LAW = 'business_management_law',
   EDUCATION_TRAINING = 'education_training',
@@ -13,8 +13,8 @@ export enum AcademicFieldEnum {
   HEALTH_MEDICINE = 'health_medicine',
   HUMANITIES_LANGUAGES = 'humanities_languages',
   ICT = 'ict',
-  NATURAL_SCIENCE = 'natural_science',
-  SOCIAL_BEHAVIORAL_SCIENCE = 'social_behavioral_science',
+  NATURAL_SCIENCES = 'natural_sciences',
+  SOCIAL_BEHAVIORAL_SCIENCES = 'social_behavioral_sciences',
   SERVICES = 'services',
   TRANSPORT_SAFETY_SECURITY_MILITARY = 'transport_safety_security_military',
   OTHERS = 'others',
