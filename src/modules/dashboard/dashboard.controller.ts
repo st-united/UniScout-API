@@ -26,12 +26,12 @@ export class DashboardController {
   }
 
   @Get('top-searched')
-  getTopSearched(@Query('limit') limit: number) {
-    return this._dashboardService.getTopSearched(limit ?? 10);
+  getTopSearched(@Query('limit') limit: string) {
+    return this._dashboardService.getTopSearched(Number(limit) || 5);
   }
 
   @Get('traffic')
-  getTrafficByCountry(@Query('limit') limit: number) {
-    return this._dashboardService.getTrafficByCountry(limit ?? 10);
+  getTrafficByCountry(@Query('limit') limit: string) {
+    return this._dashboardService.getTrafficByCountry(Number(limit) || 10);
   }
 }
