@@ -31,7 +31,6 @@ export class IsCountryValidConstraint implements ValidatorConstraintInterface {
 
       return allValid;
     } catch (err) {
-      console.error('Error in IsCountryValidConstraint.validate:', err);
       throw new Error('Failed to validate country due to internal service error');
     }
   }
