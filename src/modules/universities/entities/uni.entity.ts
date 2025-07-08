@@ -17,7 +17,6 @@ export enum AcademicFieldEnum {
   SOCIAL_BEHAVIORAL_SCIENCES = 'social_behavioral_sciences',
   SERVICES = 'services',
   TRANSPORT_SAFETY_SECURITY_MILITARY = 'transport_safety_security_military',
-  OTHERS = 'others',
 }
 
 @Entity('uni')
@@ -103,9 +102,6 @@ export class UniEntity extends AbstractEntity {
     inverseJoinColumn: { name: 'subjectId', referencedColumnName: 'id' },
   })
   subjects: SubjectEntity[];
-
-  @Column({ nullable: true })
-  otherAcademicFieldsDetail?: string;
 
   @Column({ default: false })
   isDeleted: boolean;

@@ -33,7 +33,6 @@ export class ChatbotService {
     'social_behavioral_sciences',
     'services',
     'transport_safety_security_military',
-    'others',
   ];
 
   constructor(
@@ -509,7 +508,6 @@ export class ChatbotService {
       social_behavioral_sciences: 'Social & Behavioral Sciences',
       services: 'Services',
       transport_safety_security_military: 'Transport, Safety, Security & Military',
-      others: 'Others',
     };
 
     this.CANONICAL_UNIVERSITY_FIELDS.forEach((key) => {
