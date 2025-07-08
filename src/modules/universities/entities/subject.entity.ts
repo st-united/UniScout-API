@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, ManyToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, ManyToMany } from 'typeorm';
 import { AbstractEntity } from '@Entity/abstract.entity';
 import { UniEntity } from './uni.entity';
 import { AcademicFieldEntity } from './academic-field.entity';

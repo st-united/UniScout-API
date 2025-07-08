@@ -31,13 +31,6 @@ type UniversityPaginationResult = {
   limit: number;
 };
 
-type SubjectPaginationResult = {
-  subjects: SubjectEntity[];
-  totalCount: number;
-  currentPage: number;
-  limit: number;
-};
-
 const UniversitySizeThresholds = {
   [UniversitySizeEnum.SMALL]: { max: 20000 },
   [UniversitySizeEnum.MEDIUM]: { min: 20000, max: 40000 },
@@ -490,39 +483,31 @@ export class UniversityService {
     return field.subjects.map((s) => s.name);
   }
 
-  async getPaginatedSubjects(query?: GetSubjectsDto): Promise<SubjectPaginationResult> {
+  async getAllSubjects(query?: GetSubjectsDto): Promise<SubjectEntity[]> {
+    //
     try {
-      const qb = this._subjectRepository.createQueryBuilder('subject');
+      const qb = this._subjectRepository.createQueryBuilder('subject'); //
 
-      qb.leftJoinAndSelect('subject.academicField', 'academicField');
+      qb.leftJoinAndSelect('subject.academicField', 'academicField'); //
 
       if (query?.search?.trim()) {
-        const searchTerm = query.search.trim().toLowerCase();
-        qb.andWhere('LOWER(subject.name) ILIKE :searchTerm', { searchTerm: `%${searchTerm}%` });
+        //
+        const searchTerm = query.search.trim().toLowerCase(); //
+        qb.andWhere('LOWER(subject.name) ILIKE :searchTerm', { searchTerm: `%${searchTerm}%` }); //
       }
 
       if (query?.academicFieldId) {
-        qb.andWhere('academicField.id = :academicFieldId', { academicFieldId: query.academicFieldId });
+        //
+        qb.andWhere('academicField.id = :academicFieldId', { academicFieldId: query.academicFieldId }); //
       }
 
-      qb.orderBy('subject.name', 'ASC');
+      qb.orderBy('subject.name', 'ASC'); //
 
-      const page = query?.page ?? 1;
-      const limit = query?.limit ?? 10;
+      const subjectEntities = await qb.getMany(); //
 
-      const [subjectEntities, totalCount] = await qb
-        .skip((page - 1) * limit)
-        .take(limit)
-        .getManyAndCount();
-
-      return {
-        subjects: subjectEntities,
-        totalCount,
-        currentPage: page,
-        limit,
-      };
+      return subjectEntities; //
     } catch (error) {
-      this._handleServiceError(error, 'getPaginatedSubjects');
+      this._handleServiceError(error, 'getAllSubjects'); //
     }
   }
 
