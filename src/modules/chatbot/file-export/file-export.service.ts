@@ -40,7 +40,6 @@ export class FileExportService {
         { header: 'Social & Behavioral Sciences', key: 'social_behavioral_sciences', width: 10 },
         { header: 'Services', key: 'services', width: 10 },
         { header: 'Transport, Safety & Security, Military', key: 'transport_safety_security_military', width: 10 },
-        { header: 'Others', key: 'others', width: 10 },
       ];
 
       data.forEach((uni) => {
@@ -66,7 +65,6 @@ export class FileExportService {
           social_behavioral_sciences: this._hasAcademicField(uni, 'Social & Behavioral Sciences'),
           services: this._hasAcademicField(uni, 'Services'),
           transport_safety_security_military: this._hasAcademicField(uni, 'Transport, Safety & Security, Military'),
-          others: this._hasAcademicField(uni, 'Others'),
         });
       });
 

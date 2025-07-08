@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserController } from './user.controller';
 import { AdminController } from './admin.controller';
 import { UniversityService } from './university.service';
-import { IsCountryValidConstraint, IsOtherFieldUnique, IsSubjectValid, IsUniqueConstraint } from './validator';
+import { IsCountryValidConstraint, IsSubjectValid, IsUniqueConstraint } from './validator';
 import { CsvImport } from './csv-import';
 import { UniEntity } from './entities/uni.entity';
 import { SubjectEntity } from './entities/subject.entity';
@@ -13,14 +13,7 @@ import { DashboardModule } from '@DashboardModule/dashboard.module';
 @Module({
   imports: [TypeOrmModule.forFeature([UniEntity, SubjectEntity, AcademicFieldEntity]), DashboardModule],
   controllers: [UserController, AdminController],
-  providers: [
-    UniversityService,
-    CsvImport,
-    IsCountryValidConstraint,
-    IsSubjectValid,
-    IsUniqueConstraint,
-    IsOtherFieldUnique,
-  ],
+  providers: [UniversityService, CsvImport, IsCountryValidConstraint, IsSubjectValid, IsUniqueConstraint],
   exports: [UniversityService, CsvImport],
 })
 export class UniversitiesModule {}

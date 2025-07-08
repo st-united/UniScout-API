@@ -123,14 +123,6 @@ export class UpdateUniversityDto {
   academicFields?: string[];
 
   @ApiPropertyOptional({
-    description: 'Details for "others" academic field, if selected',
-  })
-  @ValidateIf((o) => o.academicFields && o.academicFields.includes('others'))
-  @IsOptional()
-  @IsString()
-  otherAcademicFieldsDetail?: string;
-
-  @ApiPropertyOptional({
     description: 'List of subject names offered by the university. Must align with selected academic fields.',
     type: [String],
   })
