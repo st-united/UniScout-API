@@ -18,9 +18,11 @@ import { plainToInstance } from 'class-transformer';
 
 import { UniversityService } from './university.service';
 import { GetUniversityDto, UniversityTypeEnum } from './dto/get-university.dto';
+import { GetSubjectsDto } from './dto/get-subject-dto';
 import { UniversityDto } from './dto/university.dto';
 import { ExportUniversityDto } from './dto/export-university.dto';
-import { ApiOperation } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { SubjectEntity } from './entities';
 
 @Controller('universities')
 export class UserController {
@@ -124,9 +126,36 @@ export class UserController {
   }
 
   @Get('subjects')
-  @ApiOperation({ summary: 'Get list of subjects' })
-  async getSubjects(@Query('field') field: string) {
-    return this._universityService.getSubjectsByField(field);
+  @ApiOperation({ summary: 'Get list of subjects with pagination and optional search/field filter' })
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    })
+  )
+  async getPaginatedSubjects(@Query() query: GetSubjectsDto) {
+    const { subjects, totalCount, currentPage, limit } = await this._universityService.getPaginatedSubjects(query);
+
+    if (!subjects || subjects.length === 0) {
+      return {
+        message: 'No subjects found matching the criteria.',
+        data: [],
+        totalCount: 0,
+        currentPage: currentPage,
+        limit: limit,
+      };
+    }
+
+    return {
+      message: 'Subjects retrieved successfully.',
+      data: subjects,
+      totalCount: totalCount,
+      currentPage: currentPage,
+      limit: limit,
+    };
   }
 
   @Get(':id')
