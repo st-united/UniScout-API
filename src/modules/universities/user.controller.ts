@@ -126,7 +126,7 @@ export class UserController {
   }
 
   @Get('subjects')
-  @ApiOperation({ summary: 'Get list of subjects with pagination and optional search/field filter' })
+  @ApiOperation({ summary: 'Get all subjects' })
   @UsePipes(
     new ValidationPipe({
       transform: true,
@@ -136,25 +136,21 @@ export class UserController {
       },
     })
   )
-  async getPaginatedSubjects(@Query() query: GetSubjectsDto) {
-    const { subjects, totalCount, currentPage, limit } = await this._universityService.getPaginatedSubjects(query);
+  async getSubjects(@Query() query: GetSubjectsDto) {
+    const subjects = await this._universityService.getAllSubjects(query);
 
     if (!subjects || subjects.length === 0) {
       return {
         message: 'No subjects found matching the criteria.',
         data: [],
         totalCount: 0,
-        currentPage: currentPage,
-        limit: limit,
       };
     }
 
     return {
       message: 'Subjects retrieved successfully.',
       data: subjects,
-      totalCount: totalCount,
-      currentPage: currentPage,
-      limit: limit,
+      totalCount: subjects.length,
     };
   }
 
