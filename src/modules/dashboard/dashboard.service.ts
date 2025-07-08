@@ -78,7 +78,6 @@ export class DashboardService {
       'social_behavioral_sciences',
       'services',
       'transport_safety_security_military',
-      'others',
     ];
 
     const results: Record<string, number> = {};
