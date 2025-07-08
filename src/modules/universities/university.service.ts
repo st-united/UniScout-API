@@ -22,9 +22,17 @@ import { UpdateUniversityDto } from './dto/update-university.dto';
 import { GeoIpService, SearchLogService, TrackingService } from '@DashboardModule/services';
 import { ExportUniversityDto, ExportFormat } from './dto/export-university.dto';
 import { UniversityDto, UniversityDisplayDto } from './dto/university.dto';
+import { GetSubjectsDto } from './dto/get-subject-dto';
 
 type UniversityPaginationResult = {
   universities: UniversityDisplayDto[];
+  totalCount: number;
+  currentPage: number;
+  limit: number;
+};
+
+type SubjectPaginationResult = {
+  subjects: SubjectEntity[];
   totalCount: number;
   currentPage: number;
   limit: number;
@@ -149,8 +157,35 @@ export class UniversityService {
     }
 
     if ((query as any)?.subjectNames && (query as any).subjectNames.length > 0) {
-      qb.andWhere('LOWER(subject.name) IN (:...subjectNames)', {
-        subjectNames: (query as any).subjectNames.map((name: string) => name.toLowerCase()),
+      const subjectSearchTerms = (query as any).subjectNames.map((name: string) => name.toLowerCase());
+      const similarityThreshold = 0.4;
+
+      qb.andWhere(
+        new Brackets((qbInner) => {
+          subjectSearchTerms.forEach((searchTerm: string, index: number) => {
+            qbInner.orWhere(
+              new Brackets((subQb) => {
+                subQb
+                  .where('LOWER(subject.name) ILIKE :subjectSearchTerm' + index, {
+                    ['subjectSearchTerm' + index]: `%${searchTerm}%`,
+                  })
+                  .orWhere(
+                    'word_similarity(:subjectSearchTerm' +
+                      index +
+                      ', LOWER(subject.name)) > :similarityThreshold' +
+                      index,
+                    {
+                      ['subjectSearchTerm' + index]: searchTerm,
+                      ['similarityThreshold' + index]: similarityThreshold,
+                    }
+                  );
+              })
+            );
+          });
+        })
+      );
+      subjectSearchTerms.forEach((searchTerm: string, index: number) => {
+        qb.addSelect(`similarity(LOWER(subject.name), :subjectSearchTerm${index})`, `subject_similarity_${index}`);
       });
     }
 
@@ -184,6 +219,7 @@ export class UniversityService {
         qb.addOrderBy('abbreviation_similarity', 'DESC', 'NULLS LAST');
         qb.addOrderBy('university_similarity', 'DESC', 'NULLS LAST');
         qb.addOrderBy('location_similarity', 'DESC', 'NULLS LAST');
+        qb.addOrderBy('subject_similarity_0', 'DESC', 'NULLS LAST');
       }
     } else {
       qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
@@ -424,13 +460,15 @@ export class UniversityService {
     return academicFields.map((field) => field.name);
   }
 
-  async getAllAvailableAcademicFields(): Promise<string[]> {
+  async getAllAvailableAcademicFields(): Promise<{ id: number; name: string }[]> {
     const result = await this._academicFieldRepository
       .createQueryBuilder('academicField')
-      .select('DISTINCT academicField.name', 'field')
-      .orderBy('field', 'ASC')
+      .select('academicField.id', 'id')
+      .addSelect('academicField.name', 'name')
+      .distinctOn(['academicField.id', 'academicField.name'])
+      .orderBy('academicField.name', 'ASC')
       .getRawMany();
-    return result.map((row) => row.field);
+    return result.map((row) => ({ id: row.id, name: row.name }));
   }
 
   async getSubjectsByField(fieldName: string): Promise<string[]> {
@@ -444,6 +482,42 @@ export class UniversityService {
     }
 
     return field.subjects.map((s) => s.name);
+  }
+
+  async getPaginatedSubjects(query?: GetSubjectsDto): Promise<SubjectPaginationResult> {
+    try {
+      const qb = this._subjectRepository.createQueryBuilder('subject');
+
+      qb.leftJoinAndSelect('subject.academicField', 'academicField');
+
+      if (query?.search?.trim()) {
+        const searchTerm = query.search.trim().toLowerCase();
+        qb.andWhere('LOWER(subject.name) ILIKE :searchTerm', { searchTerm: `%${searchTerm}%` });
+      }
+
+      if (query?.academicFieldId) {
+        qb.andWhere('academicField.id = :academicFieldId', { academicFieldId: query.academicFieldId });
+      }
+
+      qb.orderBy('subject.name', 'ASC');
+
+      const page = query?.page ?? 1;
+      const limit = query?.limit ?? 10;
+
+      const [subjectEntities, totalCount] = await qb
+        .skip((page - 1) * limit)
+        .take(limit)
+        .getManyAndCount();
+
+      return {
+        subjects: subjectEntities,
+        totalCount,
+        currentPage: page,
+        limit,
+      };
+    } catch (error) {
+      this._handleServiceError(error, 'getPaginatedSubjects');
+    }
   }
 
   //Create University
