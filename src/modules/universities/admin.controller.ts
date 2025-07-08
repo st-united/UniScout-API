@@ -33,15 +33,9 @@ import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
 import { ExportUniversityDto } from './dto/export-university.dto';
 import { ConfirmDeleteDto } from './dto/confirm-delete.dto';
-import { JwtAccessTokenGuard } from '@AuthModule/guards/jwt-access-token.guard';
-import { UserRole } from '@Constant/enums';
-import { Roles } from '@AuthModule/decorators/roles.decorator';
-import { RolesGuard } from '@AuthModule/guards/roles.guard';
 import { ApiOperation } from '@nestjs/swagger';
 
 @Controller('admin/universities')
-// @UseGuards(JwtAccessTokenGuard, RolesGuard)
-// @Roles(UserRole.ADMIN)
 export class AdminController {
   private readonly _logger = new Logger(AdminController.name);
 
