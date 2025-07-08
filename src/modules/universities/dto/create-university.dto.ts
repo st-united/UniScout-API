@@ -18,7 +18,7 @@ import { Type } from 'class-transformer';
 import { IsCountryValidConstraint, IsOtherFieldUnique, IsSubjectValid } from '../validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UniversityTypeEnum } from './get-university.dto';
-import { AcademicFieldEnum } from '../entities/uni.entity';
+import { AcademicFieldEnum } from '../entities/uni.entity'; // Ensure this is correctly imported
 
 export class CreateUniversityDto {
   @ApiProperty({ description: 'Full name of university' })
@@ -103,8 +103,9 @@ export class CreateUniversityDto {
 
   @ApiProperty({ description: 'Website URL' })
   @IsNotEmpty({ message: 'Website is required' })
-  @Matches(/^https?:\/\//, {
-    message: 'Website must start with http:// or https://',
+  @Matches(/^https?:\/\/(?!-)(?:[a-zA-Z0-9-]{1,63}(?<!-)\.)+[a-zA-Z]{2,63}(?<!\.)$/, {
+    message:
+      'Invalid website format. Must be a valid domain (e.g., example.com), contain at least one dot, not contain special characters (except hyphens), and not start/end with a hyphen or dot.',
   })
   website: string;
 

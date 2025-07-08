@@ -280,6 +280,12 @@ export class UniversityService {
     const { exchange: uniDtoExchange, size, ...restUniDto } = uniDto;
 
     const transformedUni: UniversityDisplayDto = { ...restUniDto, size };
+    if (uniEntity.logo) {
+      const backendBaseUrl = process.env.BACKEND_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+      transformedUni.logo = `${backendBaseUrl}/static/${uniEntity.logo}`;
+    } else {
+      transformedUni.logo = '-';
+    }
 
     const universityAcademicFields = new Set(uniEntity.academicFields?.map((af) => af.name.toLowerCase()) || []);
 

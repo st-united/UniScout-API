@@ -9,10 +9,12 @@ import 'dotenv/config';
 import 'reflect-metadata';
 
 import { AppModule } from '@app/app.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 
 async function bootstrap() {
   const appOptions = { cors: true };
-  const app = await NestFactory.create(AppModule, new ExpressAdapter(), appOptions);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, new ExpressAdapter(), appOptions);
   const configService = app.get(ConfigService);
 
   app.useGlobalPipes(
@@ -41,6 +43,9 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup('/docs', app, document);
 
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/static/', // This is the public URL prefix for your static files
+  });
   const port = configService.get<number>('APP_PORT');
   await app.listen(port || 6002);
 }

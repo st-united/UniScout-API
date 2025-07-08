@@ -7,6 +7,8 @@ import { plainToClass } from 'class-transformer';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as multer from 'multer';
+import { ApiConsumes, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger'; // Import Swagger decorators
+import { RequestTypeEnum } from '@Constant/enums';
 
 const uploadDir = './uploads/contact_attachments';
 
@@ -17,11 +19,50 @@ if (!fs.existsSync(uploadDir)) {
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_FILES = 5;
 
+@ApiTags('Contact') // Optional: Tag your controller for better organization in Swagger
 @Controller('contact')
 export class ContactController {
   constructor(private readonly _contactService: ContactService) {}
 
   @Post()
+  @ApiOperation({ summary: 'Submit a contact form with optional file attachments' }) // Optional: Describe the operation
+  @ApiConsumes('multipart/form-data') // Crucial for file uploads in Swagger
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        email: { type: 'string', format: 'email' },
+        message: { type: 'string' },
+        requestType: { type: 'string', enum: Object.values(RequestTypeEnum) }, // Use Object.values for enum
+        universityName: { type: 'string' },
+        phoneNumber: { type: 'string' },
+        country: { type: 'string', nullable: true }, // Mark as nullable if optional
+        location: { type: 'string', nullable: true },
+        type: { type: 'string', nullable: true },
+        universityEmail: { type: 'string', format: 'email', nullable: true },
+        website: { type: 'string', format: 'url', nullable: true },
+        broadFieldOfStudy: { type: 'string', nullable: true },
+        specificFieldOfStudy: { type: 'string', nullable: true },
+        rank: { type: 'integer', nullable: true },
+        numberOfStudents: { type: 'integer', nullable: true },
+        files: {
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
+          maxItems: MAX_FILES,
+          description: 'Optional files (PDF, Word, images) up to 5MB each',
+        },
+      },
+      // You can add 'required' array here if you want to explicitly mark required fields
+      // For example, if 'requestType' makes some fields conditionally required,
+      // Swagger won't dynamically show/hide them based on 'requestType'.
+      // The validation pipe will handle the actual runtime validation.
+      required: ['name', 'email', 'message', 'requestType', 'universityName', 'phoneNumber'],
+    },
+  })
   @UseInterceptors(
     FilesInterceptor('files', MAX_FILES, {
       limits: { fileSize: MAX_FILE_SIZE },
