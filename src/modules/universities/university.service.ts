@@ -310,8 +310,7 @@ export class UniversityService {
 
     const transformedUni: UniversityDisplayDto = { ...restUniDto, size };
     if (uniEntity.logo) {
-      const backendBaseUrl = process.env.BACKEND_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
-      transformedUni.logo = `${backendBaseUrl}/static/${uniEntity.logo}`;
+      transformedUni.logo = uniEntity.logo;
     } else {
       transformedUni.logo = '-';
     }
