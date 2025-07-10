@@ -33,6 +33,7 @@ export class ChatbotService {
     'social_behavioral_sciences',
     'services',
     'transport_safety_security_military',
+    'others',
   ];
 
   constructor(
@@ -143,39 +144,64 @@ export class ChatbotService {
         }
       }
 
+      // Prepare universitySearchParams with all extracted and mapped parameters
+      const universitySearchParams: GetUniversityDto = {
+        ...(queryParams as GetUniversityDto),
+        page: 1,
+        limit: queryParams.exportFormat ? queryParams.exportLimit : queryParams.limit || 10,
+      };
+
+      // Initialize fieldNames array if it doesn't exist
+      if (!universitySearchParams.fieldNames) {
+        universitySearchParams.fieldNames = [];
+      }
+      // Populate fieldNames from individual academic field flags in queryParams
+      this.CANONICAL_UNIVERSITY_FIELDS.forEach((fieldKey) => {
+        if ((queryParams as any)[fieldKey] === true) {
+          universitySearchParams.fieldNames.push(fieldKey);
+        }
+      });
+
+      // --- START OF REFINED GENERAL COUNTRY COUNT QUERY CHECK ---
+      // This condition should only be true if ONLY country is specified, and no other filters.
+      // We check universitySearchParams AFTER all relevant fields (like fieldNames) have been populated.
       const isGeneralCountryCountQuery =
-        queryParams.country &&
-        queryParams.country.length === 1 &&
-        !queryParams.search &&
-        !queryParams.minRank &&
-        !queryParams.maxRank &&
-        !queryParams.type &&
-        !queryParams.location &&
-        !queryParams.size &&
-        !queryParams.fields &&
-        !queryParams.limit &&
-        !queryParams.exportFormat;
+        universitySearchParams.country &&
+        universitySearchParams.country.length === 1 &&
+        !universitySearchParams.search && // Checks if there's no specific search term
+        (!universitySearchParams.minRank || universitySearchParams.minRank === 0) && // Checks if there's no minimum rank specified or it's 0
+        (!universitySearchParams.maxRank || universitySearchParams.maxRank === 0) && // Checks if there's no maximum rank specified or it's 0
+        (!universitySearchParams.type || universitySearchParams.type.length === 0) && // Checks if no university type is specified or the array is empty
+        !universitySearchParams.location && // Checks if no specific location is specified
+        (!universitySearchParams.size || universitySearchParams.size.length === 0) && // Checks if no size category is specified or the array is empty
+        (!universitySearchParams.fieldNames || universitySearchParams.fieldNames.length === 0) && // Checks if no academic fields are specified or the array is empty
+        (!universitySearchParams.subjectNames || universitySearchParams.subjectNames.length === 0) && // Checks if no subjects are specified or the array is empty
+        !queryParams.exportFormat; // Ensures it's not an export request
+      // This refined condition ensures that if any specific search criteria (like search term, rank, type, location, size, academic fields, or subjects) are present, this general count block is skipped.
+      // --- END OF REFINED GENERAL COUNTRY COUNT QUERY CHECK ---
 
       if (isGeneralCountryCountQuery) {
-        const countryName = queryParams.country[0];
+        const countryName = universitySearchParams.country[0]; // Use universitySearchParams
 
         const countFilter: GetUniversityDto = {
-          country: queryParams.country,
+          country: universitySearchParams.country,
           page: 1,
-          limit: 1,
-          search: queryParams.search,
-          minRank: queryParams.minRank,
-          maxRank: queryParams.maxRank,
-          type: queryParams.type,
-          location: queryParams.location,
-          size: queryParams.size,
+          limit: 1, // Only need 1 result to get the total count
+          search: universitySearchParams.search,
+          minRank: universitySearchParams.minRank,
+          maxRank: universitySearchParams.maxRank,
+          type: universitySearchParams.type,
+          location: universitySearchParams.location,
+          size: universitySearchParams.size,
+          fieldNames: universitySearchParams.fieldNames, // Include fieldNames in countFilter
+          subjectNames: universitySearchParams.subjectNames, // Include subjectNames in countFilter
         };
         const actualTotalUniversitiesInDb = await this._universityService.countAll(countFilter);
 
         if (actualTotalUniversitiesInDb > 0) {
           const { universities: universitiesSampleForOverview } = await this._universityService.findAll({
-            country: queryParams.country,
-            limit: 10,
+            country: universitySearchParams.country,
+            limit: 10, // Fetches a small sample for the overview
             page: 1,
           });
 
@@ -226,16 +252,8 @@ export class ChatbotService {
               responseText += `* **Diverse Types:** Specific types not found in sample.\n`;
             }
             responseText += `* **Common Fields:** You'll find universities specializing in ${this.getCommonFieldsFromSample(
-              universitiesSampleForOverview.map((uni) => ({
-                ...uni,
-                exchange: String(uni.exchange),
-                size: this.categorizeUniversitySize(uni.studentPopulation),
-                subjects:
-                  uni.subjects && Array.isArray(uni.subjects)
-                    ? (uni.subjects as any[]).map((s) => s.name).join(', ')
-                    : '',
-              }))
-            )}.\n\n`;
+              universitiesSampleForOverview
+            )}.\n\n`; // Pass universitiesSampleForOverview directly
           }
 
           responseText += `Would you like me to export this list of all ${actualTotalUniversitiesInDb} universities for ${countryName} in a **PDF** or **Excel** file?`;
@@ -259,15 +277,35 @@ export class ChatbotService {
         }
       }
 
-      const universitySearchParams: GetUniversityDto = {
-        ...(queryParams as GetUniversityDto),
-        page: 1,
-        limit: queryParams.exportFormat ? queryParams.exportLimit : queryParams.limit || 10,
-      };
+      // Determine the export format to use if queryParams.exportFormat is an array
+      let chosenExportFormat: 'pdf' | 'excel' | undefined;
 
       if (queryParams.exportFormat) {
+        if (Array.isArray(queryParams.exportFormat)) {
+          // Prioritize PDF if both are present, otherwise pick the first one
+          if (queryParams.exportFormat.includes('pdf')) {
+            chosenExportFormat = 'pdf';
+          } else if (queryParams.exportFormat.includes('excel')) {
+            chosenExportFormat = 'excel';
+          } else {
+            // If it's an array but contains neither 'pdf' nor 'excel', log a warning
+            this._logger.warn(
+              `[DEBUG] Export request detected with unsupported array formats: ${queryParams.exportFormat.join(
+                ', '
+              )}. No file will be generated.`
+            );
+            chosenExportFormat = undefined; // No valid format to export
+          }
+        } else {
+          // If it's a string, use it directly
+          chosenExportFormat = queryParams.exportFormat as 'pdf' | 'excel';
+        }
+      }
+
+      if (chosenExportFormat) {
+        // Only proceed with export if a valid format is chosen
         this._logger.log(
-          `[DEBUG] Export request detected. Format: ${queryParams.exportFormat}, Query: ${JSON.stringify(
+          `[DEBUG] Export request detected. Format: ${chosenExportFormat}, Query: ${JSON.stringify(
             universitySearchParams
           )}`
         );
@@ -310,16 +348,12 @@ export class ChatbotService {
 
         const { universities: universitiesToExport } = await this._universityService.findAll(universitySearchParams);
 
-        const universitiesDisplayDto: UniversityDisplayDto[] = universitiesToExport.map((uni) => ({
-          ...uni,
-          exchange: String(uni.exchange),
-          size: this.categorizeUniversitySize(uni.studentPopulation),
-          subjects:
-            uni.subjects && Array.isArray(uni.subjects) ? (uni.subjects as any[]).map((s) => s.name).join(', ') : '',
-        }));
+        // universitiesToExport are already UniversityDisplayDto objects from universityService.findAll
+        // No need for further mapping here.
+        const universitiesDisplayDto: UniversityDisplayDto[] = universitiesToExport;
 
         try {
-          if (queryParams.exportFormat === 'excel') {
+          if (chosenExportFormat === 'excel') {
             const excelBase64 = await this._fileExportService.generateExcel(
               universitiesDisplayDto,
               `universities_export_${new Date().toISOString().slice(0, 10)}.xlsx`
@@ -330,7 +364,7 @@ export class ChatbotService {
               filename: `universities_export_${new Date().toISOString().slice(0, 10)}.xlsx`,
             };
             responseText = `${exportMessage}You should see a download prompt.`;
-          } else if (queryParams.exportFormat === 'pdf') {
+          } else if (chosenExportFormat === 'pdf') {
             const pdfBase64 = await this._fileExportService.generatePdf(
               universitiesDisplayDto,
               `universities_export_${new Date().toISOString().slice(0, 10)}.pdf`
@@ -343,6 +377,7 @@ export class ChatbotService {
             responseText = `${exportMessage}You should see a download prompt.`;
           }
         } catch (fileError) {
+          this._logger.error(`File export failed: ${fileError.message}`, fileError.stack);
           responseText = 'Export failed. Please try again later.';
         }
         return {
@@ -378,10 +413,11 @@ export class ChatbotService {
       return {
         response: responseText,
         timestamp: new Date().toISOString(),
-        fileData: fileData,
+        fileData: fileData, // Will be undefined here as no export was chosen
         suggestedQuestions: dynamicSuggestedQuestions,
       };
     } catch (error) {
+      this._logger.error(`Chatbot service general error: ${error.message}`, error.stack);
       const fallbackSuggestedQuestions = this.STANDARD_QUESTIONS;
 
       return {
@@ -460,8 +496,10 @@ export class ChatbotService {
         allAcademicFieldsFound.push(...uni.academicFieldsCommaSeparated.split(', ').map((field) => field.trim()));
       }
 
-      if (uni.subjects && uni.subjects !== 'NA') {
-        subjectsFromDto.push(...uni.subjects.split(', ').map((subject) => subject.trim()));
+      // Here, uni.subjects is already the string subjectsList from UniversityService,
+      // so no need to check Array.isArray or map again.
+      if (uni.subjectsList && uni.subjectsList !== 'NA') {
+        subjectsFromDto.push(...uni.subjectsList.split(', ').map((subject) => subject.trim()));
       }
     });
 
@@ -508,6 +546,7 @@ export class ChatbotService {
       social_behavioral_sciences: 'Social & Behavioral Sciences',
       services: 'Services',
       transport_safety_security_military: 'Transport, Safety, Security & Military',
+      others: 'Others',
     };
 
     this.CANONICAL_UNIVERSITY_FIELDS.forEach((key) => {
@@ -564,7 +603,10 @@ export class ChatbotService {
     return history
       .slice(-5)
       .map(
-        (msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${Array.isArray(msg.parts) ? msg.parts[0] : msg.parts}`
+        (msg) =>
+          `${msg.role === 'user' ? 'User' : 'Assistant'}: ${
+            Array.isArray(msg.parts) && msg.parts.length > 0 ? msg.parts[0].text : ''
+          }`
       )
       .join('\n');
   }
@@ -593,9 +635,6 @@ export class ChatbotService {
 
   private async extractUniversityQuery(message: string, conversationHistory: ChatMessage[]): Promise<UniversityQuery> {
     const validCountriesList = this._validCountries.join(', ');
-    const validAcademicFields = this.CANONICAL_UNIVERSITY_FIELDS.map((field) =>
-      field.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-    ).join(', ');
 
     const prompt = `
     You are an expert at extracting university search parameters from natural language.
@@ -605,6 +644,8 @@ export class ChatbotService {
     If the user asks for "top" universities, infer minRank: 1 and a reasonable maxRank (e.g., 100).
     If the user asks for "all" universities or an export without a limit, infer exportLimit: null.
     If the user asks to "export" as "pdf" or "excel", set exportFormat accordingly.
+    When a specific university name is mentioned (e.g., "Harvard University"), prioritize extracting it as the 'search' parameter.
+    If the user asks about a specific university's courses or subjects (e.g., "does Harvard have ICT courses?"), extract the university name as 'search' and the subject/field as 'fields' or the relevant academic field flag.
 
     Available university types: Public, Private, For-Profit, Non-Profit.
     Available academic fields (use these exact strings as boolean flags if inferred): ${this.CANONICAL_UNIVERSITY_FIELDS.join(
@@ -627,6 +668,16 @@ export class ChatbotService {
       "agricultural_veterinary_sciences": true,
       "arts_design": true
     }
+    Example for specific university query:
+    {
+      "search": "Harvard University",
+      "ict": true
+    }
+    Example for another specific university query:
+    {
+      "search": "MIT",
+      "fields": ["engineering_technology"]
+    }
 
     Conversation History:
     ${this.formatConversationHistory(conversationHistory)}
@@ -636,10 +687,24 @@ export class ChatbotService {
     Extracted parameters (JSON format):
     `;
 
+    // Declare 'result' outside the try block
+    let result: any;
+
     try {
-      const result = await this._model.generateContent(prompt);
-      const jsonResponse = result.response.text().trim();
-      this._logger.log(`[DEBUG] Extracted query JSON: ${jsonResponse}`);
+      result = await this._model.generateContent(prompt);
+      let jsonResponse = result.response.text().trim();
+      this._logger.log(`[DEBUG] Raw Gemini response for query extraction: ${jsonResponse}`); // New log for debugging
+
+      // Regex to extract content inside ```json ... ``` block
+      const jsonMatch = jsonResponse.match(/```json\n([\s\S]*?)\n```/);
+      if (jsonMatch && jsonMatch[1]) {
+        jsonResponse = jsonMatch[1].trim(); // Use the captured group as the JSON string
+      } else {
+        // Fallback: If Gemini doesn't wrap in markdown, log a warning and proceed
+        this._logger.warn(`Gemini response for query extraction not in markdown block. Attempting direct parse.`);
+      }
+
+      this._logger.log(`[DEBUG] Cleaned JSON string for query extraction: ${jsonResponse}`); // New log for debugging
       const parsed = JSON.parse(jsonResponse) as UniversityQuery;
 
       if (parsed.country && Array.isArray(parsed.country)) {
@@ -662,8 +727,10 @@ export class ChatbotService {
       }
       return parsed;
     } catch (error) {
+      const rawResponseText =
+        result?.response?.text() || 'N/A - Gemini response was not available or error occurred before response.';
       this._logger.error(
-        `Error extracting university query: ${error.message}. Raw response: ${error.response?.text()}`,
+        `Error extracting university query: ${error.message}. Raw response causing error: "${rawResponseText}"`,
         error.stack
       );
       return {};
