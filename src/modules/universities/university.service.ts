@@ -483,30 +483,27 @@ export class UniversityService {
   }
 
   async getAllSubjects(query?: GetSubjectsDto): Promise<SubjectEntity[]> {
-    //
     try {
-      const qb = this._subjectRepository.createQueryBuilder('subject'); //
+      const qb = this._subjectRepository.createQueryBuilder('subject');
+      qb.leftJoinAndSelect('subject.academicField', 'academicField');
 
-      qb.leftJoinAndSelect('subject.academicField', 'academicField'); //
-
-      if (query?.search?.trim()) {
-        //
-        const searchTerm = query.search.trim().toLowerCase(); //
-        qb.andWhere('LOWER(subject.name) ILIKE :searchTerm', { searchTerm: `%${searchTerm}%` }); //
+      if (query?.startsWith?.trim()) {
+        const startsWithTerm = query.startsWith.trim().toLowerCase();
+        qb.andWhere('LOWER(subject.name) ILIKE :startsWithTerm', { startsWithTerm: `${startsWithTerm}%` });
+      } else if (query?.search?.trim()) {
+        const searchTerm = query.search.trim().toLowerCase();
+        qb.andWhere('LOWER(subject.name) ILIKE :searchTerm', { searchTerm: `%${searchTerm}%` });
       }
 
       if (query?.academicFieldId) {
-        //
-        qb.andWhere('academicField.id = :academicFieldId', { academicFieldId: query.academicFieldId }); //
+        qb.andWhere('academicField.id = :academicFieldId', { academicFieldId: query.academicFieldId });
       }
+      qb.orderBy('subject.name', 'ASC');
 
-      qb.orderBy('subject.name', 'ASC'); //
-
-      const subjectEntities = await qb.getMany(); //
-
-      return subjectEntities; //
+      const subjectEntities = await qb.getMany();
+      return subjectEntities;
     } catch (error) {
-      this._handleServiceError(error, 'getAllSubjects'); //
+      this._handleServiceError(error, 'getAllSubjects');
     }
   }
 
@@ -532,24 +529,10 @@ export class UniversityService {
       exchange: dto.exchange,
     });
 
-    if (dto.academicFields && dto.academicFields.length > 0) {
-      const academicFieldEntities = await this._academicFieldRepository.find({
-        where: { name: In(dto.academicFields) },
-      });
-
-      if (academicFieldEntities.length !== dto.academicFields.length) {
-        const foundNames = new Set(academicFieldEntities.map((af) => af.name));
-        const missingNames = dto.academicFields.filter((name) => !foundNames.has(name));
-        throw new NotFoundException(`Academic field(s) not found: ${missingNames.join(', ')}`);
-      }
-      uni.academicFields = academicFieldEntities;
-    } else {
-      uni.academicFields = [];
-    }
-
     if (dto.subjects && dto.subjects.length > 0) {
       const subjectEntities = await this._subjectRepository.find({
         where: { name: In(dto.subjects) },
+        relations: ['academicField'],
       });
 
       if (subjectEntities.length !== dto.subjects.length) {
@@ -558,22 +541,32 @@ export class UniversityService {
         throw new NotFoundException(`Subject(s) not found: ${missingNames.join(', ')}`);
       }
       uni.subjects = subjectEntities;
+
+      const academicFieldsSet = new Set<AcademicFieldEntity>();
+      for (const subject of subjectEntities) {
+        if (subject.academicField) {
+          academicFieldsSet.add(subject.academicField);
+        }
+      }
+      uni.academicFields = Array.from(academicFieldsSet);
     } else {
       uni.subjects = [];
+      uni.academicFields = [];
     }
 
     try {
       const savedUni = await this._uniRepository.save(uni);
       return plainToInstance(UniversityDto, savedUni);
     } catch (error) {
-      if (error.code === '23505') {
+      if ((error as any).code === '23505') {
         throw new BadRequestException('University with this name already exists.');
       }
-      Logger.error(`Error creating university: ${error.message}`, error.stack);
+      Logger.error(`Error creating university: ${(error as Error).message}`, (error as Error).stack);
       throw new InternalServerErrorException('Failed to create university.');
     }
   }
 
+  //Update University
   async updateUniversity(id: number, dto: UpdateUniversityDto): Promise<UniversityDto> {
     const university = await this._uniRepository.findOne({ where: { id } });
 
@@ -582,31 +575,15 @@ export class UniversityService {
     }
 
     const updateData: Partial<UpdateUniversityDto> = { ...dto };
-    delete updateData.academicFields;
     delete updateData.subjectNames;
 
     Object.assign(university, updateData);
-    if (dto.academicFields !== undefined) {
-      if (dto.academicFields.length > 0) {
-        const academicFieldEntities = await this._academicFieldRepository.find({
-          where: { name: In(dto.academicFields) },
-        });
-
-        if (academicFieldEntities.length !== dto.academicFields.length) {
-          const foundNames = new Set(academicFieldEntities.map((af) => af.name));
-          const missingNames = dto.academicFields.filter((name) => !foundNames.has(name));
-          throw new NotFoundException(`Academic field(s) not found: ${missingNames.join(', ')}`);
-        }
-        university.academicFields = academicFieldEntities;
-      } else {
-        university.academicFields = [];
-      }
-    }
 
     if (dto.subjectNames !== undefined) {
       if (dto.subjectNames.length > 0) {
         const subjectEntities = await this._subjectRepository.find({
           where: { name: In(dto.subjectNames) },
+          relations: ['academicField'],
         });
 
         if (subjectEntities.length !== dto.subjectNames.length) {
@@ -615,8 +592,17 @@ export class UniversityService {
           throw new NotFoundException(`Subject(s) not found: ${missingNames.join(', ')}`);
         }
         university.subjects = subjectEntities;
+
+        const academicFieldsSet = new Set<AcademicFieldEntity>();
+        for (const subject of subjectEntities) {
+          if (subject.academicField) {
+            academicFieldsSet.add(subject.academicField);
+          }
+        }
+        university.academicFields = Array.from(academicFieldsSet);
       } else {
         university.subjects = [];
+        university.academicFields = [];
       }
     }
 
@@ -624,10 +610,10 @@ export class UniversityService {
       const savedUniversity = await this._uniRepository.save(university);
       return plainToInstance(UniversityDto, savedUniversity);
     } catch (error) {
-      if (error.code === '23505') {
+      if ((error as any).code === '23505') {
         throw new BadRequestException('University with this name already exists.');
       }
-      Logger.error(`Error updating university: ${error.message}`, error.stack);
+      Logger.error(`Error updating university: ${(error as Error).message}`, (error as Error).stack);
       throw new InternalServerErrorException('Failed to update university.');
     }
   }
@@ -664,6 +650,7 @@ export class UniversityService {
     }
   }
 
+  //Export University
   async exportUniversities(
     query: Omit<ExportUniversityDto, 'format'>,
     format: ExportFormat

@@ -15,7 +15,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { IsCountryValidConstraint, IsSubjectValid } from '../validator';
+import { IsCountryValidConstraint } from '../validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { UniversityTypeEnum } from './get-university.dto';
 
@@ -114,25 +114,11 @@ export class UpdateUniversityDto {
   exchange?: boolean;
 
   @ApiPropertyOptional({
-    description: 'List of academic field names offered by the university',
-    type: [String],
-  })
-  @IsOptional()
-  @IsArray({ message: 'Academic fields must be an array' })
-  @IsString({ each: true, message: 'Each academic field must be a string' })
-  academicFields?: string[];
-
-  @ApiPropertyOptional({
-    description: 'List of subject names offered by the university. Must align with selected academic fields.',
+    description: 'List of subject names offered by the university.',
     type: [String],
   })
   @IsOptional()
   @IsArray({ message: 'Subject names must be an array' })
   @IsString({ each: true, message: 'Each subject name must be a string' })
-  @ValidateIf((o) => o.academicFields !== undefined || o.subjectNames !== undefined)
-  @Validate(IsSubjectValid, {
-    message:
-      'Selected subjects must be valid for the chosen academic fields, and each academic field must have at least one associated subject.',
-  })
   subjectNames?: string[];
 }
