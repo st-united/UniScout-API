@@ -701,9 +701,7 @@ export class UniversityService {
           'strength',
           'description',
           'exchange',
-          ...academicFieldHeaders,
-          'subjects',
-          'academicFieldsCommaSeparated',
+          'subjectsList',
         ];
       }
 

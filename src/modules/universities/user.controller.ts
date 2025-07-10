@@ -6,23 +6,17 @@ import {
   NotFoundException,
   Param,
   ParseIntPipe,
-  BadRequestException,
   UsePipes,
   Req,
-  Res,
   Logger,
 } from '@nestjs/common';
-import { Response } from 'express';
-import { Readable } from 'stream';
 import { plainToInstance } from 'class-transformer';
 
 import { UniversityService } from './university.service';
 import { GetUniversityDto, UniversityTypeEnum } from './dto/get-university.dto';
 import { GetSubjectsDto } from './dto/get-subject-dto';
 import { UniversityDto } from './dto/university.dto';
-import { ExportUniversityDto } from './dto/export-university.dto';
-import { ApiOperation, ApiQuery } from '@nestjs/swagger';
-import { SubjectEntity } from './entities';
+import { ApiOperation } from '@nestjs/swagger';
 
 @Controller('universities')
 export class UserController {
@@ -64,36 +58,6 @@ export class UserController {
       currentPage: currentPage,
       limit: limit,
     };
-  }
-
-  @Get('export')
-  @ApiOperation({ summary: 'Export universities (User)' })
-  @UsePipes(
-    new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      transformOptions: {
-        enableImplicitConversion: true,
-      },
-    })
-  )
-  async exportUniversities(@Query() query: ExportUniversityDto, @Res() res: Response) {
-    try {
-      const { format, ...filters } = query;
-      const { data, filename, contentType } = await this._universityService.exportUniversities(filters, format);
-
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-      const readableStream = new Readable();
-      readableStream.push(data);
-      readableStream.push(null);
-
-      readableStream.pipe(res);
-    } catch (error) {
-      this._logger.error(`Export failed: ${error.message}`, error.stack);
-      throw new BadRequestException('Export failed. Please try again later.');
-    }
   }
 
   @Get('countries')
