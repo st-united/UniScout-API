@@ -14,10 +14,9 @@ import {
   IsArray,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { IsCountryValidConstraint, IsSubjectValid } from '../validator';
+import { IsCountryValidConstraint } from '../validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UniversityTypeEnum } from './get-university.dto';
-import { AcademicFieldEnum } from '../entities/uni.entity'; // Ensure this is correctly imported
 
 export class CreateUniversityDto {
   @ApiProperty({ description: 'Full name of university' })
@@ -124,25 +123,13 @@ export class CreateUniversityDto {
   @Type(() => Boolean)
   exchange?: boolean;
 
-  @ApiProperty({
-    description: 'List of academic field names offered by the university',
-    enum: AcademicFieldEnum,
-    isArray: true,
-  })
-  @IsNotEmpty({ message: 'Academic fields are required' })
-  @IsArray()
-  @IsIn(Object.values(AcademicFieldEnum), { each: true, message: 'Invalid academic field selected' })
-  academicFields: AcademicFieldEnum[];
-
   @ApiPropertyOptional({
-    description: 'List of subject names offered by the university. Must align with selected academic fields.',
+    description: 'List of subject names offered by the university.',
     type: [String],
   })
   @IsNotEmpty({ message: 'Subject names are required' })
   @IsArray({ message: 'Subject names must be an array' })
   @IsString({ each: true, message: 'Each subject name must be a string' })
-  @Validate(IsSubjectValid, {
-    message: 'One or more subjects are invalid or do not belong to the selected academic fields.',
-  })
+  @IsString({ each: true, message: 'Each subject name must be a string' })
   subjects: string[];
 }
