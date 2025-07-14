@@ -1,6 +1,6 @@
 import { Injectable, OnApplicationBootstrap, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 import { UserEntity } from '../users/entities/user.entity';
 import { StatusEnum, UserRole } from '@Constant/enums';
 import { ConfigService } from '@nestjs/config';
@@ -20,23 +20,24 @@ export class SeedService implements OnApplicationBootstrap {
 
   private async seedUsers(): Promise<void> {
     try {
+      // --- Seed SUPER User ---
       const superUserEmail = 'superadmin@gmail.com';
-      const existingUser = await this.userRepository.findOneBy({
+      const existingSuperUser = await this.userRepository.findOneBy({
         email: superUserEmail,
-      });
+        deletedAt: null,
+      } as FindOptionsWhere<UserEntity>);
 
-      if (!existingUser) {
+      if (!existingSuperUser) {
         this.logger.log(`Seeding initial SUPER user: ${superUserEmail}`);
         const plainTextPassword = this.configService.get<string>('RESET_PASSWORD') || 'password';
 
-        const newUser = this.userRepository.create({
+        const newSuperUser = this.userRepository.create({
           email: superUserEmail,
           password: plainTextPassword,
           name: 'Super Administrator',
           role: UserRole.SUPER,
           status: StatusEnum.ACTIVE,
           phone: '1234567890',
-          identityId: '1',
           avatar: null,
           dateOfBirth: null,
           address: null,
@@ -44,13 +45,43 @@ export class SeedService implements OnApplicationBootstrap {
           failedLoginAttempts: 0,
           lockoutUntil: null,
         });
-        await this.userRepository.save(newUser);
+        await this.userRepository.save(newSuperUser);
         this.logger.log('SUPER user seeded successfully!');
       } else {
         this.logger.log(`SUPER user '${superUserEmail}' already exists. Skipping seed.`);
       }
+
+      const adminUserEmail = 'admin@gmail.com';
+      const existingAdminUser = await this.userRepository.findOneBy({
+        email: adminUserEmail,
+        deletedAt: null,
+      } as FindOptionsWhere<UserEntity>);
+
+      if (!existingAdminUser) {
+        this.logger.log(`Seeding initial ADMIN user: ${adminUserEmail}`);
+        const plainTextPassword = this.configService.get<string>('RESET_PASSWORD') || 'password';
+
+        const newAdminUser = this.userRepository.create({
+          email: adminUserEmail,
+          password: plainTextPassword,
+          name: 'Regular Administrator',
+          role: UserRole.ADMIN,
+          status: StatusEnum.ACTIVE,
+          phone: '0987654321',
+          avatar: null,
+          dateOfBirth: null,
+          address: null,
+          refreshToken: null,
+          failedLoginAttempts: 0,
+          lockoutUntil: null,
+        });
+        await this.userRepository.save(newAdminUser);
+        this.logger.log('ADMIN user seeded successfully!');
+      } else {
+        this.logger.log(`ADMIN user '${adminUserEmail}' already exists. Skipping seed.`);
+      }
     } catch (error) {
-      this.logger.error('Error seeding initial user:', error.message);
+      this.logger.error('Error seeding initial users:', error.message, error.stack);
     }
   }
 }

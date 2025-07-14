@@ -9,7 +9,10 @@ export class UserDto {
   email: string;
 
   @Expose()
-  phone: string;
+  phone?: string;
+
+  @Expose()
+  avatar?: string;
 
   @Expose()
   status: StatusEnum;
@@ -18,14 +21,26 @@ export class UserDto {
   name: string;
 
   @Expose()
-  dateOfBirth: Date;
+  dateOfBirth?: Date;
 
   @Expose()
-  address: string;
+  address?: string;
 
   @Expose()
-  identityId: string;
+  identityId?: number;
 
   @Expose()
-  role: UserRole; // <-- ADD THIS LINE to expose the user's role
+  role: UserRole;
+
+  @Expose()
+  createdAt: Date;
+
+  @Expose()
+  updatedAt: Date;
+
+  @Expose()
+  deletedAt?: Date;
+
+  @Expose()
+  deletedBy?: string;
 }
