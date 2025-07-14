@@ -1,9 +1,9 @@
-import { Controller, Get, Query, HttpStatus, HttpException } from '@nestjs/common';
+import { Controller, Get, Query, HttpStatus, HttpException, Param, ParseIntPipe } from '@nestjs/common';
 import { ContactService } from './contact.service';
 import { GetContactSubmissionsDto } from './dto/get-contact.dto';
-import { ApiOperation, ApiTags, ApiQuery } from '@nestjs/swagger';
+import { ApiOperation, ApiTags, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { RequestTypeEnum } from '@Constant/enums';
-import { SubmissionStatusEnum } from './entities';
+import { ContactSubmissionEntity, SubmissionStatusEnum } from './entities';
 
 @Controller('admin/contact')
 export class AdminContactController {
@@ -33,6 +33,33 @@ export class AdminContactController {
         {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
           message: 'Failed to retrieve contact submissions.',
+          error: error.message || 'Internal Server Error',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get full details of a specific contact submission by ID' })
+  @ApiResponse({ status: 200, description: 'The contact submission details', type: ContactSubmissionEntity })
+  @ApiResponse({ status: 404, description: 'Contact submission not found' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async getContactSubmissionById(@Param('id', ParseIntPipe) id: number) {
+    try {
+      const submission = await this._contactService.getContactSubmissionById(id);
+      if (!submission) {
+        throw new HttpException('Contact submission not found.', HttpStatus.NOT_FOUND);
+      }
+      return submission;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: 'Failed to retrieve contact submission details.',
           error: error.message || 'Internal Server Error',
         },
         HttpStatus.INTERNAL_SERVER_ERROR
