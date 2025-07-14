@@ -13,8 +13,7 @@ import { ContactModule } from '@ContactModule/contact.module';
 import { UsersModule } from '@UsersModule/users.module';
 import { DashboardModule } from '@DashboardModule/dashboard.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
-import { FieldsModule } from './modules/fields/fields.module';
-import { UserEntity } from './modules/users/entities/user.entity'; // Adjust this path if necessary
+import { UserEntity } from './modules/users/entities/user.entity';
 import { SeedService } from './modules/seed/seed.service';
 
 @Module({
@@ -55,7 +54,6 @@ import { SeedService } from './modules/seed/seed.service';
     UniversitiesModule,
     UsersModule,
     ChatbotModule,
-    FieldsModule,
   ],
   providers: [
     {

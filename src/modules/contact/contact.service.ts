@@ -1,11 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CreateContactDto } from './dto/create-contact.dto';
+import { GetContactSubmissionsDto } from './dto/get-contact.dto';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, FindManyOptions, ILike } from 'typeorm';
 import { ContactSubmissionEntity } from './entities';
 import { RequestTypeEnum } from '@Constant/enums';
 
@@ -37,27 +38,27 @@ export class ContactService {
     createContactDto: CreateContactDto,
     attachmentPaths: string[] = []
   ): Promise<{ message: string }> {
-    const senderEmail = createContactDto.email;
+    const senderEmail = createContactDto.representativeEmail;
     this._logger.log(`Received contact form submission from: ${senderEmail}`);
 
     try {
       const {
-        name,
-        email,
-        message,
         universityName,
-        phoneNumber,
         requestType,
-        // All other fields, will be conditionally rendered
+        representativeName,
+        representativeEmail,
+        representativeNumber,
+        message,
+        abbreviation,
         country,
         location,
         type,
         universityEmail,
+        universityNumber,
         website,
-        broadFieldOfStudy,
-        specificFieldOfStudy,
-        rank,
+        subjects,
         numberOfStudents,
+        description,
       } = createContactDto;
 
       const attachments = attachmentPaths.map((filePath) => ({
@@ -65,120 +66,182 @@ export class ContactService {
         path: filePath,
       }));
 
-      // --- Prepare HTML and Text Content Conditionally ---
       let universityDetailsHtml = '';
       let universityDetailsText = '';
+      let contactDetailsHtml = '';
+      let contactDetailsText = '';
+      let messageHtml = '';
+      let messageText = '';
 
       if (requestType === RequestTypeEnum.NEW_UNIVERSITY) {
         universityDetailsHtml = `
           <h3>University Details (New University):</h3>
           <p><strong>University Name:</strong> ${universityName}</p>
+          <p><strong>Abbreviation:</strong> ${abbreviation || 'N/A'}</p>
           <p><strong>Country:</strong> ${country}</p>
           <p><strong>Location:</strong> ${location}</p>
           <p><strong>Type:</strong> ${type}</p>
           <p><strong>University Email:</strong> ${universityEmail}</p>
+          <p><strong>University Number:</strong> ${universityNumber || 'N/A'}</p>
           <p><strong>Website:</strong> <a href="${website}">${website}</a></p>
-          <p><strong>Broad Field of Study:</strong> ${broadFieldOfStudy}</p>
-          <p><strong>Specific Field of Study:</strong> ${specificFieldOfStudy}</p>
-          ${typeof rank === 'number' ? `<p><strong>Rank:</strong> ${rank}</p>` : ''}
+          <p><strong>Subjects:</strong> ${subjects}</p>
           ${
             typeof numberOfStudents === 'number'
               ? `<p><strong>Number of Students:</strong> ${numberOfStudents}</p>`
               : ''
           }
+          <p><strong>Description:</strong> ${description}</p>
         `;
         universityDetailsText = `
           University Details (New University):
           University Name: ${universityName}
+          Abbreviation: ${abbreviation || 'N/A'}
           Country: ${country}
           Location: ${location}
           Type: ${type}
           University Email: ${universityEmail}
+          University Number: ${universityNumber || 'N/A'}
           Website: ${website}
-          Broad Field of Study: ${broadFieldOfStudy}
-          Specific Field of Study: ${specificFieldOfStudy}
-          ${typeof rank === 'number' ? `Rank: ${rank}\n` : ''}
+          Subjects: ${subjects}
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
+          Description: ${description}\n
         `;
-      } else if (requestType === RequestTypeEnum.UPDATE_INFORMATION) {
+        contactDetailsHtml = `
+          <h3>Sender's Contact Details:</h3>
+          <p><strong>Representative Name:</strong> ${representativeName || 'N/A'}</p>
+          <p><strong>Representative Email:</strong> ${representativeEmail || 'N/A'}</p>
+          <p><strong>Representative Phone Number:</strong> ${representativeNumber || 'N/A'}</p>
+        `;
+        contactDetailsText = `
+          Sender's Contact Details:
+          Representative Name: ${representativeName || 'N/A'}
+          Representative Email: ${representativeEmail || 'N/A'}
+          Representative Phone Number: ${representativeNumber || 'N/A'}
+        `;
+        messageHtml = `
+          <h3>Message:</h3>
+          <p>${message || 'N/A'}</p>
+        `;
+        messageText = `
+          Message:
+          ${message || 'N/A'}
+        `;
+      } else {
         universityDetailsHtml = `
-          <h3>University Details (Update Information):</h3>
+          <h3>University Details:</h3>
           <p><strong>University Name:</strong> ${universityName}</p>
         `;
         universityDetailsText = `
-          University Details (Update Information):
+          University Details:
           University Name: ${universityName}
         `;
-      }
-      // You might add an else block or default if other RequestTypeEnum values exist
-      // or if you want to handle unexpected request types.
-
-      const mailOptions = {
-        from: `"${name}" <${email}>`,
-        to: this._configService.get<string>('CONTACT_FORM_RECEIVER_EMAIL'),
-        subject: `UNISCOUT - ${requestType} Request from ${name}`, // Dynamic subject
-        html: `
+        contactDetailsHtml = `
           <h3>Sender's Contact Details:</h3>
-          <p><strong>Name:</strong> ${name}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Phone Number:</strong> ${phoneNumber}</p>
-          <p><strong>Request Type:</strong> ${requestType}</p>
-          ${universityDetailsHtml}
+          <p><strong>Representative Name:</strong> ${representativeName}</p>
+          <p><strong>Representative Email:</strong> ${representativeEmail}</p>
+          <p><strong>Representative Phone Number:</strong> ${representativeNumber}</p>
+        `;
+        contactDetailsText = `
+          Sender's Contact Details:
+          Representative Name: ${representativeName}
+          Representative Email: ${representativeEmail}
+          Representative Phone Number: ${representativeNumber}
+        `;
+        messageHtml = `
           <h3>Message:</h3>
           <p>${message}</p>
-        `,
-        text: `
-          Sender's Contact Details:
-          Name: ${name}
-          Email: ${email}
-          Phone Number: ${phoneNumber}
-          Request Type: ${requestType}
-          ${universityDetailsText}
+          ${description ? `<p><strong>Description:</strong> ${description}</p>` : ''}
+        `;
+        messageText = `
           Message:
           ${message}
+          ${description ? `Description: ${description}\n` : ''}
+        `;
+      }
+
+      const mailOptions = {
+        from: `"${representativeName || 'Contact Form'}" <${representativeEmail}>`,
+        to: this._configService.get<string>('CONTACT_FORM_RECEIVER_EMAIL'),
+        subject: `UNISCOUT - ${requestType} Request from ${representativeName || 'Anonymous'}`,
+        html: `
+          ${contactDetailsHtml}
+          <p><strong>Request Type:</strong> ${requestType}</p>
+          ${universityDetailsHtml}
+          ${messageHtml}
+        `,
+        text: `
+          ${contactDetailsText}
+          Request Type: ${requestType}
+          ${universityDetailsText}
+          ${messageText}
         `,
         attachments: attachments,
       };
 
       await this._transporter.sendMail(mailOptions);
-      this._logger.log(`Contact form email sent successfully from ${email} for ${requestType} request.`);
+      this._logger.log(`Contact form email sent successfully from ${representativeEmail} for ${requestType} request.`);
 
-      // --- Acknowledgment Email Content Conditionally ---
       let acknowledgmentUniversityDetailsHtml = '';
       let acknowledgmentUniversityDetailsText = '';
+      let acknowledgmentContactDetailsHtml = '';
+      let acknowledgmentContactDetailsText = '';
+      let acknowledgmentMessageHtml = '';
+      let acknowledgmentMessageText = '';
 
       if (requestType === RequestTypeEnum.NEW_UNIVERSITY) {
         acknowledgmentUniversityDetailsHtml = `
           <h3>Submitted University Details:</h3>
           <p><strong>University Name:</strong> ${universityName}</p>
+          <p><strong>Abbreviation:</strong> ${abbreviation || 'N/A'}</p>
           <p><strong>Country:</strong> ${country}</p>
           <p><strong>Location:</strong> ${location}</p>
           <p><strong>Type:</strong> ${type}</p>
           <p><strong>University Email:</strong> ${universityEmail}</p>
+          <p><strong>University Number:</strong> ${universityNumber || 'N/A'}</p>
           <p><strong>Website:</strong> <a href="${website}">${website}</a></p>
-          <p><strong>Broad Field of Study:</strong> ${broadFieldOfStudy}</p>
-          <p><strong>Specific Field of Study:</strong> ${specificFieldOfStudy}</p>
-          ${typeof rank === 'number' ? `<p><strong>Rank:</strong> ${rank}</p>` : ''}
+          <p><strong>Subjects:</strong> ${subjects}</p>
           ${
             typeof numberOfStudents === 'number'
               ? `<p><strong>Number of Students:</strong> ${numberOfStudents}</p>`
               : ''
           }
+          <p><strong>Description:</strong> ${description}</p>
         `;
         acknowledgmentUniversityDetailsText = `
           Submitted University Details:
           University Name: ${universityName}
+          Abbreviation: ${abbreviation || 'N/A'}
           Country: ${country}
           Location: ${location}
           Type: ${type}
           University Email: ${universityEmail}
+          University Number: ${universityNumber || 'N/A'}
           Website: ${website}
-          Broad Field of Study: ${broadFieldOfStudy}
-          Specific Field of Study: ${specificFieldOfStudy}
-          ${typeof rank === 'number' ? `Rank: ${rank}\n` : ''}
+          Subjects: ${subjects}
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
+          Description: ${description}\n
         `;
-      } else if (requestType === RequestTypeEnum.UPDATE_INFORMATION) {
+        acknowledgmentContactDetailsHtml = `
+          <h3>Your Contact Details:</h3>
+          <p><strong>Name:</strong> ${representativeName || 'N/A'}</p>
+          <p><strong>Email:</strong> ${representativeEmail || 'N/A'}</p>
+          <p><strong>Phone Number:</strong> ${representativeNumber || 'N/A'}</p>
+        `;
+        acknowledgmentContactDetailsText = `
+          Your Contact Details:
+          Name: ${representativeName || 'N/A'}
+          Email: ${representativeEmail || 'N/A'}
+          Phone Number: ${representativeNumber || 'N/A'}
+        `;
+        acknowledgmentMessageHtml = `
+          <h3>Your Message:</h3>
+          <p>${message || 'N/A'}</p>
+        `;
+        acknowledgmentMessageText = `
+          Your Message:
+          ${message || 'N/A'}
+        `;
+      } else {
         acknowledgmentUniversityDetailsHtml = `
           <h3>Submitted University Details:</h3>
           <p><strong>University Name:</strong> ${universityName}</p>
@@ -187,42 +250,56 @@ export class ContactService {
           Submitted University Details:
           University Name: ${universityName}
         `;
+        acknowledgmentContactDetailsHtml = `
+          <h3>Your Contact Details:</h3>
+          <p><strong>Name:</strong> ${representativeName}</p>
+          <p><strong>Email:</strong> ${representativeEmail}</p>
+          <p><strong>Phone Number:</strong> ${representativeNumber}</p>
+        `;
+        acknowledgmentContactDetailsText = `
+          Your Contact Details:
+          Name: ${representativeName}
+          Email: ${representativeEmail}
+          Phone Number: ${representativeNumber}
+        `;
+        acknowledgmentMessageHtml = `
+          <h3>Your Message:</h3>
+          <p>${message}</p>
+          ${description ? `<p><strong>Description:</strong> ${description}</p>` : ''}
+        `;
+        acknowledgmentMessageText = `
+          Your Message:
+          ${message}
+          ${description ? `Description: ${description}\n` : ''}
+        `;
       }
 
       const acknowledgmentMailOptions = {
         from: `UNISCOUT <${this._configService.get<string>('MAIL_USER')}>`,
-        to: email,
+        to: representativeEmail,
         subject: 'UNISCOUT - We received your message!',
         html: `
-          <p>Dear ${name},</p>
-          <p>Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon as possible.</p>
+          <p>Dear ${representativeName || 'Valued User'},</p>
+          <p>Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon to as possible.</p>
           <p>Here's a copy of your submission details:</p>
-          <h3>Your Contact Details:</h3>
-          <p><strong>Name:</strong> ${name}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Phone Number:</strong> ${phoneNumber}</p>
+          ${acknowledgmentContactDetailsHtml}
           <p><strong>Request Type:</strong> ${requestType}</p>
           ${acknowledgmentUniversityDetailsHtml}
-          <h3>Your Message:</h3>
-          <p>${message}</p>
+          ${acknowledgmentMessageHtml}
           <p>If you have any urgent queries, feel free to reach out to us directly.</p>
           <p>Best regards,<br>The UNISCOUT Team</p>
         `,
         text: `
-          Dear ${name},
+          Dear ${representativeName || 'Valued User'},
 
-          Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon as possible.
+          Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon to as possible.
 
           Here's a copy of your submission details:
 
-          Your Contact Details:
-          Name: ${name}
-          Email: ${email}
-          Phone Number: ${phoneNumber}
+          ${acknowledgmentContactDetailsText}
           Request Type: ${requestType}
           ${acknowledgmentUniversityDetailsText}
-          Your Message:
-          ${message}
+          ${acknowledgmentMessageText}
 
           If you have any urgent queries, feel free to reach out to us directly.
 
@@ -232,27 +309,26 @@ export class ContactService {
       };
 
       await this._transporter.sendMail(acknowledgmentMailOptions);
-      this._logger.log(`Acknowledgment email sent successfully to ${email} for ${requestType} request.`);
+      this._logger.log(`Acknowledgment email sent successfully to ${representativeEmail} for ${requestType} request.`);
 
       const newSubmission = this._contactSubmissionRepo.create({
-        email: email,
-        name: name,
-        // You might consider conditionally saving more fields to the entity
-        // based on the request type if your database schema allows for nulls
-        // or if you have different tables for different request types.
-        universityName: universityName, // Always stored
-        requestType: requestType, // Always stored
-        phoneNumber: phoneNumber, // Always stored
-        message: message, // Always stored
+        representativeEmail: representativeEmail,
+        representativeName: representativeName,
+        universityName: universityName,
+        requestType: requestType,
+        representativeNumber: representativeNumber,
+        message: message,
+        description: description,
+        // The 'status' field will be set to 'PENDING' by default as defined in the entity
         ...(requestType === RequestTypeEnum.NEW_UNIVERSITY && {
+          abbreviation: abbreviation,
           country: country,
           location: location,
           type: type,
           universityEmail: universityEmail,
+          universityNumber: universityNumber,
           website: website,
-          broadFieldOfStudy: broadFieldOfStudy,
-          specificFieldOfStudy: specificFieldOfStudy,
-          rank: rank,
+          subjects: subjects,
           numberOfStudents: numberOfStudents,
         }),
       });
@@ -275,5 +351,61 @@ export class ContactService {
         });
       });
     }
+  }
+
+  async getContactSubmissions(query: GetContactSubmissionsDto) {
+    const {
+      page = 1,
+      pageSize = 10,
+      sortOrder = 'DESC',
+      sortBy = 'submittedAt',
+      requestType,
+      country,
+      universityName,
+      status,
+    } = query;
+
+    const findOptions: FindManyOptions<ContactSubmissionEntity> = {
+      take: pageSize,
+      skip: (page - 1) * pageSize,
+      order: {
+        [sortBy]: sortOrder,
+      },
+      where: {},
+    };
+
+    if (requestType) {
+      findOptions.where['requestType'] = requestType;
+    }
+    if (country) {
+      findOptions.where['country'] = ILike(`%${country}%`); // Case-insensitive like search for country
+    }
+    if (universityName) {
+      findOptions.where['universityName'] = ILike(`%${universityName}%`); // Case-insensitive like search for university name
+    }
+    if (status) {
+      findOptions.where['status'] = status;
+    }
+
+    const [submissions, total] = await this._contactSubmissionRepo.findAndCount(findOptions);
+
+    return {
+      data: submissions,
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async getContactSubmissionById(id: number): Promise<ContactSubmissionEntity | undefined> {
+    this._logger.log(`Attempting to retrieve contact submission with ID: ${id}`);
+    const submission = await this._contactSubmissionRepo.findOneBy({ id });
+    if (!submission) {
+      this._logger.warn(`Contact submission with ID ${id} not found.`);
+    } else {
+      this._logger.log(`Contact submission with ID ${id} retrieved successfully.`);
+    }
+    return submission;
   }
 }
