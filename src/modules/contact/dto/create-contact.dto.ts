@@ -2,35 +2,20 @@ import {
   IsEmail,
   IsNotEmpty,
   IsString,
-  MaxLength,
   IsEnum,
   IsNumberString,
   IsUrl,
   IsInt,
   Min,
   ValidateIf,
+  Validate,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'; // Import ApiProperty and ApiPropertyOptional
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { RequestTypeEnum } from '@Constant/enums';
+import { UniversityTypeEnum } from '@UniversitiesModule/dto/get-university.dto';
+import { IsCountryValidConstraint } from '@UniversitiesModule/validator';
 
 export class CreateContactDto {
-  @ApiProperty({ description: 'Name of the contact person', maxLength: 100 })
-  @IsString()
-  @IsNotEmpty({ message: 'Name cannot be empty.' })
-  @MaxLength(100, { message: 'Name cannot exceed 100 characters.' })
-  name: string;
-
-  @ApiProperty({ description: 'Email address of the contact person' })
-  @IsEmail({}, { message: 'Please provide a valid email address.' })
-  @IsNotEmpty({ message: 'Email cannot be empty.' })
-  email: string;
-
-  @ApiProperty({ description: 'Message content', maxLength: 1000 })
-  @IsString()
-  @IsNotEmpty({ message: 'Message cannot be empty.' })
-  @MaxLength(1000, { message: 'Message cannot exceed 1000 characters.' })
-  message: string;
-
   @ApiProperty({
     description: 'Type of request',
     enum: RequestTypeEnum,
@@ -40,97 +25,93 @@ export class CreateContactDto {
   @IsNotEmpty({ message: 'Request type cannot be empty.' })
   requestType: RequestTypeEnum;
 
-  @ApiProperty({ description: 'Name of the university', maxLength: 255 })
+  @ApiProperty({ description: 'Name of university' })
   @IsString()
   @IsNotEmpty({ message: 'University Name cannot be empty.' })
-  @MaxLength(255, { message: 'University name cannot exceed 255 characters.' })
   universityName: string;
 
-  @ApiProperty({ description: 'Phone number' })
+  @ApiPropertyOptional({ description: 'Name of contact person' })
+  @ValidateIf((o) => o.requestType !== RequestTypeEnum.NEW_UNIVERSITY)
   @IsString()
-  @IsNotEmpty({ message: 'Phone Number cannot be empty.' })
-  @IsNumberString({}, { message: 'Please provide a valid phone number.' })
-  phoneNumber: string;
+  @IsNotEmpty({ message: 'Representative name cannot be empty for this request type.' })
+  representativeName?: string;
 
-  @ApiPropertyOptional({
-    description: 'Country (required for NEW_UNIVERSITY request type)',
-    maxLength: 200,
-  })
+  @ApiPropertyOptional({ description: 'Email address of contact person' })
+  @ValidateIf((o) => o.requestType !== RequestTypeEnum.NEW_UNIVERSITY)
+  @IsEmail({}, { message: 'Please provide a valid email address.' })
+  @IsNotEmpty({ message: 'Representative email cannot be empty for this request type.' })
+  representativeEmail?: string;
+
+  @ApiPropertyOptional({ description: 'Phone number of contact person' })
+  @ValidateIf((o) => o.requestType !== RequestTypeEnum.NEW_UNIVERSITY)
+  @IsString()
+  @IsNotEmpty({ message: 'Representative phone number cannot be empty for this request type.' })
+  @IsNumberString({}, { message: 'Please provide a valid phone number.' })
+  representativeNumber?: string;
+
+  @ApiPropertyOptional({ description: 'Message content' })
+  @ValidateIf((o) => o.requestType !== RequestTypeEnum.NEW_UNIVERSITY)
+  @IsString()
+  @IsNotEmpty({ message: 'Message cannot be empty for this request type.' })
+  message?: string;
+
+  @ApiPropertyOptional({ description: 'Abbreviation' })
+  @ValidateIf((o) => o.requestType === RequestTypeEnum.NEW_UNIVERSITY)
+  @IsString()
+  @IsNotEmpty({ message: 'Abbreviation cannot be empty for New University requests.' })
+  abbreviation?: string;
+
+  @ApiPropertyOptional({ description: 'Country' })
   @ValidateIf((o) => o.requestType === RequestTypeEnum.NEW_UNIVERSITY)
   @IsString()
   @IsNotEmpty({ message: 'Country cannot be empty for New University requests.' })
-  @MaxLength(200, { message: 'Country cannot exceed 200 characters.' })
+  @Validate(IsCountryValidConstraint, { message: 'Each country must be a valid country from the database.' })
   country?: string;
 
-  @ApiPropertyOptional({
-    description: 'Location (required for NEW_UNIVERSITY request type)',
-    maxLength: 255,
-  })
+  @ApiPropertyOptional({ description: 'Location (City/State/Province)' })
   @ValidateIf((o) => o.requestType === RequestTypeEnum.NEW_UNIVERSITY)
   @IsString()
   @IsNotEmpty({ message: 'Location cannot be empty for New University requests.' })
-  @MaxLength(255, { message: 'Location cannot exceed 255 characters.' })
   location?: string;
 
   @ApiPropertyOptional({
-    description: 'University Type (required for NEW_UNIVERSITY request type)',
-    maxLength: 100,
+    description: 'University type',
+    enum: UniversityTypeEnum,
   })
   @ValidateIf((o) => o.requestType === RequestTypeEnum.NEW_UNIVERSITY)
-  @IsString()
-  @IsNotEmpty({ message: 'University Type cannot be empty for New University requests.' })
-  @MaxLength(100, { message: 'University type cannot exceed 100 characters.' })
+  @IsEnum(UniversityTypeEnum, { message: 'Invalid university type provided.' })
+  @IsNotEmpty({ message: 'University type cannot be empty for New University requests.' })
   type?: string;
 
-  @ApiPropertyOptional({
-    description: 'University Email (required for NEW_UNIVERSITY request type)',
-  })
+  @ApiPropertyOptional({ description: 'University email' })
   @ValidateIf((o) => o.requestType === RequestTypeEnum.NEW_UNIVERSITY)
   @IsString()
-  @IsNotEmpty({ message: 'University Email cannot be empty for New University requests.' })
+  @IsNotEmpty({ message: 'University email cannot be empty for New University requests.' })
   @IsEmail({}, { message: 'Please provide a valid university email address for New University requests.' })
   universityEmail?: string;
 
-  @ApiPropertyOptional({
-    description: 'Website URL (required for NEW_UNIVERSITY request type)',
-  })
+  @ApiPropertyOptional({ description: 'University phone number' })
+  @ValidateIf((o) => o.requestType === RequestTypeEnum.NEW_UNIVERSITY)
+  @IsString()
+  @IsNotEmpty({ message: 'University phone number cannot be empty for New University requests.' })
+  @IsNumberString({}, { message: 'Please provide a valid university phone number for New University requests.' })
+  universityNumber?: string;
+
+  @ApiPropertyOptional({ description: 'Website URL' })
   @ValidateIf((o) => o.requestType === RequestTypeEnum.NEW_UNIVERSITY)
   @IsString()
   @IsNotEmpty({ message: 'Website cannot be empty for New University requests.' })
   @IsUrl({}, { message: 'Please provide a valid website URL for New University requests.' })
   website?: string;
 
-  @ApiPropertyOptional({
-    description: 'Broad Field of Study (required for NEW_UNIVERSITY request type)',
-    maxLength: 255,
-  })
+  @ApiPropertyOptional({ description: 'Subjects' })
   @ValidateIf((o) => o.requestType === RequestTypeEnum.NEW_UNIVERSITY)
   @IsString()
-  @IsNotEmpty({ message: 'Broad Field of Study cannot be empty for New University requests.' })
-  @MaxLength(255, { message: 'Broad field of study cannot exceed 255 characters.' })
-  broadFieldOfStudy?: string;
+  @IsNotEmpty({ message: 'Subjects cannot be empty for New University requests.' })
+  subjects?: string;
 
   @ApiPropertyOptional({
-    description: 'Specific Field of Study (required for NEW_UNIVERSITY request type)',
-    maxLength: 255,
-  })
-  @ValidateIf((o) => o.requestType === RequestTypeEnum.NEW_UNIVERSITY)
-  @IsString()
-  @IsNotEmpty({ message: 'Specific Field of Study cannot be empty for New University requests.' })
-  @MaxLength(255, { message: 'Specific field of study cannot exceed 255 characters.' })
-  specificFieldOfStudy?: string;
-
-  @ApiPropertyOptional({
-    description: 'Rank of the university (positive integer)',
-    type: Number,
-  })
-  @ValidateIf((o) => o.requestType === RequestTypeEnum.NEW_UNIVERSITY && o.rank !== undefined && o.rank !== null)
-  @IsInt({ message: 'Rank must be an integer for New University requests.' })
-  @Min(1, { message: 'Rank must be a positive number for New University requests.' })
-  rank?: number;
-
-  @ApiPropertyOptional({
-    description: 'Number of students (non-negative integer)',
+    description: 'Number of students',
     type: Number,
   })
   @ValidateIf(
@@ -139,7 +120,12 @@ export class CreateContactDto {
       o.numberOfStudents !== undefined &&
       o.numberOfStudents !== null
   )
-  @IsInt({ message: 'Number of students must be an integer for New University requests.' })
-  @Min(0, { message: 'Number of students cannot be negative for New University requests.' })
+  @IsInt({ message: 'Number of students must be an integer.' })
+  @Min(0, { message: 'Number of students cannot be negative.' })
   numberOfStudents?: number;
+
+  @ApiPropertyOptional({ description: 'Description' })
+  @ValidateIf((o) => o.requestType === RequestTypeEnum.NEW_UNIVERSITY)
+  @IsString()
+  description?: string;
 }

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ContactController } from './contact.controller';
+import { AdminContactController } from './admin-contact.controller';
 import { ContactService } from './contact.service';
 import { MulterModule } from '@nestjs/platform-express';
 import { ConfigModule } from '@nestjs/config';
@@ -8,7 +9,7 @@ import { ContactSubmissionEntity } from './entities';
 
 @Module({
   imports: [MulterModule.register({}), ConfigModule, TypeOrmModule.forFeature([ContactSubmissionEntity])],
-  controllers: [ContactController],
+  controllers: [ContactController, AdminContactController],
   providers: [ContactService],
 })
 export class ContactModule {}
