@@ -21,6 +21,7 @@ export class CreateUserDto {
   password?: string;
 
   @ApiPropertyOptional()
+  @IsOptional()
   @IsString({ message: 'Số điện thoại phải là chuỗi' })
   phone?: string;
 
