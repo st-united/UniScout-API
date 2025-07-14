@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { UserController } from './user.controller';
-import { AdminController } from './admin.controller';
+import { UserController } from './university.controller';
+import { AdminController } from './admin-university.controller';
 import { UniversityService } from './university.service';
 import { IsCountryValidConstraint, IsUniqueConstraint } from './validator';
 import { CsvImport } from './csv-import';

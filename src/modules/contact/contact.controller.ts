@@ -7,7 +7,7 @@ import { plainToClass } from 'class-transformer';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as multer from 'multer';
-import { ApiConsumes, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger'; // Import Swagger decorators
+import { ApiConsumes, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequestTypeEnum } from '@Constant/enums';
 
 const uploadDir = './uploads/contact_attachments';
@@ -19,33 +19,35 @@ if (!fs.existsSync(uploadDir)) {
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_FILES = 5;
 
-@ApiTags('Contact') // Optional: Tag your controller for better organization in Swagger
 @Controller('contact')
 export class ContactController {
   constructor(private readonly _contactService: ContactService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Submit a contact form with optional file attachments' }) // Optional: Describe the operation
-  @ApiConsumes('multipart/form-data') // Crucial for file uploads in Swagger
+  @ApiOperation({ summary: 'Submit a contact form with optional file attachments' })
+  @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        name: { type: 'string' },
-        email: { type: 'string', format: 'email' },
-        message: { type: 'string' },
-        requestType: { type: 'string', enum: Object.values(RequestTypeEnum) }, // Use Object.values for enum
+        requestType: { type: 'string', enum: Object.values(RequestTypeEnum) },
         universityName: { type: 'string' },
-        phoneNumber: { type: 'string' },
-        country: { type: 'string', nullable: true }, // Mark as nullable if optional
+
+        representativeName: { type: 'string', nullable: true },
+        representativeEmail: { type: 'string', format: 'email', nullable: true },
+        representativeNumber: { type: 'string', nullable: true },
+
+        abbreviation: { type: 'string', nullable: true },
+        country: { type: 'string', nullable: true },
         location: { type: 'string', nullable: true },
         type: { type: 'string', nullable: true },
         universityEmail: { type: 'string', format: 'email', nullable: true },
+        universityNumber: { type: 'string', nullable: true },
         website: { type: 'string', format: 'url', nullable: true },
-        broadFieldOfStudy: { type: 'string', nullable: true },
-        specificFieldOfStudy: { type: 'string', nullable: true },
-        rank: { type: 'integer', nullable: true },
+        subjects: { type: 'string', nullable: true },
         numberOfStudents: { type: 'integer', nullable: true },
+        description: { type: 'string', nullable: true },
+
         files: {
           type: 'array',
           items: {
@@ -56,11 +58,7 @@ export class ContactController {
           description: 'Optional files (PDF, Word, images) up to 5MB each',
         },
       },
-      // You can add 'required' array here if you want to explicitly mark required fields
-      // For example, if 'requestType' makes some fields conditionally required,
-      // Swagger won't dynamically show/hide them based on 'requestType'.
-      // The validation pipe will handle the actual runtime validation.
-      required: ['name', 'email', 'message', 'requestType', 'universityName', 'phoneNumber'],
+      required: ['requestType', 'universityName'],
     },
   })
   @UseInterceptors(
@@ -69,8 +67,8 @@ export class ContactController {
       fileFilter: (req, file, callback) => {
         const allowedMimeTypes = [
           'application/pdf',
-          'application/msword', // .doc
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           'image/jpeg',
           'image/png',
           'image/gif',
@@ -99,23 +97,25 @@ export class ContactController {
 
     try {
       const createContactData: Partial<CreateContactDto> = {
-        name: body.name,
-        email: body.email,
-        message: body.message,
         requestType: body.requestType,
-
         universityName: body.universityName,
-        phoneNumber: body.phoneNumber,
+
+        representativeName: body.representativeName,
+        representativeEmail: body.representativeEmail,
+        representativeNumber: body.representativeNumber,
+        message: body.message,
+
+        abbreviation: body.abbreviation,
         country: body.country,
         location: body.location,
         type: body.type,
         universityEmail: body.universityEmail,
+        universityNumber: body.universityNumber,
         website: body.website,
-        broadFieldOfStudy: body.broadFieldOfStudy,
-        specificFieldOfStudy: body.specificFieldOfStudy,
+        subjects: body.subjects,
 
-        rank: body.rank ? parseInt(body.rank, 10) : undefined,
         numberOfStudents: body.numberOfStudents ? parseInt(body.numberOfStudents, 10) : undefined,
+        description: body.description,
       };
 
       const createContactDto = plainToClass(CreateContactDto, createContactData);
@@ -159,6 +159,10 @@ export class ContactController {
           },
           HttpStatus.BAD_REQUEST
         );
+      }
+
+      if (error instanceof HttpException) {
+        throw error;
       }
 
       throw new HttpException(
