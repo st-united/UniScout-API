@@ -2,11 +2,11 @@ import { BadRequestException, Injectable, UnauthorizedException, InternalServerE
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 
 import { UserEntity } from '@UsersModule/entities';
 import { CredentialsDto } from './dto/credentials.dto';
-import { StatusEnum } from '@Constant/enums';
+import { StatusEnum, UserRole } from '@Constant/enums';
 import { UserPayloadDto } from './dto/user-payload.dto';
 import { JwtPayload } from '@Constant/types';
 import { ResponseItem } from '@app/common/dtos';
@@ -14,11 +14,13 @@ import { TokenDto } from './dto/token.dto';
 import { ConfigService } from '@nestjs/config';
 import { UserDto } from '@UsersModule/dto/user.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
+import { plainToClass } from 'class-transformer';
 
 @Injectable()
 export class AuthService {
   private readonly MAX_LOGIN_ATTEMPTS: number;
   private readonly LOCKOUT_DURATION_MINUTES: number;
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
@@ -33,28 +35,43 @@ export class AuthService {
     const emailExisted = await this.userRepository.findOneBy({
       email: registerDto.email,
       deletedAt: null,
-    });
+    } as FindOptionsWhere<UserEntity>);
+
     if (emailExisted) {
       throw new BadRequestException('Email Already Exist!');
     }
-    const user = await this.userRepository.create(registerDto);
+
+    const hashedPassword = await bcrypt.hash(registerDto.password, 10);
+    const user = this.userRepository.create({
+      ...registerDto,
+      password: hashedPassword,
+      status: StatusEnum.PENDING,
+      role: UserRole.USER,
+    });
     await this.userRepository.save(user);
-    return new ResponseItem(user, 'Account Created Successful!');
+
+    const userDto = plainToClass(UserDto, user, { excludeExtraneousValues: true });
+    return new ResponseItem(userDto, 'Account Created Successful!');
   }
+
   async validateUser(credentialsDto: CredentialsDto): Promise<UserPayloadDto> {
     try {
       const user = await this.userRepository.findOneBy({
         email: credentialsDto.email,
         deletedAt: null,
-      });
+      } as FindOptionsWhere<UserEntity>);
 
-      if (!user || user.status !== StatusEnum.ACTIVE) {
+      if (!user) {
         throw new UnauthorizedException('Invalid username or password.');
       }
 
       if (user.lockoutUntil && user.lockoutUntil > new Date()) {
         const remainingTime = Math.ceil((user.lockoutUntil.getTime() - new Date().getTime()) / (1000 * 60));
         throw new UnauthorizedException(`Account locked. Please try again in ${remainingTime} minutes.`);
+      }
+
+      if (user.status !== StatusEnum.ACTIVE) {
+        throw new UnauthorizedException('Account is not active. Please contact support.');
       }
 
       const comparePassword = await bcrypt.compare(credentialsDto.password, user.password);
@@ -79,12 +96,8 @@ export class AuthService {
       user.lockoutUntil = null;
       await this.userRepository.save(user);
 
-      return {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-      };
+      const userPayload = plainToClass(UserPayloadDto, user, { excludeExtraneousValues: true });
+      return userPayload;
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;
@@ -107,7 +120,7 @@ export class AuthService {
 
     await this.userRepository.update(userPayloadDto.id, { refreshToken });
 
-    const data = {
+    const data: TokenDto = {
       name: userPayloadDto.name,
       accessToken,
       refreshToken,
@@ -115,11 +128,10 @@ export class AuthService {
 
     return new ResponseItem(data, 'Log In Successful!');
   }
-  async logout(userId: string): Promise<ResponseItem<string | null>> {
-    try {
-      const numericUserId = parseInt(userId, 10);
 
-      const user = await this.userRepository.findOneBy({ id: numericUserId });
+  async logout(userId: number): Promise<ResponseItem<string | null>> {
+    try {
+      const user = await this.userRepository.findOneBy({ id: userId } as FindOptionsWhere<UserEntity>);
 
       if (!user) {
         throw new BadRequestException('User not found.');
@@ -127,7 +139,7 @@ export class AuthService {
       if (user.refreshToken === null) {
         throw new BadRequestException('User is already logged out.');
       }
-      const updateResult = await this.userRepository.update(numericUserId, { refreshToken: null });
+      const updateResult = await this.userRepository.update(userId, { refreshToken: null });
 
       if (updateResult.affected === 0) {
         throw new InternalServerErrorException('Logout failed due to an unexpected database issue.');
@@ -146,13 +158,14 @@ export class AuthService {
     const user = await this.userRepository.findOneBy({
       refreshToken: token,
       status: StatusEnum.ACTIVE,
-      deletedBy: null,
-    });
+      deletedAt: null,
+    } as FindOptionsWhere<UserEntity>);
 
     if (!user) throw new UnauthorizedException('Incorrect Account!');
+
     const payload: JwtPayload = { sub: user.id, email: user.email, role: user.role };
 
-    const data = {
+    const data: TokenDto = {
       accessToken: this.jwtService.sign(payload, {
         secret: this.configService.get<string>('JWT_ACCESS_SECRETKEY'),
         expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRES'),
