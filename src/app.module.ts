@@ -42,6 +42,7 @@ import { SeedService } from './modules/seed/seed.service';
         MAIL_USER: Joi.string().required(),
         MAIL_PASSWORD: Joi.string().required(),
         MAIL_FROM_ADDRESS: Joi.string().email().required(),
+        MAIL_CONTACT_FORM_RECEIVER_EMAIL: Joi.string().email().required(),
       }),
       isGlobal: true,
       envFilePath: '.env',

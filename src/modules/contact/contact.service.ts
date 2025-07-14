@@ -20,12 +20,12 @@ export class ContactService {
     private readonly _contactSubmissionRepo: Repository<ContactSubmissionEntity>
   ) {
     this._transporter = nodemailer.createTransport({
-      host: this._configService.get<string>('EMAIL_HOST'),
-      port: this._configService.get<number>('EMAIL_PORT'),
-      secure: this._configService.get<boolean>('EMAIL_SECURE'),
+      host: this._configService.get<string>('MAIL_HOST'),
+      port: this._configService.get<number>('MAIL_PORT'),
+      secure: this._configService.get<boolean>('MAIL_SECURE'),
       auth: {
-        user: this._configService.get<string>('EMAIL_USER'),
-        pass: this._configService.get<string>('EMAIL_PASS'),
+        user: this._configService.get<string>('MAIL_USER'),
+        pass: this._configService.get<string>('MAIL_PASSWORD'),
       },
       tls: {
         rejectUnauthorized: false,
@@ -190,7 +190,7 @@ export class ContactService {
       }
 
       const acknowledgmentMailOptions = {
-        from: `UNISCOUT <${this._configService.get<string>('EMAIL_USER')}>`,
+        from: `UNISCOUT <${this._configService.get<string>('MAIL_USER')}>`,
         to: email,
         subject: 'UNISCOUT - We received your message!',
         html: `
