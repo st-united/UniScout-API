@@ -397,4 +397,15 @@ export class ContactService {
       totalPages: Math.ceil(total / pageSize),
     };
   }
+
+  async getContactSubmissionById(id: number): Promise<ContactSubmissionEntity | undefined> {
+    this._logger.log(`Attempting to retrieve contact submission with ID: ${id}`);
+    const submission = await this._contactSubmissionRepo.findOneBy({ id });
+    if (!submission) {
+      this._logger.warn(`Contact submission with ID ${id} not found.`);
+    } else {
+      this._logger.log(`Contact submission with ID ${id} retrieved successfully.`);
+    }
+    return submission;
+  }
 }
