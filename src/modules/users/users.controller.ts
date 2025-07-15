@@ -30,6 +30,7 @@ import { RolesGuard } from '@AuthModule/guards/roles.guard';
 import { Roles } from '@AuthModule/decorators/roles.decorator';
 import { UserRole } from '@Constant/enums';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UserListResponseDto } from './dto/user-list-response.dto';
 
 @Controller('users')
 @UseGuards(JwtAccessTokenGuard)
@@ -62,10 +63,11 @@ export class UsersController {
   }
 
   @Get()
-  async getUsers(@Query() getUsersDto: GetUsersDto): Promise<ResponsePaginate<UserDto>> {
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SUPER, UserRole.ADMIN) // Only SUPER or ADMIN can view all users
+  async getUsers(@Query() getUsersDto: GetUsersDto): Promise<ResponsePaginate<UserListResponseDto>> {
     return await this.usersService.getUsers(getUsersDto);
   }
-
   @Get('me')
   async getProfile(@Req() req): Promise<ResponseItem<ProfileDto>> {
     return await this.usersService.getProfile(req.user.userId);

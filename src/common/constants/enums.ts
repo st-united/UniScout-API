@@ -2,6 +2,7 @@ export enum StatusEnum {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
   PENDING = 'PENDING',
+  BLOCKED = 'BLOCKED',
 }
 
 export enum Order {
