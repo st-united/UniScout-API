@@ -6,10 +6,12 @@ import * as nodemailer from 'nodemailer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, ILike } from 'typeorm';
+import { Repository, Brackets } from 'typeorm';
 import { ContactSubmissionEntity, SubmissionStatusEnum } from './entities';
 import { RequestTypeEnum } from '@Constant/enums';
 import { UpdateContactSubmissionStatusDto } from './dto/update-contact.dto';
+import { UniEntity } from '@UniversitiesModule/entities';
+import { UniversityService } from '@UniversitiesModule/university.service';
 
 @Injectable()
 export class ContactService {
@@ -19,15 +21,17 @@ export class ContactService {
   constructor(
     private readonly _configService: ConfigService,
     @InjectRepository(ContactSubmissionEntity)
-    private readonly _contactSubmissionRepo: Repository<ContactSubmissionEntity>
+    private readonly _contactSubmissionRepo: Repository<ContactSubmissionEntity>,
+    @InjectRepository(UniEntity)
+    private readonly _universityService: UniversityService
   ) {
     this._transporter = nodemailer.createTransport({
-      host: this._configService.get<string>('EMAIL_HOST'),
-      port: this._configService.get<number>('EMAIL_PORT'),
-      secure: this._configService.get<boolean>('EMAIL_SECURE'),
+      host: this._configService.get<string>('MAIL_HOST'),
+      port: this._configService.get<number>('MAIL_PORT'),
+      secure: this._configService.get<boolean>('MAIL_SECURE'),
       auth: {
-        user: this._configService.get<string>('EMAIL_USER'),
-        pass: this._configService.get<string>('EMAIL_PASS'),
+        user: this._configService.get<string>('MAIL_USER'),
+        pass: this._configService.get<string>('MAIL_PASSWORD'),
       },
       tls: {
         rejectUnauthorized: false,
@@ -258,7 +262,7 @@ export class ContactService {
       }
 
       const acknowledgmentMailOptions = {
-        from: `UNISCOUT <${this._configService.get<string>('EMAIL_USER')}>`,
+        from: `UNISCOUT <${this._configService.get<string>('MAIL_USER')}>`,
         to: representativeEmail,
         subject: 'UNISCOUT - We received your message!',
         html: `
@@ -345,33 +349,50 @@ export class ContactService {
       sortBy = 'submittedAt',
       requestType,
       country,
-      universityName,
       status,
+      search,
     } = query;
 
-    const findOptions: FindManyOptions<ContactSubmissionEntity> = {
-      take: pageSize,
-      skip: (page - 1) * pageSize,
-      order: {
-        [sortBy]: sortOrder,
-      },
-      where: {},
-    };
+    const qb = this._contactSubmissionRepo.createQueryBuilder('submission');
 
     if (requestType) {
-      findOptions.where['requestType'] = requestType;
+      qb.andWhere('submission.requestType = :requestType', { requestType });
     }
     if (country) {
-      findOptions.where['country'] = ILike(`%${country}%`);
-    }
-    if (universityName) {
-      findOptions.where['universityName'] = ILike(`%${universityName}%`);
+      qb.andWhere('submission.country = :country', { country: country });
     }
     if (status) {
-      findOptions.where['status'] = status;
+      qb.andWhere('submission.status = :status', { status });
     }
 
-    const [submissions, total] = await this._contactSubmissionRepo.findAndCount(findOptions);
+    if (search?.trim()) {
+      const searchTerm = search.trim();
+      const similarityThreshold = 0.4;
+
+      qb.andWhere(
+        new Brackets((qbInner) => {
+          qbInner
+            .where('submission.universityName ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+            .orWhere('submission.abbreviation ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+            .orWhere('word_similarity(:searchTerm, submission.universityName) > :similarityThreshold', {
+              searchTerm,
+              similarityThreshold,
+            })
+            .orWhere('word_similarity(:searchTerm, submission.abbreviation) > :similarityThreshold', {
+              searchTerm,
+              similarityThreshold,
+            });
+        })
+      );
+      qb.addSelect(`word_similarity(submission.universityName, :searchTerm)`, 'university_name_similarity');
+      qb.addSelect(`word_similarity(submission.abbreviation, :searchTerm)`, 'abbreviation_similarity');
+    }
+
+    qb.orderBy(`submission.${sortBy}`, sortOrder);
+
+    qb.take(pageSize).skip((page - 1) * pageSize);
+
+    const [submissions, total] = await qb.getManyAndCount();
 
     return {
       data: submissions,
@@ -452,5 +473,9 @@ export class ContactService {
     await this._contactSubmissionRepo.save(submission);
     this._logger.log(`Contact submission with ID ${id} status updated to ${newStatus}.`);
     return submission;
+  }
+
+  async getAvailableCountriesForContactForm(): Promise<string[]> {
+    return this._universityService.getAllAvailableCountries();
   }
 }
