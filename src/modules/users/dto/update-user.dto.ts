@@ -1,8 +1,19 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { Expose } from 'class-transformer';
-import { IsOptional, IsString, IsEmail, MinLength, Matches, IsEnum, IsDateString, IsNumber } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsEmail,
+  MinLength,
+  Matches,
+  IsEnum,
+  IsDateString,
+  IsNumber,
+  MaxLength,
+} from 'class-validator';
 import { StatusEnum } from '@Constant/enums';
 import { CreateUserDto } from './create-user.dto';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
   @Expose()
@@ -38,6 +49,12 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @ApiProperty({ example: 'Software Engineer', description: 'User job title', required: false })
+  @IsOptional() // <--- KEEP IsOptional for update DTO if it's a PATCH
+  @IsString({ message: 'Nghề nghiệp phải là chuỗi' })
+  @MaxLength(100, { message: 'Nghề nghiệp không được vượt quá 100 ký tự' })
+  job?: string; // <--- KEEP optional for update DTO
 
   @Expose()
   @IsOptional()

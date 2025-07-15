@@ -40,7 +40,15 @@ async function bootstrap() {
     .setTitle('Uni-Scout')
     .setDescription('The Uni-Scout API description')
     .setVersion('1.0')
-    .addBearerAuth()
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'Enter your JWT token (e.g., "eyJhbGciOiJIUzI1NiI...").',
+      },
+      'JWT-auth'
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, options);

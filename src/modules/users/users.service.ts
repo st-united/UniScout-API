@@ -156,11 +156,10 @@ export class UsersService {
   async getUsers(params: GetUsersDto): Promise<ResponsePaginate<UserListResponseDto>> {
     const usersQuery = this.userRepository
       .createQueryBuilder('users')
-      .select(['users.id', 'users.name', 'users.email', 'users.role', 'users.status', 'users.createdAt'])
+      .select(['users.id', 'users.name', 'users.email', 'users.role', 'users.job', 'users.status', 'users.createdAt'])
       .where('users.status = ANY(:status)', {
         status: params.status ? [params.status] : [StatusEnum.ACTIVE, StatusEnum.INACTIVE, StatusEnum.PENDING],
       })
-      // MODIFIED LINE: Changed to LOWER(users.name) LIKE LOWER(:name)
       .andWhere('LOWER(users.name) LIKE LOWER(:name)', {
         name: `%${params.search ?? ''}%`,
       })

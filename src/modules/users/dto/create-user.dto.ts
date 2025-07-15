@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { StatusEnum, UserRole } from '@Constant/enums';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -39,6 +39,11 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  @ApiProperty({ example: 'Software Engineer', description: 'User job title', required: false }) // <--- NEW FIELD
+  @IsString({ message: 'Nghề nghiệp phải là chuỗi' })
+  @MaxLength(100, { message: 'Nghề nghiệp không được vượt quá 100 ký tự' })
+  job?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

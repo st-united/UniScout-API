@@ -19,6 +19,10 @@ export class UserListResponseDto {
   @Expose()
   role: UserRole;
 
+  @ApiProperty({ example: 'Software Engineer', description: 'Job title or profession of the user' }) // <--- CHANGED: removed required: false
+  @Expose()
+  job: string;
+
   @ApiProperty({ enum: StatusEnum, description: 'The status of the user account' })
   @Expose()
   status: StatusEnum;

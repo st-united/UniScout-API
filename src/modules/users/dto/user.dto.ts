@@ -15,6 +15,10 @@ export class UserDto {
   @Expose()
   phone?: string;
 
+  @ApiProperty({ example: 'Software Engineer', description: 'Job title or profession of the user' }) // <--- CHANGED: removed required: false
+  @Expose()
+  job: string;
+
   @ApiProperty({ description: "URL to the user's avatar image", required: false })
   @Expose()
   avatar?: string;

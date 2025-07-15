@@ -45,6 +45,9 @@ export class UserEntity extends AbstractEntity {
   @Exclude()
   refreshToken: string;
 
+  @Column({ type: 'varchar', length: 100, nullable: false })
+  job: string;
+
   @BeforeInsert()
   async hasPassword() {
     if (this.password) {
