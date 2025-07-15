@@ -32,8 +32,14 @@ export class UserEntity extends AbstractEntity {
   @Column({ type: 'varchar', nullable: true, length: 200 })
   address: string;
 
-  @Column({ type: 'varchar', length: 12, nullable: true })
-  identityId: string;
+  @Column({
+    type: 'int',
+    unique: true,
+    nullable: true,
+
+    generated: 'increment',
+  })
+  identityId: number;
 
   @Column({ type: 'varchar', nullable: true })
   @Exclude()
@@ -41,7 +47,9 @@ export class UserEntity extends AbstractEntity {
 
   @BeforeInsert()
   async hasPassword() {
-    this.password = await bcrypt.hash(this.password, 10);
+    if (this.password) {
+      this.password = await bcrypt.hash(this.password, 10);
+    }
   }
 
   @Column({ type: 'varchar', nullable: true })
