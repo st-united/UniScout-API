@@ -1,7 +1,7 @@
 import { Controller, Get, Query, HttpStatus, HttpException, Param, ParseIntPipe, Body, Patch } from '@nestjs/common';
 import { ContactService } from './contact.service';
 import { GetContactSubmissionsDto } from './dto/get-contact.dto';
-import { ApiOperation, ApiTags, ApiQuery, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { RequestTypeEnum } from '@Constant/enums';
 import { ContactSubmissionEntity, SubmissionStatusEnum } from './entities';
 import { UpdateContactSubmissionStatusDto } from './dto/update-contact.dto';
@@ -23,8 +23,13 @@ export class AdminContactController {
   @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Field to sort by (default: submittedAt)' })
   @ApiQuery({ name: 'requestType', required: false, enum: RequestTypeEnum, description: 'Filter by request type' })
   @ApiQuery({ name: 'country', required: false, type: String, description: 'Filter by country' })
-  @ApiQuery({ name: 'universityName', required: false, type: String, description: 'Filter by university name' })
   @ApiQuery({ name: 'status', required: false, enum: SubmissionStatusEnum, description: 'Filter by submission status' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'General search term for university name and abbreviation',
+  })
   async getContactSubmissions(@Query() query: GetContactSubmissionsDto) {
     try {
       const submissions = await this._contactService.getContactSubmissions(query);
@@ -39,6 +44,34 @@ export class AdminContactController {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  @Get('countries')
+  @ApiOperation({ summary: 'Get list of countries for contact form filter (Admin)' })
+  async getContactCountries() {
+    const countries = await this._contactService.getAvailableCountriesForContactForm();
+    return {
+      message: 'Countries for contact form retrieved successfully.',
+      data: countries,
+    };
+  }
+
+  @Get('request-types')
+  @ApiOperation({ summary: 'Get list of contact request types (Admin)' })
+  getRequestTypes() {
+    return {
+      message: 'Request types retrieved successfully.',
+      data: Object.values(RequestTypeEnum),
+    };
+  }
+
+  @Get('submission-statuses')
+  @ApiOperation({ summary: 'Get list of contact submission statuses (Admin)' })
+  getSubmissionStatuses() {
+    return {
+      message: 'Submission statuses retrieved successfully.',
+      data: Object.values(SubmissionStatusEnum),
+    };
   }
 
   @Get(':id')

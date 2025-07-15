@@ -37,7 +37,7 @@ export class GetContactSubmissionsDto {
   sortOrder?: 'ASC' | 'DESC' = 'DESC';
 
   @ApiPropertyOptional({
-    description: 'Field to sort by (e.g., submittedAt, requestType, country, universityName, status)',
+    description: 'Field to sort by (e.g., submittedAt, requestType, country, status)',
     default: 'submittedAt',
   })
   @IsOptional()
@@ -53,18 +53,11 @@ export class GetContactSubmissionsDto {
   requestType?: RequestTypeEnum;
 
   @ApiPropertyOptional({
-    description: 'Filter by country (partial match)',
+    description: 'Filter by country (exact match)',
   })
   @IsOptional()
   @IsString()
   country?: string;
-
-  @ApiPropertyOptional({
-    description: 'Filter by university name (partial match)',
-  })
-  @IsOptional()
-  @IsString()
-  universityName?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by submission status',
@@ -73,4 +66,11 @@ export class GetContactSubmissionsDto {
   @IsOptional()
   @IsEnum(SubmissionStatusEnum)
   status?: SubmissionStatusEnum;
+
+  @ApiPropertyOptional({
+    description: 'General search term for university name and abbreviation (partial and similarity match)',
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }
