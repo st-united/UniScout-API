@@ -16,63 +16,29 @@ import { CreateUserDto } from './create-user.dto';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
-  @Expose()
+  @ApiProperty({ example: 'John Doe', description: 'User name', required: false })
   @IsOptional()
-  @IsEmail({}, { message: 'Please provide a valid email address.' })
-  email?: string;
-
-  @Expose()
-  @IsOptional()
-  @IsString()
-  phone?: string;
-
-  @Expose()
-  @IsOptional()
-  @IsString({ message: 'Password must be a string.' })
-  @MinLength(8, { message: 'Password must be at least 8 characters long.' })
-  @Matches(/^(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).*$/, {
-    message: 'Password must contain at least one capital letter and one special character.',
-  })
-  password?: string;
-
-  @Expose()
-  @IsOptional()
-  @IsString()
-  avatar?: string;
-
-  @Expose()
-  @IsOptional()
-  @IsEnum(StatusEnum, { message: 'Invalid status provided.' })
-  status?: StatusEnum;
-
-  @Expose()
-  @IsOptional()
-  @IsString()
+  @IsString({ message: 'Tên phải là chuỗi' })
+  @MinLength(3, { message: 'Tên phải có ít nhất 3 ký tự' })
+  @MaxLength(50, { message: 'Tên không được vượt quá 50 ký tự' })
   name?: string;
 
+  @ApiProperty({ example: 'test@example.com', description: 'User email', required: false })
+  @IsOptional()
+  @IsEmail({}, { message: 'Email không hợp lệ' })
+  @MinLength(5, { message: 'Email phải có ít nhất 5 ký tự' })
+  @MaxLength(255, { message: 'Email không được vượt quá 255 ký tự' })
+  email?: string;
+
   @ApiProperty({ example: 'Software Engineer', description: 'User job title', required: false })
-  @IsOptional() // <--- KEEP IsOptional for update DTO if it's a PATCH
+  @IsOptional()
   @IsString({ message: 'Nghề nghiệp phải là chuỗi' })
+  @MinLength(3, { message: 'Nghề nghiệp phải có ít nhất 3 ký tự' })
   @MaxLength(100, { message: 'Nghề nghiệp không được vượt quá 100 ký tự' })
-  job?: string; // <--- KEEP optional for update DTO
+  job?: string;
 
-  @Expose()
+  @ApiProperty({ enum: StatusEnum, example: StatusEnum.ACTIVE, description: 'User status', required: false })
   @IsOptional()
-  @IsDateString()
-  dateOfBirth?: string;
-
-  @Expose()
-  @IsOptional()
-  @IsString()
-  address?: string;
-
-  @Expose()
-  @IsOptional()
-  @IsNumber({}, { message: 'Identity ID must be a number.' })
-  identityId?: number;
-
-  @Expose()
-  @IsOptional()
-  @IsNumber()
-  roleId?: number;
+  @IsEnum(StatusEnum, { message: 'Trạng thái không hợp lệ' })
+  status?: StatusEnum;
 }
