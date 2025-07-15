@@ -25,6 +25,12 @@ import { JwtAccessTokenGuard } from '../auth/guards/jwt-access-token.guard';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ProfileDto } from './dto/profile.dto';
 import { UserDto } from './dto/user.dto';
+import { AuthGuard } from '@nestjs/passport';
+import { RolesGuard } from '@AuthModule/guards/roles.guard';
+import { Roles } from '@AuthModule/decorators/roles.decorator';
+import { UserRole } from '@Constant/enums';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UserListResponseDto } from './dto/user-list-response.dto';
 
 @Controller('users')
 @UseGuards(JwtAccessTokenGuard)
@@ -32,12 +38,14 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER)
   @UseInterceptors(FileInterceptor('avatar', fileOption('users')))
   async create(
     @UploadedFile()
     avatar: Express.Multer.File,
-    @Body() createUserDto
-  ) {
+    @Body() createUserDto: CreateUserDto
+  ): Promise<ResponseItem<UserDto>> {
     if (!avatar && createUserDto.containFile === 'true') {
       throw new BadRequestException('Hình ảnh không hợp lệ');
     }
@@ -55,10 +63,11 @@ export class UsersController {
   }
 
   @Get()
-  async getUsers(@Query() getUsersDto: GetUsersDto): Promise<ResponsePaginate<UserDto>> {
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SUPER, UserRole.ADMIN) // Only SUPER or ADMIN can view all users
+  async getUsers(@Query() getUsersDto: GetUsersDto): Promise<ResponsePaginate<UserListResponseDto>> {
     return await this.usersService.getUsers(getUsersDto);
   }
-
   @Get('me')
   async getProfile(@Req() req): Promise<ResponseItem<ProfileDto>> {
     return await this.usersService.getProfile(req.user.userId);
@@ -90,10 +99,10 @@ export class UsersController {
   @Post('avatar/:identityId')
   @UseInterceptors(FileInterceptor('avatar', fileOption('users')))
   async uploadAvatar(
-    @Param('identityId') identityId: string,
+    @Param('identityId', ParseIntPipe) identityId: number,
     @UploadedFile()
     avatar: Express.Multer.File
-  ): Promise<any> {
+  ): Promise<ResponseItem<any>> {
     if (avatar) {
       return await this.usersService.uploadAvatar(identityId, avatar);
     }
@@ -101,7 +110,7 @@ export class UsersController {
   }
 
   @Patch('avatar/:identityId')
-  async removeAvatar(@Param('identityId') identityId: string): Promise<ResponseItem<UserDto>> {
+  async removeAvatar(@Param('identityId', ParseIntPipe) identityId: number): Promise<ResponseItem<any>> {
     return await this.usersService.removeAvatar(identityId);
   }
 }

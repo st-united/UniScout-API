@@ -19,7 +19,7 @@ export class ProfileDto {
   address: string;
 
   @Expose()
-  identityId: string;
+  identityId: number;
 
   @Expose()
   avatar: string;

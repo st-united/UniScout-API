@@ -8,9 +8,12 @@ import { SearchLogEntity, TrackingEntity } from './entities';
 import { GeoIpService, SearchLogService, TrackingService } from './services';
 import { UniEntity } from '@UniversitiesModule/entities';
 import { ContactSubmissionEntity } from '@ContactModule/entities';
+import { UserEntity } from '@UsersModule/entities';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UniEntity, TrackingEntity, SearchLogEntity, ContactSubmissionEntity])],
+  imports: [
+    TypeOrmModule.forFeature([UserEntity, UniEntity, TrackingEntity, SearchLogEntity, ContactSubmissionEntity]),
+  ],
   controllers: [DashboardController],
   providers: [DashboardService, DashboardGateway, TrackingService, GeoIpService, SearchLogService],
   exports: [DashboardService, TrackingService, GeoIpService, SearchLogService],
