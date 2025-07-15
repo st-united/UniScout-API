@@ -31,10 +31,11 @@ import { Roles } from '@AuthModule/decorators/roles.decorator';
 import { UserRole } from '@Constant/enums';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserListResponseDto } from './dto/user-list-response.dto';
-import { ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 @Controller('users')
 @UseGuards(JwtAccessTokenGuard)
+@ApiBearerAuth('JWT-auth')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
