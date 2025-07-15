@@ -31,6 +31,7 @@ import { Roles } from '@AuthModule/decorators/roles.decorator';
 import { UserRole } from '@Constant/enums';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserListResponseDto } from './dto/user-list-response.dto';
+import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 @Controller('users')
 @UseGuards(JwtAccessTokenGuard)
@@ -64,7 +65,7 @@ export class UsersController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.SUPER, UserRole.ADMIN) // Only SUPER or ADMIN can view all users
+  @Roles(UserRole.SUPER)
   async getUsers(@Query() getUsersDto: GetUsersDto): Promise<ResponsePaginate<UserListResponseDto>> {
     return await this.usersService.getUsers(getUsersDto);
   }
@@ -84,6 +85,13 @@ export class UsersController {
   }
 
   @Get(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SUPER)
+  @ApiOperation({ summary: 'Get details of a single user by ID (SUPER/ADMIN only)' })
+  @ApiResponse({ status: 200, description: 'User details retrieved successfully', type: UserDto })
+  @ApiResponse({ status: 400, description: 'Bad request (e.g., user not found)' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden (Insufficient role)' })
   async getUser(@Param('id', ParseIntPipe) id: number): Promise<ResponseItem<UserDto>> {
     return await this.usersService.getUser(id);
   }
