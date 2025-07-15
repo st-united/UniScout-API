@@ -23,6 +23,7 @@ export class ContactService {
     @InjectRepository(ContactSubmissionEntity)
     private readonly _contactSubmissionRepo: Repository<ContactSubmissionEntity>,
     @InjectRepository(UniEntity)
+    private readonly _uniRepository: Repository<UniEntity>,
     private readonly _universityService: UniversityService
   ) {
     this._transporter = nodemailer.createTransport({

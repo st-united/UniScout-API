@@ -7,9 +7,15 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ContactSubmissionEntity } from './entities';
 import { UniEntity } from '@UniversitiesModule/entities';
+import { UniversitiesModule } from '@UniversitiesModule/university.module';
 
 @Module({
-  imports: [MulterModule.register({}), ConfigModule, TypeOrmModule.forFeature([ContactSubmissionEntity, UniEntity])],
+  imports: [
+    MulterModule.register({}),
+    ConfigModule,
+    TypeOrmModule.forFeature([ContactSubmissionEntity, UniEntity]),
+    UniversitiesModule,
+  ],
   controllers: [ContactController, AdminContactController],
   providers: [ContactService],
 })
