@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { GetContactSubmissionsDto } from './dto/get-contact.dto';
 import { ConfigService } from '@nestjs/config';
@@ -7,8 +7,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindManyOptions, ILike } from 'typeorm';
-import { ContactSubmissionEntity } from './entities';
+import { ContactSubmissionEntity, SubmissionStatusEnum } from './entities';
 import { RequestTypeEnum } from '@Constant/enums';
+import { UpdateContactSubmissionStatusDto } from './dto/update-contact.dto';
 
 @Injectable()
 export class ContactService {
@@ -39,7 +40,7 @@ export class ContactService {
     attachmentPaths: string[] = []
   ): Promise<{ message: string }> {
     const senderEmail = createContactDto.representativeEmail;
-    this._logger.log(`Received contact form submission from: ${senderEmail}`);
+    this._logger.log(`Received contact form submission from: ${senderEmail || 'Anonymous'}`);
 
     try {
       const {
@@ -90,8 +91,7 @@ export class ContactService {
               ? `<p><strong>Number of Students:</strong> ${numberOfStudents}</p>`
               : ''
           }
-          <p><strong>Description:</strong> ${description}</p>
-        `;
+          <p><strong>Description:</strong> ${description || 'N/A'}</p> `;
         universityDetailsText = `
           University Details (New University):
           University Name: ${universityName}
@@ -104,8 +104,7 @@ export class ContactService {
           Website: ${website}
           Subjects: ${subjects}
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
-          Description: ${description}\n
-        `;
+          Description: ${description || 'N/A'}\n `;
         contactDetailsHtml = `
           <h3>Sender's Contact Details:</h3>
           <p><strong>Representative Name:</strong> ${representativeName || 'N/A'}</p>
@@ -117,14 +116,6 @@ export class ContactService {
           Representative Name: ${representativeName || 'N/A'}
           Representative Email: ${representativeEmail || 'N/A'}
           Representative Phone Number: ${representativeNumber || 'N/A'}
-        `;
-        messageHtml = `
-          <h3>Message:</h3>
-          <p>${message || 'N/A'}</p>
-        `;
-        messageText = `
-          Message:
-          ${message || 'N/A'}
         `;
       } else {
         universityDetailsHtml = `
@@ -160,26 +151,28 @@ export class ContactService {
       }
 
       const mailOptions = {
-        from: `"${representativeName || 'Contact Form'}" <${representativeEmail}>`,
+        from: `"${representativeName || 'Contact Form'}" <${
+          representativeEmail || this._configService.get<string>('EMAIL_USER')
+        }>`,
         to: this._configService.get<string>('CONTACT_FORM_RECEIVER_EMAIL'),
         subject: `UNISCOUT - ${requestType} Request from ${representativeName || 'Anonymous'}`,
         html: `
           ${contactDetailsHtml}
           <p><strong>Request Type:</strong> ${requestType}</p>
           ${universityDetailsHtml}
-          ${messageHtml}
-        `,
+          ${messageHtml} `,
         text: `
           ${contactDetailsText}
           Request Type: ${requestType}
           ${universityDetailsText}
-          ${messageText}
-        `,
+          ${messageText} `,
         attachments: attachments,
       };
 
       await this._transporter.sendMail(mailOptions);
-      this._logger.log(`Contact form email sent successfully from ${representativeEmail} for ${requestType} request.`);
+      this._logger.log(
+        `Contact form email sent successfully from ${representativeEmail || 'Anonymous'} for ${requestType} request.`
+      );
 
       let acknowledgmentUniversityDetailsHtml = '';
       let acknowledgmentUniversityDetailsText = '';
@@ -205,8 +198,7 @@ export class ContactService {
               ? `<p><strong>Number of Students:</strong> ${numberOfStudents}</p>`
               : ''
           }
-          <p><strong>Description:</strong> ${description}</p>
-        `;
+          <p><strong>Description:</strong> ${description || 'N/A'}</p> `;
         acknowledgmentUniversityDetailsText = `
           Submitted University Details:
           University Name: ${universityName}
@@ -219,8 +211,7 @@ export class ContactService {
           Website: ${website}
           Subjects: ${subjects}
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
-          Description: ${description}\n
-        `;
+          Description: ${description || 'N/A'}\n `;
         acknowledgmentContactDetailsHtml = `
           <h3>Your Contact Details:</h3>
           <p><strong>Name:</strong> ${representativeName || 'N/A'}</p>
@@ -232,14 +223,6 @@ export class ContactService {
           Name: ${representativeName || 'N/A'}
           Email: ${representativeEmail || 'N/A'}
           Phone Number: ${representativeNumber || 'N/A'}
-        `;
-        acknowledgmentMessageHtml = `
-          <h3>Your Message:</h3>
-          <p>${message || 'N/A'}</p>
-        `;
-        acknowledgmentMessageText = `
-          Your Message:
-          ${message || 'N/A'}
         `;
       } else {
         acknowledgmentUniversityDetailsHtml = `
@@ -280,36 +263,38 @@ export class ContactService {
         subject: 'UNISCOUT - We received your message!',
         html: `
           <p>Dear ${representativeName || 'Valued User'},</p>
-          <p>Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon to as possible.</p>
-          <p>Here's a copy of your submission details:</p>
+          <p>Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon as possible.</p> <p>Here's a copy of your submission details:</p>
           ${acknowledgmentContactDetailsHtml}
           <p><strong>Request Type:</strong> ${requestType}</p>
           ${acknowledgmentUniversityDetailsHtml}
-          ${acknowledgmentMessageHtml}
-          <p>If you have any urgent queries, feel free to reach out to us directly.</p>
+          ${acknowledgmentMessageHtml} <p>If you have any urgent queries, feel free to reach out to us directly.</p>
           <p>Best regards,<br>The UNISCOUT Team</p>
         `,
         text: `
           Dear ${representativeName || 'Valued User'},
 
-          Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon to as possible.
-
-          Here's a copy of your submission details:
+          Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon as possible. Here's a copy of your submission details:
 
           ${acknowledgmentContactDetailsText}
           Request Type: ${requestType}
           ${acknowledgmentUniversityDetailsText}
-          ${acknowledgmentMessageText}
-
-          If you have any urgent queries, feel free to reach out to us directly.
+          ${acknowledgmentMessageText} If you have any urgent queries, feel free to reach out to us directly.
 
           Best regards,
           The UNISCOUT Team
         `,
       };
 
-      await this._transporter.sendMail(acknowledgmentMailOptions);
-      this._logger.log(`Acknowledgment email sent successfully to ${representativeEmail} for ${requestType} request.`);
+      if (representativeEmail) {
+        await this._transporter.sendMail(acknowledgmentMailOptions);
+        this._logger.log(
+          `Acknowledgment email sent successfully to ${representativeEmail} for ${requestType} request.`
+        );
+      } else {
+        this._logger.warn(
+          `No representative email provided for ${requestType} request. Acknowledgment email not sent.`
+        );
+      }
 
       const newSubmission = this._contactSubmissionRepo.create({
         representativeEmail: representativeEmail,
@@ -319,7 +304,6 @@ export class ContactService {
         representativeNumber: representativeNumber,
         message: message,
         description: description,
-        // The 'status' field will be set to 'PENDING' by default as defined in the entity
         ...(requestType === RequestTypeEnum.NEW_UNIVERSITY && {
           abbreviation: abbreviation,
           country: country,
@@ -378,10 +362,10 @@ export class ContactService {
       findOptions.where['requestType'] = requestType;
     }
     if (country) {
-      findOptions.where['country'] = ILike(`%${country}%`); // Case-insensitive like search for country
+      findOptions.where['country'] = ILike(`%${country}%`);
     }
     if (universityName) {
-      findOptions.where['universityName'] = ILike(`%${universityName}%`); // Case-insensitive like search for university name
+      findOptions.where['universityName'] = ILike(`%${universityName}%`);
     }
     if (status) {
       findOptions.where['status'] = status;
@@ -406,6 +390,67 @@ export class ContactService {
     } else {
       this._logger.log(`Contact submission with ID ${id} retrieved successfully.`);
     }
+    return submission;
+  }
+
+  async updateContactSubmissionStatus(
+    id: number,
+    updateDto: UpdateContactSubmissionStatusDto
+  ): Promise<ContactSubmissionEntity> {
+    this._logger.log(`Attempting to update status for contact submission with ID: ${id}`);
+    const submission = await this._contactSubmissionRepo.findOneBy({ id });
+
+    if (!submission) {
+      throw new HttpException('Contact submission not found.', HttpStatus.NOT_FOUND);
+    }
+
+    const currentStatus = submission.status;
+    const newStatus = updateDto.status;
+    const rejectionReason = updateDto.rejectionReason;
+
+    switch (currentStatus) {
+      case SubmissionStatusEnum.PENDING:
+        if (
+          newStatus !== SubmissionStatusEnum.IN_PROGRESS &&
+          newStatus !== SubmissionStatusEnum.COMPLETED &&
+          newStatus !== SubmissionStatusEnum.REJECTED
+        ) {
+          throw new HttpException(
+            `Invalid status transition from ${currentStatus} to ${newStatus}.`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        break;
+      case SubmissionStatusEnum.IN_PROGRESS:
+        if (newStatus !== SubmissionStatusEnum.COMPLETED && newStatus !== SubmissionStatusEnum.REJECTED) {
+          throw new HttpException(
+            `Invalid status transition from ${currentStatus} to ${newStatus}.`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        break;
+      case SubmissionStatusEnum.COMPLETED:
+      case SubmissionStatusEnum.REJECTED:
+        throw new HttpException(`Cannot change status from a final state: ${currentStatus}.`, HttpStatus.BAD_REQUEST);
+      default:
+        throw new HttpException('Invalid current status.', HttpStatus.BAD_REQUEST);
+    }
+
+    if (newStatus === SubmissionStatusEnum.REJECTED) {
+      if (!rejectionReason || rejectionReason.length < 10 || rejectionReason.length > 500) {
+        throw new HttpException(
+          'Rejection reason is required and must be between 10 and 500 characters for Rejected status.',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      submission.rejectionReason = rejectionReason;
+    } else {
+      submission.rejectionReason = null;
+    }
+
+    submission.status = newStatus;
+    await this._contactSubmissionRepo.save(submission);
+    this._logger.log(`Contact submission with ID ${id} status updated to ${newStatus}.`);
     return submission;
   }
 }

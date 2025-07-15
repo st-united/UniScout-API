@@ -70,4 +70,7 @@ export class ContactSubmissionEntity {
     default: SubmissionStatusEnum.PENDING,
   })
   status: SubmissionStatusEnum;
+
+  @Column({ type: 'text', nullable: true })
+  rejectionReason: string;
 }

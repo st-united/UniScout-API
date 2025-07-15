@@ -1,9 +1,10 @@
-import { Controller, Get, Query, HttpStatus, HttpException, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Query, HttpStatus, HttpException, Param, ParseIntPipe, Body, Patch } from '@nestjs/common';
 import { ContactService } from './contact.service';
 import { GetContactSubmissionsDto } from './dto/get-contact.dto';
-import { ApiOperation, ApiTags, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { ApiOperation, ApiTags, ApiQuery, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { RequestTypeEnum } from '@Constant/enums';
 import { ContactSubmissionEntity, SubmissionStatusEnum } from './entities';
+import { UpdateContactSubmissionStatusDto } from './dto/update-contact.dto';
 
 @Controller('admin/contact')
 export class AdminContactController {
@@ -60,6 +61,39 @@ export class AdminContactController {
         {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
           message: 'Failed to retrieve contact submission details.',
+          error: error.message || 'Internal Server Error',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Patch(':id/status')
+  @ApiOperation({ summary: 'Update the status of a specific contact submission by ID' })
+  @ApiBody({ type: UpdateContactSubmissionStatusDto, description: 'New status and optional rejection reason' })
+  @ApiResponse({
+    status: 200,
+    description: 'The contact submission status updated successfully',
+    type: ContactSubmissionEntity,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid status transition or missing rejection reason' })
+  @ApiResponse({ status: 404, description: 'Contact submission not found' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async updateContactSubmissionStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateDto: UpdateContactSubmissionStatusDto
+  ) {
+    try {
+      const updatedSubmission = await this._contactService.updateContactSubmissionStatus(id, updateDto);
+      return updatedSubmission;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: 'Failed to update contact submission status.',
           error: error.message || 'Internal Server Error',
         },
         HttpStatus.INTERNAL_SERVER_ERROR
