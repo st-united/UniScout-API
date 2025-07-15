@@ -75,10 +75,10 @@ export class UsersController {
     return await this.usersService.getProfile(req.user.userId);
   }
 
-  @Patch('profile')
-  async updateProfile(@Req() req, @Body() updateUserDto: UpdateUserDto): Promise<ResponseItem<UserDto>> {
-    return await this.usersService.updateProfile(req.user.userId, updateUserDto);
-  }
+  // @Patch('profile')
+  // async updateProfile(@Req() req, @Body() updateUserDto: UpdateUserDto): Promise<ResponseItem<UserDto>> {
+  //   return await this.usersService.updateProfile(req.user.userId, updateUserDto);
+  // }
 
   @Delete(':id')
   async deleteUser(@Param('id', ParseIntPipe) id: number): Promise<ResponseItem<null>> {
@@ -98,6 +98,13 @@ export class UsersController {
   }
 
   @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SUPER)
+  @ApiOperation({ summary: 'Update a user by ID (SUPER only - restricted fields)' })
+  @ApiResponse({ status: 200, description: 'User updated successfully', type: UserDto })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden (Insufficient role)' })
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateUserDto: UpdateUserDto

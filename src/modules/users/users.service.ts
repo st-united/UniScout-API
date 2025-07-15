@@ -208,104 +208,88 @@ export class UsersService {
     return new ResponseItem(result, 'Thành công');
   }
 
-  async updateProfile(id: number, updateUserDto: UpdateUserDto): Promise<ResponseItem<UserDto>> {
-    const user = await this.userRepository.findOneBy({ id, deletedAt: null } as FindOptionsWhere<UserEntity>);
-    if (!user) {
-      throw new BadRequestException('Thông tin cá nhân không tồn tại');
-    }
+  // async updateProfile(id: number, updateUserDto: UpdateUserDto): Promise<ResponseItem<UserDto>> {
+  //   const user = await this.userRepository.findOneBy({ id, deletedAt: null } as FindOptionsWhere<UserEntity>);
+  //   if (!user) {
+  //     throw new BadRequestException('Thông tin cá nhân không tồn tại');
+  //   }
 
-    if (
-      updateUserDto.identityId !== undefined &&
-      updateUserDto.identityId !== null &&
-      user.identityId !== updateUserDto.identityId
-    ) {
-      const identityIdExisted = await this.userRepository.findOneBy({
-        identityId: updateUserDto.identityId,
-        id: Not(id),
-        deletedAt: null,
-      } as FindOptionsWhere<UserEntity>);
-      if (identityIdExisted) {
-        throw new BadRequestException('CMND/CCCD đã tồn tại');
-      }
-    }
+  //   if (
+  //     updateUserDto.identityId !== undefined &&
+  //     updateUserDto.identityId !== null &&
+  //     user.identityId !== updateUserDto.identityId
+  //   ) {
+  //     const identityIdExisted = await this.userRepository.findOneBy({
+  //       identityId: updateUserDto.identityId,
+  //       id: Not(id),
+  //       deletedAt: null,
+  //     } as FindOptionsWhere<UserEntity>);
+  //     if (identityIdExisted) {
+  //       throw new BadRequestException('CMND/CCCD đã tồn tại');
+  //     }
+  //   }
 
-    if (updateUserDto.phone !== undefined && updateUserDto.phone !== null && user.phone !== updateUserDto.phone) {
-      const phoneExisted = await this.userRepository.findOneBy({
-        phone: updateUserDto.phone,
-        id: Not(id),
-        deletedAt: null,
-      } as FindOptionsWhere<UserEntity>);
-      if (phoneExisted) {
-        throw new BadRequestException('Số điện thoại đã tồn tại');
-      }
-    }
+  //   if (updateUserDto.phone !== undefined && updateUserDto.phone !== null && user.phone !== updateUserDto.phone) {
+  //     const phoneExisted = await this.userRepository.findOneBy({
+  //       phone: updateUserDto.phone,
+  //       id: Not(id),
+  //       deletedAt: null,
+  //     } as FindOptionsWhere<UserEntity>);
+  //     if (phoneExisted) {
+  //       throw new BadRequestException('Số điện thoại đã tồn tại');
+  //     }
+  //   }
 
-    if (updateUserDto.password) {
-      updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
-    }
+  //   if (updateUserDto.password) {
+  //     updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+  //   }
 
-    const updatePartial = plainToClass(UpdateUserDto, updateUserDto, { excludeExtraneousValues: true });
-    await this.userRepository.update(id, {
-      ...updatePartial,
-      identityId: user.identityId,
-    });
+  //   const updatePartial = plainToClass(UpdateUserDto, updateUserDto, { excludeExtraneousValues: true });
+  //   await this.userRepository.update(id, {
+  //     ...updatePartial,
+  //     identityId: user.identityId,
+  //   });
 
-    const result = await this.userRepository.findOneBy({ id, deletedAt: null } as FindOptionsWhere<UserEntity>);
-    const resultDto = plainToClass(UserDto, result, { excludeExtraneousValues: true });
+  //   const result = await this.userRepository.findOneBy({ id, deletedAt: null } as FindOptionsWhere<UserEntity>);
+  //   const resultDto = plainToClass(UserDto, result, { excludeExtraneousValues: true });
 
-    return new ResponseItem(resultDto, 'Cập nhật dữ liệu thành công');
-  }
+  //   return new ResponseItem(resultDto, 'Cập nhật dữ liệu thành công');
+  // }
 
   async update(id: number, updateUserDto: UpdateUserDto): Promise<ResponseItem<UserDto>> {
     const user = await this.userRepository.findOneBy({ id, deletedAt: null } as FindOptionsWhere<UserEntity>);
     if (!user) {
-      throw new BadRequestException('Nhân viên không tồn tại');
-    }
-    if (updateUserDto.email !== undefined && updateUserDto.email !== null && user.email !== updateUserDto.email) {
-      const emailExisted = await this.userRepository.findOneBy({
-        email: updateUserDto.email,
-        id: Not(id),
-        deletedAt: null,
-      } as FindOptionsWhere<UserEntity>);
-      if (emailExisted) throw new BadRequestException('Email đã tồn tại');
+      throw new BadRequestException('Người dùng không tồn tại');
     }
 
-    if (
-      updateUserDto.identityId !== undefined &&
-      updateUserDto.identityId !== null &&
-      user.identityId !== updateUserDto.identityId
-    ) {
-      const identityIdExisted = await this.userRepository.findOneBy({
-        identityId: updateUserDto.identityId,
-        id: Not(id),
-        deletedAt: null,
-      } as FindOptionsWhere<UserEntity>);
-      if (identityIdExisted) {
-        throw new BadRequestException('CMND/CCCD đã tồn tại');
+    const updatePayload: Partial<UserEntity> = {};
+    if (updateUserDto.name !== undefined) {
+      updatePayload.name = updateUserDto.name;
+    }
+
+    if (updateUserDto.email !== undefined) {
+      if (updateUserDto.email !== user.email) {
+        const emailExisted = await this.userRepository.findOneBy({
+          email: updateUserDto.email,
+          id: Not(id),
+          deletedAt: null,
+        } as FindOptionsWhere<UserEntity>);
+        if (emailExisted) {
+          throw new BadRequestException('Email đã tồn tại');
+        }
       }
+      updatePayload.email = updateUserDto.email;
     }
 
-    if (updateUserDto.phone !== undefined && updateUserDto.phone !== null && user.phone !== updateUserDto.phone) {
-      const phoneExisted = await this.userRepository.findOneBy({
-        phone: updateUserDto.phone,
-        id: Not(id),
-        deletedAt: null,
-      } as FindOptionsWhere<UserEntity>);
-      if (phoneExisted) {
-        throw new BadRequestException('Số điện thoại đã tồn tại');
-      }
+    if (updateUserDto.job !== undefined) {
+      updatePayload.job = updateUserDto.job;
     }
 
-    if (updateUserDto.password) {
-      updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+    if (updateUserDto.status !== undefined) {
+      updatePayload.status = updateUserDto.status;
     }
 
-    const updatePartial = plainToClass(UpdateUserDto, updateUserDto, { excludeExtraneousValues: true });
-
-    await this.userRepository.update(id, {
-      ...updatePartial,
-      identityId: user.identityId,
-    });
+    await this.userRepository.update(id, updatePayload);
 
     const result = await this.userRepository.findOneBy({ id, deletedAt: null } as FindOptionsWhere<UserEntity>);
     const resultDto = plainToClass(UserDto, result, { excludeExtraneousValues: true });
