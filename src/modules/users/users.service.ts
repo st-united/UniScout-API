@@ -7,7 +7,7 @@ import { FindOptionsWhere, Not, Repository } from 'typeorm';
 
 import { PageMetaDto, ResponseItem, ResponsePaginate } from '@app/common/dtos';
 import { convertPath } from '@app/common/utils';
-import { StatusEnum, UserRole } from '@Constant/enums';
+import { Job, StatusEnum, UserRole } from '@Constant/enums';
 import { ConfigService } from '@nestjs/config';
 import { CreateUserDto } from '@UsersModule/dto/create-user.dto';
 import { GetUsersDto } from '@UsersModule/dto/get-users.dto';
@@ -29,6 +29,12 @@ export class UsersService {
     private readonly userRepository: Repository<UserEntity>,
     private readonly mailService: MailService
   ) {}
+  getJobDropdownOptions(): string[] {
+    return [Job.MARKETING, Job.BUSINESS_DEVELOPMENT];
+  }
+  getAllJobRoles(): string[] {
+    return Object.values(Job);
+  }
   private generateRandomPassword(): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     const specialChars = '!@#$%^&*()-_+=[]{}|;:,.<>?';

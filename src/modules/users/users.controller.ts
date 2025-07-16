@@ -39,6 +39,22 @@ import { ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @Get('job-roles')
+  @ApiOperation({ summary: 'Get predefined job roles for dropdown lists (Marketing, Business Development)' })
+  @ApiResponse({ status: 200, description: 'Job roles retrieved successfully', type: [String] })
+  // @UseGuards(JwtAccessTokenGuard) // Uncomment if you want to protect this endpoint
+  // @Roles(UserRole.ADMIN, UserRole.SUPER, UserRole.USER) // Adjust roles as needed
+  getJobRolesForDropdown(): string[] {
+    return this.usersService.getJobDropdownOptions();
+  }
+
+  @Get('all-job-roles')
+  @ApiOperation({ summary: 'Get all available job roles from the enum' })
+  @ApiResponse({ status: 200, description: 'All job roles retrieved successfully', type: [String] })
+  getAllJobRoles(): string[] {
+    return this.usersService.getAllJobRoles();
+  }
+
   @Post()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER)
