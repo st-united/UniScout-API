@@ -1,10 +1,25 @@
-import { Controller, Get, Query, HttpStatus, HttpException, Param, ParseIntPipe, Body, Patch } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  HttpStatus,
+  HttpException,
+  Param,
+  ParseIntPipe,
+  Body,
+  Patch,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiOperation, ApiQuery, ApiResponse, ApiBody, ApiTags, ApiParam } from '@nestjs/swagger';
 import { ContactService } from './contact.service';
 import { GetContactSubmissionsDto } from './dto/get-contact.dto';
-import { ApiOperation, ApiQuery, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { RequestTypeEnum } from '@Constant/enums';
 import { ContactSubmissionEntity, SubmissionStatusEnum } from './entities';
 import { UpdateContactSubmissionStatusDto } from './dto/update-contact.dto';
+import { Response } from 'express';
+import { join } from 'path';
+import { existsSync } from 'fs';
 
 @Controller('admin/contact')
 export class AdminContactController {
@@ -47,7 +62,7 @@ export class AdminContactController {
   }
 
   @Get('countries')
-  @ApiOperation({ summary: 'Get list of countries for contact form filter (Admin)' })
+  @ApiOperation({ summary: 'Get list of countries (Admin)' })
   async getContactCountries() {
     const countries = await this._contactService.getAvailableCountriesForContactForm();
     return {
@@ -65,7 +80,7 @@ export class AdminContactController {
     };
   }
 
-  @Get('submission-statuses')
+  @Get('status')
   @ApiOperation({ summary: 'Get list of contact submission statuses (Admin)' })
   getSubmissionStatuses() {
     return {
@@ -132,5 +147,44 @@ export class AdminContactController {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  @Get('download-excel/:id')
+  @ApiOperation({ summary: 'Download an uploaded subjects Excel file by contact submission ID (Admin Only)' })
+  @ApiParam({ name: 'id', description: 'ID of the contact submission' })
+  @ApiResponse({
+    status: 200,
+    description: 'Uploaded Excel file downloaded successfully',
+    content: {
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': {
+        schema: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Contact submission not found or Excel file not found' })
+  async downloadSubmissionExcel(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+    const submission = await this._contactService.getContactSubmissionById(id);
+
+    if (!submission) {
+      throw new HttpException('Contact submission not found.', HttpStatus.NOT_FOUND);
+    }
+
+    const excelFilePath = submission.subjectsExcelFilePath;
+
+    if (!excelFilePath) {
+      throw new HttpException('No Excel file associated with this submission.', HttpStatus.NOT_FOUND);
+    }
+
+    const absoluteFilePath = join(process.cwd(), excelFilePath);
+
+    const filename = excelFilePath.split('/').pop();
+
+    if (!existsSync(absoluteFilePath)) {
+      throw new HttpException('Uploaded Excel file not found on server.', HttpStatus.NOT_FOUND);
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.sendFile(absoluteFilePath);
   }
 }

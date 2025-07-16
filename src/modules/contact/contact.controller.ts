@@ -1,5 +1,16 @@
-import { Body, Controller, Post, HttpStatus, HttpException, UseInterceptors, UploadedFiles } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import {
+  Body,
+  Controller,
+  Post,
+  HttpStatus,
+  HttpException,
+  UseInterceptors,
+  UploadedFiles,
+  Get,
+  Res,
+  Param,
+} from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ContactService } from './contact.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { validate } from 'class-validator';
@@ -7,24 +18,32 @@ import { plainToClass } from 'class-transformer';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as multer from 'multer';
-import { ApiConsumes, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiConsumes, ApiBody, ApiOperation, ApiTags, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { RequestTypeEnum } from '@Constant/enums';
+import { Response } from 'express';
+import { join } from 'path';
+import { existsSync } from 'fs';
 
 const uploadDir = './uploads/contact_attachments';
+const tempExcelUploadDir = './uploads/excel_temp';
 
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+if (!fs.existsSync(tempExcelUploadDir)) {
+  fs.mkdirSync(tempExcelUploadDir, { recursive: true });
+}
+
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
-const MAX_FILES = 5;
+const MAX_ATTACHMENT_FILES = 5;
 
 @Controller('contact')
 export class ContactController {
   constructor(private readonly _contactService: ContactService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Submit a contact form with optional file attachments' })
+  @ApiOperation({ summary: 'Submit a contact form with optional file attachments and an optional subjects Excel file' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -44,7 +63,6 @@ export class ContactController {
         universityEmail: { type: 'string', format: 'email', nullable: true },
         universityNumber: { type: 'string', nullable: true },
         website: { type: 'string', format: 'url', nullable: true },
-        subjects: { type: 'string', nullable: true },
         numberOfStudents: { type: 'integer', nullable: true },
         description: { type: 'string', nullable: true },
 
@@ -54,46 +72,83 @@ export class ContactController {
             type: 'string',
             format: 'binary',
           },
-          maxItems: MAX_FILES,
-          description: 'Optional files (PDF, Word, images) up to 5MB each',
+          maxItems: MAX_ATTACHMENT_FILES,
+          description: 'Optional general attachments (PDF, Word, images) up to 5MB each',
+        },
+        subjectsExcel: {
+          type: 'string',
+          format: 'binary',
+          description: 'Optional Excel file (.xlsx, .xls) for subjects, up to 5MB',
         },
       },
       required: ['requestType', 'universityName'],
     },
   })
   @UseInterceptors(
-    FilesInterceptor('files', MAX_FILES, {
-      limits: { fileSize: MAX_FILE_SIZE },
-      fileFilter: (req, file, callback) => {
-        const allowedMimeTypes = [
-          'application/pdf',
-          'application/msword',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'image/jpeg',
-          'image/png',
-          'image/gif',
-        ];
-        if (!allowedMimeTypes.includes(file.mimetype)) {
-          return callback(
-            new HttpException('Only PDF, Word documents, and image files are allowed!', HttpStatus.BAD_REQUEST),
-            false
-          );
-        }
-        callback(null, true);
-      },
-      storage: multer.diskStorage({
-        destination: (req, file, cb) => {
-          cb(null, uploadDir);
+    FileFieldsInterceptor(
+      [
+        { name: 'files', maxCount: MAX_ATTACHMENT_FILES },
+        { name: 'subjectsExcel', maxCount: 1 },
+      ],
+      {
+        limits: { fileSize: MAX_FILE_SIZE },
+        fileFilter: (req, file, callback) => {
+          if (file.fieldname === 'files') {
+            const allowedMimeTypes = [
+              'application/pdf',
+              'application/msword',
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'image/jpeg',
+              'image/png',
+              'image/gif',
+            ];
+            if (!allowedMimeTypes.includes(file.mimetype)) {
+              return callback(
+                new HttpException(
+                  'Only PDF, Word documents, and image files are allowed for general attachments!',
+                  HttpStatus.BAD_REQUEST
+                ),
+                false
+              );
+            }
+          } else if (file.fieldname === 'subjectsExcel') {
+            const allowedMimeTypes = [
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'application/vnd.ms-excel',
+            ];
+            if (!allowedMimeTypes.includes(file.mimetype)) {
+              return callback(
+                new HttpException('Only .xlsx and .xls Excel files are allowed for subjects!', HttpStatus.BAD_REQUEST),
+                false
+              );
+            }
+          }
+          callback(null, true);
         },
-        filename: (req, file, cb) => {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          cb(null, `${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
-        },
-      }),
-    })
+        storage: multer.diskStorage({
+          destination: (req, file, cb) => {
+            if (file.fieldname === 'files') {
+              cb(null, uploadDir);
+            } else if (file.fieldname === 'subjectsExcel') {
+              cb(null, tempExcelUploadDir);
+            } else {
+              cb(new HttpException('Invalid field name for file upload.', HttpStatus.BAD_REQUEST), '');
+            }
+          },
+          filename: (req, file, cb) => {
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+            cb(null, `${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
+          },
+        }),
+      }
+    )
   )
-  async submitContactForm(@Body() body: any, @UploadedFiles() files?: Array<Express.Multer.File>) {
+  async submitContactForm(
+    @Body() body: any,
+    @UploadedFiles() files: { files?: Express.Multer.File[]; subjectsExcel?: Express.Multer.File[] }
+  ) {
     let attachmentPaths: string[] = [];
+    let tempExcelFilePath: string | undefined;
 
     try {
       const createContactData: Partial<CreateContactDto> = {
@@ -112,8 +167,6 @@ export class ContactController {
         universityEmail: body.universityEmail,
         universityNumber: body.universityNumber,
         website: body.website,
-        subjects: body.subjects,
-
         numberOfStudents: body.numberOfStudents ? parseInt(body.numberOfStudents, 10) : undefined,
         description: body.description,
       };
@@ -134,19 +187,44 @@ export class ContactController {
         );
       }
 
-      if (files && files.length > 0) {
-        attachmentPaths = files.map((file) => file.path);
+      if (files?.files && files.files.length > 0) {
+        attachmentPaths = files.files.map((file) => file.path);
       }
 
-      const result = await this._contactService.handleSubmitContactForm(createContactDto, attachmentPaths);
+      if (files?.subjectsExcel && files.subjectsExcel.length > 0) {
+        tempExcelFilePath = files.subjectsExcel[0].path;
+      }
+
+      if (createContactDto.requestType === RequestTypeEnum.NEW_UNIVERSITY && !tempExcelFilePath) {
+        throw new HttpException(
+          'An Excel file with subjects is required for New University requests.',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const result = await this._contactService.handleSubmitContactForm(
+        createContactDto,
+        attachmentPaths,
+        tempExcelFilePath
+      );
       return result;
     } catch (error) {
       if (attachmentPaths.length > 0) {
         attachmentPaths.forEach((filePath) => {
           fs.unlink(filePath, (err) => {
             if (err)
-              console.error(`Failed to delete temporary file during error cleanup: ${filePath}, Error: ${err.message}`);
+              console.error(
+                `Failed to delete temporary attachment file during error cleanup: ${filePath}, Error: ${err.message}`
+              );
           });
+        });
+      }
+      if (tempExcelFilePath) {
+        fs.unlink(tempExcelFilePath, (err) => {
+          if (err)
+            console.error(
+              `Failed to delete temporary Excel file during error cleanup: ${tempExcelFilePath}, Error: ${err.message}`
+            );
         });
       }
 
@@ -174,5 +252,30 @@ export class ContactController {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  @Get('template/:filename')
+  @ApiOperation({ summary: 'Download template' })
+  @ApiParam({ name: 'filename', description: 'Name of the Excel template file (e.g., Sample.xlsx)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Excel template file downloaded successfully',
+    content: {
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': {
+        schema: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'File not found' })
+  async downloadExcelTemplate(@Param('filename') filename: string, @Res() res: Response) {
+    const filePath = join(__dirname, '..', '..', '..', 'public', filename);
+
+    if (!existsSync(filePath)) {
+      throw new HttpException('Excel template file not found.', HttpStatus.NOT_FOUND);
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.sendFile(filePath);
   }
 }

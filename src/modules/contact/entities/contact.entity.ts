@@ -17,10 +17,10 @@ export class ContactSubmissionEntity {
   requestType: RequestTypeEnum;
 
   @Column()
-  representativeName: string;
+  universityName: string;
 
   @Column()
-  universityName: string;
+  representativeName: string;
 
   @Column()
   representativeEmail: string;
@@ -53,7 +53,7 @@ export class ContactSubmissionEntity {
   website: string;
 
   @Column({ nullable: true })
-  subjects: string;
+  subjectsExcelFilePath: string;
 
   @Column({ nullable: true })
   numberOfStudents: number;

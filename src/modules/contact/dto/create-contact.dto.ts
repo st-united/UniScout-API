@@ -9,6 +9,9 @@ import {
   Min,
   ValidateIf,
   Validate,
+  IsOptional,
+  IsArray,
+  IsNumber,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { RequestTypeEnum } from '@Constant/enums';
@@ -103,12 +106,6 @@ export class CreateContactDto {
   @IsNotEmpty({ message: 'Website cannot be empty for New University requests.' })
   @IsUrl({}, { message: 'Please provide a valid website URL for New University requests.' })
   website?: string;
-
-  @ApiPropertyOptional({ description: 'Subjects' })
-  @ValidateIf((o) => o.requestType === RequestTypeEnum.NEW_UNIVERSITY)
-  @IsString()
-  @IsNotEmpty({ message: 'Subjects cannot be empty for New University requests.' })
-  subjects?: string;
 
   @ApiPropertyOptional({
     description: 'Number of students',
