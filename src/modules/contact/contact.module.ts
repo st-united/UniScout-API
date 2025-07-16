@@ -6,14 +6,15 @@ import { MulterModule } from '@nestjs/platform-express';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ContactSubmissionEntity } from './entities';
-import { UniEntity } from '@UniversitiesModule/entities';
+import { AcademicFieldEntity, SubjectEntity, UniEntity } from '@UniversitiesModule/entities';
 import { UniversitiesModule } from '@UniversitiesModule/university.module';
+import { Subject } from 'rxjs';
 
 @Module({
   imports: [
     MulterModule.register({}),
     ConfigModule,
-    TypeOrmModule.forFeature([ContactSubmissionEntity, UniEntity]),
+    TypeOrmModule.forFeature([ContactSubmissionEntity, UniEntity, SubjectEntity, AcademicFieldEntity]),
     UniversitiesModule,
   ],
   controllers: [ContactController, AdminContactController],

@@ -6,7 +6,7 @@ import * as nodemailer from 'nodemailer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets } from 'typeorm';
+import { Repository, Brackets, In } from 'typeorm';
 import { ContactSubmissionEntity, SubmissionStatusEnum } from './entities';
 import { RequestTypeEnum } from '@Constant/enums';
 import { UpdateContactSubmissionStatusDto } from './dto/update-contact.dto';
@@ -34,15 +34,13 @@ export class ContactService {
         user: this._configService.get<string>('MAIL_USER'),
         pass: this._configService.get<string>('MAIL_PASSWORD'),
       },
-      tls: {
-        rejectUnauthorized: false,
-      },
     });
   }
 
   async handleSubmitContactForm(
     createContactDto: CreateContactDto,
-    attachmentPaths: string[] = []
+    attachmentPaths: string[] = [],
+    excelFilePath?: string
   ): Promise<{ message: string }> {
     const senderEmail = createContactDto.representativeEmail;
     this._logger.log(`Received contact form submission from: ${senderEmail || 'Anonymous'}`);
@@ -62,7 +60,6 @@ export class ContactService {
         universityEmail,
         universityNumber,
         website,
-        subjects,
         numberOfStudents,
         description,
       } = createContactDto;
@@ -76,40 +73,46 @@ export class ContactService {
       let universityDetailsText = '';
       let contactDetailsHtml = '';
       let contactDetailsText = '';
-      let messageHtml = '';
-      let messageText = '';
+      let messageContentHtml = '';
+      let messageContentText = '';
 
       if (requestType === RequestTypeEnum.NEW_UNIVERSITY) {
         universityDetailsHtml = `
-          <h3>University Details (New University):</h3>
+          <h3>University Details:</h3>
           <p><strong>University Name:</strong> ${universityName}</p>
           <p><strong>Abbreviation:</strong> ${abbreviation || 'N/A'}</p>
-          <p><strong>Country:</strong> ${country}</p>
-          <p><strong>Location:</strong> ${location}</p>
-          <p><strong>Type:</strong> ${type}</p>
-          <p><strong>University Email:</strong> ${universityEmail}</p>
+          <p><strong>Country:</strong> ${country || 'N/A'}</p>
+          <p><strong>Location:</strong> ${location || 'N/A'}</p>
+          <p><strong>Type:</strong> ${type || 'N/A'}</p>
+          <p><strong>University Email:</strong> ${universityEmail || 'N/A'}</p>
           <p><strong>University Number:</strong> ${universityNumber || 'N/A'}</p>
           <p><strong>Website:</strong> <a href="${website}">${website}</a></p>
-          <p><strong>Subjects:</strong> ${subjects}</p>
+          ${
+            excelFilePath
+              ? `<p><strong>Subjects Excel File:</strong> <a href="${excelFilePath}">Download Here</a></p>`
+              : ''
+          }
           ${
             typeof numberOfStudents === 'number'
               ? `<p><strong>Number of Students:</strong> ${numberOfStudents}</p>`
               : ''
           }
-          <p><strong>Description:</strong> ${description || 'N/A'}</p> `;
+          ${description ? `<p><strong>Description:</strong> ${description}</p>` : ''}
+        `;
         universityDetailsText = `
-          University Details (New University):
+          University Details:
           University Name: ${universityName}
           Abbreviation: ${abbreviation || 'N/A'}
-          Country: ${country}
-          Location: ${location}
-          Type: ${type}
-          University Email: ${universityEmail}
+          Country: ${country || 'N/A'}
+          Location: ${location || 'N/A'}
+          Type: ${type || 'N/A'}
+          University Email: ${universityEmail || 'N/A'}
           University Number: ${universityNumber || 'N/A'}
           Website: ${website}
-          Subjects: ${subjects}
+          Subjects Excel File: ${excelFilePath || 'N/A'}
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
-          Description: ${description || 'N/A'}\n `;
+          ${description ? `Description: ${description}\n` : ''}
+        `;
         contactDetailsHtml = `
           <h3>Sender's Contact Details:</h3>
           <p><strong>Representative Name:</strong> ${representativeName || 'N/A'}</p>
@@ -122,6 +125,8 @@ export class ContactService {
           Representative Email: ${representativeEmail || 'N/A'}
           Representative Phone Number: ${representativeNumber || 'N/A'}
         `;
+        messageContentHtml = '';
+        messageContentText = '';
       } else {
         universityDetailsHtml = `
           <h3>University Details:</h3>
@@ -143,15 +148,13 @@ export class ContactService {
           Representative Email: ${representativeEmail}
           Representative Phone Number: ${representativeNumber}
         `;
-        messageHtml = `
+        messageContentHtml = `
           <h3>Message:</h3>
           <p>${message}</p>
-          ${description ? `<p><strong>Description:</strong> ${description}</p>` : ''}
         `;
-        messageText = `
+        messageContentText = `
           Message:
           ${message}
-          ${description ? `Description: ${description}\n` : ''}
         `;
       }
 
@@ -162,15 +165,17 @@ export class ContactService {
         to: this._configService.get<string>('CONTACT_FORM_RECEIVER_EMAIL'),
         subject: `UNISCOUT - ${requestType} Request from ${representativeName || 'Anonymous'}`,
         html: `
-          ${contactDetailsHtml}
           <p><strong>Request Type:</strong> ${requestType}</p>
           ${universityDetailsHtml}
-          ${messageHtml} `,
+          ${contactDetailsHtml}
+          ${messageContentHtml}
+        `,
         text: `
-          ${contactDetailsText}
           Request Type: ${requestType}
           ${universityDetailsText}
-          ${messageText} `,
+          ${contactDetailsText}
+          ${messageContentText}
+        `,
         attachments: attachments,
       };
 
@@ -183,40 +188,46 @@ export class ContactService {
       let acknowledgmentUniversityDetailsText = '';
       let acknowledgmentContactDetailsHtml = '';
       let acknowledgmentContactDetailsText = '';
-      let acknowledgmentMessageHtml = '';
-      let acknowledgmentMessageText = '';
+      let acknowledgmentMessageContentHtml = '';
+      let acknowledgmentMessageContentText = '';
 
       if (requestType === RequestTypeEnum.NEW_UNIVERSITY) {
         acknowledgmentUniversityDetailsHtml = `
           <h3>Submitted University Details:</h3>
           <p><strong>University Name:</strong> ${universityName}</p>
           <p><strong>Abbreviation:</strong> ${abbreviation || 'N/A'}</p>
-          <p><strong>Country:</strong> ${country}</p>
-          <p><strong>Location:</strong> ${location}</p>
-          <p><strong>Type:</strong> ${type}</p>
-          <p><strong>University Email:</strong> ${universityEmail}</p>
+          <p><strong>Country:</strong> ${country || 'N/A'}</p>
+          <p><strong>Location:</strong> ${location || 'N/A'}</p>
+          <p><strong>Type:</strong> ${type || 'N/A'}</p>
+          <p><strong>University Email:</strong> ${universityEmail || 'N/A'}</p>
           <p><strong>University Number:</strong> ${universityNumber || 'N/A'}</p>
           <p><strong>Website:</strong> <a href="${website}">${website}</a></p>
-          <p><strong>Subjects:</strong> ${subjects}</p>
+          ${
+            excelFilePath
+              ? `<p><strong>Subjects Excel File:</strong> <a href="${excelFilePath}">Download Here</a></p>`
+              : ''
+          }
           ${
             typeof numberOfStudents === 'number'
               ? `<p><strong>Number of Students:</strong> ${numberOfStudents}</p>`
               : ''
           }
-          <p><strong>Description:</strong> ${description || 'N/A'}</p> `;
+          ${description ? `<p><strong>Description:</strong> ${description}</p>` : ''}
+        `;
         acknowledgmentUniversityDetailsText = `
           Submitted University Details:
           University Name: ${universityName}
           Abbreviation: ${abbreviation || 'N/A'}
-          Country: ${country}
-          Location: ${location}
-          Type: ${type}
-          University Email: ${universityEmail}
+          Country: ${country || 'N/A'}
+          Location: ${location || 'N/A'}
+          Type: ${type || 'N/A'}
+          University Email: ${universityEmail || 'N/A'}
           University Number: ${universityNumber || 'N/A'}
           Website: ${website}
-          Subjects: ${subjects}
+          Subjects Excel File: ${excelFilePath || 'N/A'}
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
-          Description: ${description || 'N/A'}\n `;
+          ${description ? `Description: ${description}\n` : ''}
+        `;
         acknowledgmentContactDetailsHtml = `
           <h3>Your Contact Details:</h3>
           <p><strong>Name:</strong> ${representativeName || 'N/A'}</p>
@@ -229,6 +240,8 @@ export class ContactService {
           Email: ${representativeEmail || 'N/A'}
           Phone Number: ${representativeNumber || 'N/A'}
         `;
+        acknowledgmentMessageContentHtml = '';
+        acknowledgmentMessageContentText = '';
       } else {
         acknowledgmentUniversityDetailsHtml = `
           <h3>Submitted University Details:</h3>
@@ -250,15 +263,13 @@ export class ContactService {
           Email: ${representativeEmail}
           Phone Number: ${representativeNumber}
         `;
-        acknowledgmentMessageHtml = `
+        acknowledgmentMessageContentHtml = `
           <h3>Your Message:</h3>
           <p>${message}</p>
-          ${description ? `<p><strong>Description:</strong> ${description}</p>` : ''}
         `;
-        acknowledgmentMessageText = `
+        acknowledgmentMessageContentText = `
           Your Message:
           ${message}
-          ${description ? `Description: ${description}\n` : ''}
         `;
       }
 
@@ -269,10 +280,10 @@ export class ContactService {
         html: `
           <p>Dear ${representativeName || 'Valued User'},</p>
           <p>Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon as possible.</p> <p>Here's a copy of your submission details:</p>
-          ${acknowledgmentContactDetailsHtml}
           <p><strong>Request Type:</strong> ${requestType}</p>
           ${acknowledgmentUniversityDetailsHtml}
-          ${acknowledgmentMessageHtml} <p>If you have any urgent queries, feel free to reach out to us directly.</p>
+          ${acknowledgmentContactDetailsHtml}
+          ${acknowledgmentMessageContentHtml} <p>If you have any urgent queries, feel free to reach out to us directly.</p>
           <p>Best regards,<br>The UNISCOUT Team</p>
         `,
         text: `
@@ -280,10 +291,10 @@ export class ContactService {
 
           Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon as possible. Here's a copy of your submission details:
 
-          ${acknowledgmentContactDetailsText}
           Request Type: ${requestType}
           ${acknowledgmentUniversityDetailsText}
-          ${acknowledgmentMessageText} If you have any urgent queries, feel free to reach out to us directly.
+          ${acknowledgmentContactDetailsText}
+          ${acknowledgmentMessageContentText} If you have any urgent queries, feel free to reach out to us directly.
 
           Best regards,
           The UNISCOUT Team
@@ -308,7 +319,6 @@ export class ContactService {
         requestType: requestType,
         representativeNumber: representativeNumber,
         message: message,
-        description: description,
         ...(requestType === RequestTypeEnum.NEW_UNIVERSITY && {
           abbreviation: abbreviation,
           country: country,
@@ -317,8 +327,9 @@ export class ContactService {
           universityEmail: universityEmail,
           universityNumber: universityNumber,
           website: website,
-          subjects: subjects,
-          numberOfStudents: numberOfStudents,
+          subjectsExcelFilePath: excelFilePath,
+          studentPopulation: numberOfStudents,
+          description: description,
         }),
       });
       await this._contactSubmissionRepo.save(newSubmission);
@@ -339,6 +350,12 @@ export class ContactService {
           else this._logger.log(`Successfully deleted temporary attachment file: ${filePath}`);
         });
       });
+      if (excelFilePath && fs.existsSync(excelFilePath) && !excelFilePath.startsWith('http')) {
+        fs.unlink(excelFilePath, (err) => {
+          if (err) this._logger.error(`Failed to delete temporary Excel file: ${excelFilePath}, Error: ${err.message}`);
+          else this._logger.log(`Successfully deleted temporary Excel file: ${excelFilePath}`);
+        });
+      }
     }
   }
 

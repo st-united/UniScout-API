@@ -36,6 +36,10 @@ async function bootstrap() {
   // Prefix
   app.setGlobalPrefix('api');
 
+  app.useStaticAssets(join(__dirname, '..', 'public'), {
+    prefix: '/public/',
+  });
+
   const options = new DocumentBuilder()
     .setTitle('Uni-Scout')
     .setDescription('The Uni-Scout API description')
@@ -55,7 +59,7 @@ async function bootstrap() {
   SwaggerModule.setup('/docs', app, document);
 
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
-    prefix: '/static/', // This is the public URL prefix for your static files
+    prefix: '/static/',
   });
   const port = configService.get<number>('APP_PORT');
   await app.listen(port || 6002);
