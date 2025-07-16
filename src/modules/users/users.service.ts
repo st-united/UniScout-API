@@ -35,6 +35,9 @@ export class UsersService {
   getAllJobRoles(): string[] {
     return Object.values(Job);
   }
+  getAllUserStatuses(): string[] {
+    return Object.values(StatusEnum);
+  }
   private generateRandomPassword(): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     const specialChars = '!@#$%^&*()-_+=[]{}|;:,.<>?';
