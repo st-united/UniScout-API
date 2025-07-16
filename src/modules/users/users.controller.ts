@@ -79,7 +79,14 @@ export class UsersController {
   async changePassword(@Req() req, @Body() changePasswordDto: ChangePasswordDto): Promise<ResponseItem<UserDto>> {
     return await this.usersService.changePassword(req.user.userId, changePasswordDto);
   }
-
+  @Get('status')
+  @ApiOperation({ summary: 'Get all available user statuses for dropdown lists' })
+  @ApiResponse({ status: 200, description: 'User statuses retrieved successfully', type: [String] })
+  // @UseGuards(JwtAccessTokenGuard) // Uncomment if you want to protect this endpoint
+  // @Roles(UserRole.ADMIN, UserRole.SUPER, UserRole.USER) // Adjust roles as needed
+  getAllUserStatusesForDropdown(): string[] {
+    return this.usersService.getAllUserStatuses();
+  }
   @Get()
   @UseGuards(RolesGuard)
   @Roles(UserRole.SUPER)
