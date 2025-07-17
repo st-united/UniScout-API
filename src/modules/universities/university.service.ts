@@ -657,6 +657,8 @@ export class UniversityService {
     query: ChatbotGetUniversityDto, // Use the new DTO here
     ipAddress?: string
   ): Promise<UniversityPaginationResult> {
+    this._logger.debug(`[UniversityService] searchUniversitiesForChatbot received query: ${JSON.stringify(query)}`);
+    this._logger.debug(`[UniversityService] searchUniversitiesForChatbot received IP: ${ipAddress}`);
     try {
       const defaultLimit = 18; // Or whatever default limit for chatbot results
 

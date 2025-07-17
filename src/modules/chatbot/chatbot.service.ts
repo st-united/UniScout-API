@@ -97,7 +97,10 @@ export class ChatbotService {
       let responseText = '';
       let fileData: ChatResponseDataWithFile['fileData'] = undefined;
 
-      const queryParams = (await this.extractUniversityQuery(message, conversationHistory)) as UniversityQuery;
+      const queryParams = (await this.extractUniversityQuery(
+        message,
+        conversationHistory
+      )) as unknown as UniversityQuery;
 
       if (queryParams.country && queryParams.country.length > 0) {
         const normalizedCountries = queryParams.country
@@ -608,134 +611,188 @@ export class ChatbotService {
     }
   }
 
-  private async extractUniversityQuery(message: string, conversationHistory: ChatMessage[]): Promise<UniversityQuery> {
+  private async extractUniversityQuery(
+    message: string,
+    conversationHistory: ChatMessage[]
+  ): Promise<ChatbotGetUniversityDto | null> {
     const validCountriesList = this._validCountries.join(', ');
     const validAcademicFields = this.CANONICAL_UNIVERSITY_FIELDS.map((field) =>
-      field.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-    ).join(', ');
+      this.formatFieldKeyForDisplay(field)
+    ).join(', '); // Use the helper for display
 
     const prompt = `
-        You are an expert at extracting university search parameters from natural language.
-        Based on the following conversation history and the latest user message, extract specific parameters for a university search.
-        If a parameter is not explicitly mentioned or clearly implied, leave it as undefined.
-        Infer boolean values (e.g., for 'exchange' or specific academic fields) as true if mentioned.
-        If the user asks for "top" universities, infer minRank: 1 and a reasonable maxRank (e.g., 100).
-        If the user asks for "all" universities or an export without a limit, infer exportLimit: null.
-        If the user asks to "export" as "pdf" or "excel", set exportFormat accordingly.
-        Crucially, if the user mentions specific 'subjects' or 'fields of study', extract them into 'subjectNames' (for specific subjects) and 'fieldNames' (for broader academic fields) arrays.
-    
-        Available university types: Public, Private, For-Profit, Non-Profit.
-        Available academic fields (use these exact strings as boolean flags if inferred): ${this.CANONICAL_UNIVERSITY_FIELDS.join(
-      ', '
-    )}.
-        Available countries: ${validCountriesList}
-    
-        Example of expected JSON output:
-        {
-          "search": "engineering",
-          "country": ["USA", "Canada"],
-          "minRank": 1,
-          "maxRank": 50,
-          "type": ["Public"],
-          "location": "New York",
-          "size": "medium",
-          "limit": 10,
-          "exportFormat": "pdf",
-          "exportLimit": 100,
-          "agricultural_veterinary_sciences": true,
-          "arts_design": true,
-          "subjectNames": ["Computer Science", "Artificial Intelligence"], // New field
-          "fieldNames": ["ICT", "Engineering & Technology"] // New field
-        }
-    
-        Conversation History:
-        ${this.formatConversationHistory(conversationHistory)}
-    
-        User's latest message: "${message}"
-    
-        Extracted parameters (JSON format):
-        `;
+      You are an expert at extracting university search parameters from natural language.
+      Based on the following conversation history and the latest user message, extract specific parameters for a university search.
+      If a parameter is not explicitly mentioned or clearly implied, leave it as null. Do NOT use "undefined".
+      Infer boolean values (e.g., for 'exchange' or specific academic fields) as true if mentioned, otherwise null.
+      If the user asks for "top" universities, infer minRank: 1 and a reasonable maxRank (e.g., 100).
+      If the user asks for "all" universities or an export without a limit, infer exportLimit: null.
+      If the user asks to "export" as "pdf" or "excel", set exportFormat accordingly.
+      Crucially, if the user mentions specific 'subjects' or 'fields of study', extract them into 'subjectNames' (for specific subjects like "Quantum Physics") and 'fieldNames' (for broader academic fields like "Engineering & Technology") as arrays of strings.
+
+      Available university types: Public, Private, For-Profit, Non-Profit.
+      Available academic fields (use these exact strings as keys in a 'fields' object with boolean true/false or null, AND add their formatted names to 'fieldNames' array if true): ${this.CANONICAL_UNIVERSITY_FIELDS.join(
+        ', '
+      )}.
+      Available countries (use their canonical names, e.g., "USA", "Germany"): ${validCountriesList}
+
+      Example of expected JSON output:
+      {
+        "search": "harvard university",
+        "country": ["USA"],
+        "minRank": 1,
+        "maxRank": 50,
+        "type": ["Public"],
+        "location": "New York",
+        "size": "medium",
+        "limit": 10,
+        "exportFormat": "pdf",
+        "exportLimit": 100,
+        "fields": {
+          "engineering_technology": true,
+          "arts_design": null // If not mentioned
+        },
+        "subjectNames": ["Computer Science", "Artificial Intelligence"],
+        "fieldNames": ["Engineering & Technology", "Arts & Design"], // Formatted names
+        "exchange": true,
+        "rank": null,
+        "sortOrder": "ASC"
+      }
+
+      Conversation History:
+      ${this.formatConversationHistory(conversationHistory)}
+
+      User's latest message: "${message}"
+
+      Extracted parameters (JSON format):
+      `;
 
     try {
       const result = await this._model.generateContent(prompt);
       let jsonResponse = result.response.text().trim();
-      this._logger.log(`[DEBUG] Raw AI response for query extraction: ${jsonResponse}`); // Log raw AI response // --- FIX STARTS HERE --- // Check if the response starts with the Markdown code block and remove it
+      this._logger.debug(`[ChatbotService] [DEBUG] Raw AI response for query extraction: ${jsonResponse}`);
 
+      // 1. Clean up potential markdown code block (```json ... ```)
       if (jsonResponse.startsWith('```json')) {
-        jsonResponse = jsonResponse.replace(/^```json\s*\n/, '').replace(/\n```$/, '');
-        this._logger.log(`[DEBUG] Cleaned JSON response: ${jsonResponse}`); // Log cleaned response
-      } // --- FIX ENDS HERE ---
-      const parsed = JSON.parse(jsonResponse) as UniversityQuery;
+        jsonResponse = jsonResponse
+          .replace(/^```json\s*\n/, '')
+          .replace(/\n```$/, '')
+          .trim();
+      }
 
-      if (parsed.country && Array.isArray(parsed.country)) {
-        parsed.country = parsed.country.map((c) => this.normalizeCountryName(c)).filter((c) => c !== null) as string[];
-      } // --- CORRECTED 'fields' PROCESSING BLOCK --- // Handle 'fields' object (Record<string, boolean>) and map to boolean flags and new 'fieldNames' array
+      // 2. IMPORTANT: Replace "undefined" literal strings with "null" literal strings
+      // This is the core fix for the SyntaxError.
+      // Use a regex to catch "key": undefined, "key": undefined, and plain undefined
+      jsonResponse = jsonResponse.replace(/: undefined/g, ': null');
+      jsonResponse = jsonResponse.replace(/undefined,/g, 'null,');
+      jsonResponse = jsonResponse.replace(/undefined}/g, 'null}');
+      jsonResponse = jsonResponse.replace(/^undefined$/g, 'null'); // For cases where the whole response is 'undefined'
 
-      if (parsed.fields && typeof parsed.fields === 'object' && Object.keys(parsed.fields).length > 0) {
-        parsed.fieldNames = parsed.fieldNames || []; // Initialize fieldNames
-        for (const fieldKey in parsed.fields) {
-          if (Object.prototype.hasOwnProperty.call(parsed.fields, fieldKey) && parsed.fields[fieldKey] === true) {
-            // The AI should output canonical field keys here, e.g., "engineering_technology"
-            const canonicalFormatted = this.formatFieldKeyForDisplay(fieldKey); // Format for adding to fieldNames // Set the boolean flag directly on the parsed object (if it's one of the canonical fields)
+      this._logger.debug(`[ChatbotService] [DEBUG] Cleaned JSON response (after undefined->null): ${jsonResponse}`);
 
-            if (this.CANONICAL_UNIVERSITY_FIELDS.includes(fieldKey)) {
-              (parsed as any)[fieldKey] = true; // Add to fieldNames if it's a valid canonical field and not already present
-              if (!parsed.fieldNames.includes(canonicalFormatted)) {
-                parsed.fieldNames.push(canonicalFormatted);
-              }
-            } else {
-              // If the AI returns a fieldKey that is NOT in CANONICAL_UNIVERSITY_FIELDS
-              // but it's set to true, you might want to add it to fieldNames anyway,
-              // or log a warning. For now, let's just add it to fieldNames.
-              this._logger.warn(`AI returned unknown field '${fieldKey}' in 'fields' object. Adding to fieldNames.`);
-              if (!parsed.fieldNames.includes(canonicalFormatted)) {
-                parsed.fieldNames.push(canonicalFormatted);
-              }
-            }
-          }
+      // Handle cases where the LLM might return an empty string or just whitespace after cleaning
+      if (!jsonResponse || jsonResponse.trim() === '') {
+        return null; // No valid JSON to parse
+      }
+
+      const extractedFromLLM: any = JSON.parse(jsonResponse);
+
+      // If the LLM returns an empty object, consider it no university query
+      if (Object.keys(extractedFromLLM).length === 0) {
+        return null;
+      }
+
+      // Initialize the DTO with defaults to prevent missing properties.
+      const chatbotQuery: ChatbotGetUniversityDto = {
+        search: extractedFromLLM.search || null,
+        type: Array.isArray(extractedFromLLM.type)
+          ? extractedFromLLM.type.filter(Boolean)
+          : extractedFromLLM.type
+          ? [extractedFromLLM.type].filter(Boolean)
+          : null,
+        country: Array.isArray(extractedFromLLM.country)
+          ? (extractedFromLLM.country.map((c: string) => this.normalizeCountryName(c)).filter(Boolean) as string[])
+          : extractedFromLLM.country
+          ? ([this.normalizeCountryName(extractedFromLLM.country)].filter(Boolean) as string[])
+          : null,
+        size: Array.isArray(extractedFromLLM.size)
+          ? extractedFromLLM.size.filter(Boolean)
+          : extractedFromLLM.size
+          ? [extractedFromLLM.size].filter(Boolean)
+          : null,
+        minRank: extractedFromLLM.minRank || null,
+        maxRank: extractedFromLLM.maxRank || null,
+        rank: extractedFromLLM.rank || null,
+        page: 1, // Default for initial search
+        limit: extractedFromLLM.limit || 18, // Default limit, or use LLM suggested limit
+        sortOrder: extractedFromLLM.sortOrder || null,
+        exportFormat: extractedFromLLM.exportFormat || null,
+        exportLimit: extractedFromLLM.exportLimit || null,
+        subjectNames: Array.isArray(extractedFromLLM.subjectNames)
+          ? extractedFromLLM.subjectNames.filter(Boolean)
+          : extractedFromLLM.subjectNames
+          ? [extractedFromLLM.subjectNames].filter(Boolean)
+          : [],
+        fieldNames: Array.isArray(extractedFromLLM.fieldNames)
+          ? extractedFromLLM.fieldNames.filter(Boolean)
+          : extractedFromLLM.fieldNames
+          ? [extractedFromLLM.fieldNames].filter(Boolean)
+          : [],
+        exchange: extractedFromLLM.exchange || null, // Map boolean fields directly
+        agricultural_veterinary_sciences:
+          extractedFromLLM.fields?.agricultural_veterinary_sciences === true ? true : null,
+        arts_design: extractedFromLLM.fields?.arts_design === true ? true : null,
+        business_management_law: extractedFromLLM.fields?.business_management_law === true ? true : null,
+        education_training: extractedFromLLM.fields?.education_training === true ? true : null,
+        engineering_technology: extractedFromLLM.fields?.engineering_technology === true ? true : null,
+        health_medicine: extractedFromLLM.fields?.health_medicine === true ? true : null,
+        humanities_languages: extractedFromLLM.fields?.humanities_languages === true ? true : null,
+        ict: extractedFromLLM.fields?.ict === true ? true : null,
+        natural_sciences: extractedFromLLM.fields?.natural_sciences === true ? true : null,
+        social_behavioral_sciences: extractedFromLLM.fields?.social_behavioral_sciences === true ? true : null,
+        services: extractedFromLLM.fields?.services === true ? true : null,
+        transport_safety_security_military:
+          extractedFromLLM.fields?.transport_safety_security_military === true ? true : null,
+        location: extractedFromLLM.location || null, // Assuming you have a 'location' field in your DTO
+      };
+
+      // Final cleanup: Remove properties that are null, empty arrays, or otherwise not needed for the query
+      // This is crucial to avoid sending empty filters to the database layer.
+      for (const key in chatbotQuery) {
+        // Only delete if it's explicitly null or an empty array.
+        // Don't delete false booleans if your DTO needs them.
+
+        if (chatbotQuery[key] === null || (Array.isArray(chatbotQuery[key]) && chatbotQuery[key].length === 0)) {
+          delete chatbotQuery[key];
         }
-        delete parsed.fields; // Remove the old 'fields' property as its content is now mapped
-      } // --- END OF CORRECTED 'fields' PROCESSING BLOCK ---
-      return parsed;
+      }
+
+      // If the primary search term and other key filters are all empty/null, return null
+      // This indicates no clear university query was extracted.
+      if (
+        !chatbotQuery.search &&
+        !chatbotQuery.country &&
+        !chatbotQuery.fieldNames?.length &&
+        !chatbotQuery.subjectNames?.length &&
+        !chatbotQuery.minRank &&
+        !chatbotQuery.maxRank &&
+        !chatbotQuery.type
+      ) {
+        return null;
+      }
+
+      return chatbotQuery;
     } catch (error) {
       // Improved error logging to capture the malformed raw response from AI
+      // Ensure result.response.text() is safely accessed as it might not exist if parsing failed very early
+      const rawErrorResponse = (error as any).response?.text ? (error as any).response.text() : Response;
       this._logger.error(
-        `Error extracting university query: ${error.message}. ` +
-          `AI response that caused parsing error (might be undefined if error occurred before getting text): "${(
-            error as any
-          ).response?.text?.()}"`,
+        `[ChatbotService] Error extracting university query: ${error.message}. ` +
+          `AI response that caused parsing error: "${rawErrorResponse}"`,
         error.stack
-      ); // Return an empty object to allow for a graceful fallback in the chat method
-      return {
-        search: undefined,
-        type: undefined,
-        country: undefined,
-        size: undefined,
-        minRank: undefined,
-        maxRank: undefined,
-        rank: undefined,
-        subjectNames: [],
-        fieldNames: [],
-        location: undefined,
-        limit: undefined,
-        exportFormat: undefined,
-        exportLimit: undefined,
-        sortOrder: undefined,
-        fields: undefined, // Keep this for the interface definition, but the code effectively moves its data // Include all other properties from UniversityQuery as undefined or their default empty values
-        agricultural_veterinary_sciences: undefined,
-        arts_design: undefined,
-        business_management_law: undefined,
-        education_training: undefined,
-        engineering_technology: undefined,
-        health_medicine: undefined,
-        humanities_languages: undefined,
-        ict: undefined,
-        natural_sciences: undefined,
-        social_behavioral_sciences: undefined,
-        services: undefined,
-        transport_safety_security_military: undefined,
-        exchange: undefined,
-      };
+      );
+      // Return null if extraction fails, allowing the chatbot to use its fallback
+      return null;
     }
   }
   private async generateUniversityResponse(
