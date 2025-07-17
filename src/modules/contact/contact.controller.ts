@@ -55,6 +55,7 @@ export class ContactController {
         representativeName: { type: 'string', nullable: true },
         representativeEmail: { type: 'string', format: 'email', nullable: true },
         representativeNumber: { type: 'string', nullable: true },
+        message: { type: 'string', nullable: true },
 
         abbreviation: { type: 'string', nullable: true },
         country: { type: 'string', nullable: true },
