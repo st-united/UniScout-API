@@ -9,9 +9,8 @@ import {
   Body,
   Patch,
   Res,
-  UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiQuery, ApiResponse, ApiBody, ApiTags, ApiParam } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiBody, ApiParam } from '@nestjs/swagger';
 import { ContactService } from './contact.service';
 import { GetContactSubmissionsDto } from './dto/get-contact.dto';
 import { RequestTypeEnum } from '@Constant/enums';
@@ -20,6 +19,7 @@ import { UpdateContactSubmissionStatusDto } from './dto/update-contact.dto';
 import { Response } from 'express';
 import { join } from 'path';
 import { existsSync } from 'fs';
+import * as path from 'path';
 
 @Controller('admin/contact')
 export class AdminContactController {
@@ -118,7 +118,7 @@ export class AdminContactController {
 
   @Patch(':id/status')
   @ApiOperation({ summary: 'Update the status of a specific contact submission by ID' })
-  @ApiBody({ type: UpdateContactSubmissionStatusDto, description: 'New status and optional rejection reason' })
+  @ApiBody({ type: UpdateContactSubmissionStatusDto, description: 'New status and rejection reason' })
   @ApiResponse({
     status: 200,
     description: 'The contact submission status updated successfully',
@@ -175,7 +175,7 @@ export class AdminContactController {
       throw new HttpException('No Excel file associated with this submission.', HttpStatus.NOT_FOUND);
     }
 
-    const absoluteFilePath = join(process.cwd(), excelFilePath);
+    const absoluteFilePath = path.isAbsolute(excelFilePath) ? excelFilePath : join(process.cwd(), excelFilePath);
 
     const filename = excelFilePath.split('/').pop();
 

@@ -19,16 +19,16 @@ export class ContactSubmissionEntity {
   @Column()
   universityName: string;
 
-  @Column()
+  @Column({ nullable: true })
   representativeName: string;
 
-  @Column()
+  @Column({ nullable: true })
   representativeEmail: string;
 
-  @Column()
+  @Column({ nullable: true })
   representativeNumber: string;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', nullable: true })
   message: string;
 
   @Column({ nullable: true })

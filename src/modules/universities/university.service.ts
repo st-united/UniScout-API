@@ -13,7 +13,7 @@ import { stringify } from 'csv-stringify';
 import * as ExcelJS from 'exceljs';
 import { plainToInstance } from 'class-transformer';
 
-import { UniEntity } from './entities/uni.entity';
+import { UniEntity, AcademicFieldEnum } from './entities/uni.entity';
 import { SubjectEntity } from './entities/subject.entity';
 import { AcademicFieldEntity } from './entities/academic-field.entity';
 import { GetUniversityDto, UniversitySizeEnum, SortOrderEnum } from './dto/get-university.dto';
@@ -37,6 +37,10 @@ const UniversitySizeThresholds = {
   [UniversitySizeEnum.LARGE]: { min: 40000, max: 100000 },
   [UniversitySizeEnum.EXTRA_LARGE]: { min: 100000 },
 };
+
+const SIMILARITY_THRESHOLD = 0.4;
+const DEFAULT_USER_LIMIT = 18;
+const DEFAULT_ADMIN_LIMIT = 12;
 
 @Injectable()
 export class UniversityService {
@@ -64,7 +68,6 @@ export class UniversityService {
     if (query?.search?.trim()) {
       const searchTerm = query.search.trim();
 
-      const similarityThreshold = 0.4;
       const exactMatchQb = this._uniRepository.createQueryBuilder('uni_exact');
 
       exactMatchQb.andWhere(
@@ -95,11 +98,11 @@ export class UniversityService {
             qbInner
               .where('word_similarity(:searchTerm, uni.university) > :similarityThreshold', {
                 searchTerm,
-                similarityThreshold,
+                similarityThreshold: SIMILARITY_THRESHOLD,
               })
               .orWhere('word_similarity(:searchTerm,uni.location) > :similarityThreshold', {
                 searchTerm,
-                similarityThreshold,
+                similarityThreshold: SIMILARITY_THRESHOLD,
               });
           })
         );
@@ -149,9 +152,9 @@ export class UniversityService {
       });
     }
 
-    if ((query as any)?.subjectNames && (query as any).subjectNames.length > 0) {
-      const subjectSearchTerms = (query as any).subjectNames.map((name: string) => name.toLowerCase());
-      const similarityThreshold = 0.4;
+    const typedQuery = query as GetUniversityDto;
+    if (typedQuery?.subjectNames && typedQuery.subjectNames.length > 0) {
+      const subjectSearchTerms = typedQuery.subjectNames.map((name: string) => name.toLowerCase());
 
       qb.andWhere(
         new Brackets((qbInner) => {
@@ -169,7 +172,7 @@ export class UniversityService {
                       index,
                     {
                       ['subjectSearchTerm' + index]: searchTerm,
-                      ['similarityThreshold' + index]: similarityThreshold,
+                      ['similarityThreshold' + index]: SIMILARITY_THRESHOLD,
                     }
                   );
               })
@@ -218,15 +221,14 @@ export class UniversityService {
       qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
     }
 
+    const countryOrder = ['Vietnam', 'Korea', 'Japan', 'India', 'Australia', 'USA'];
+    const caseWhenClauses = countryOrder.map((country, index) => `WHEN '${country}' THEN ${index + 1}`).join('\n');
+    const defaultOrder = countryOrder.length + 1;
+
     qb.addSelect(
       `CASE "uni"."country"
-            WHEN 'Vietnam' THEN 1
-            WHEN 'Korea' THEN 2
-            WHEN 'Japan' THEN 3
-            WHEN 'India' THEN 4
-            WHEN 'Australia' THEN 5
-            WHEN 'USA' THEN 6
-            ELSE 7 END`,
+            ${caseWhenClauses}
+            ELSE ${defaultOrder} END`,
       'country_order'
     );
 
@@ -253,7 +255,7 @@ export class UniversityService {
 
   private async _getUniversitiesPaginated(
     query?: GetUniversityDto,
-    defaultLimit = 18
+    defaultLimit = DEFAULT_USER_LIMIT
   ): Promise<UniversityPaginationResult> {
     const qb = this._uniRepository
       .createQueryBuilder('uni')
@@ -335,7 +337,13 @@ export class UniversityService {
     }
 
     for (const key in transformedUni) {
-      if (key === 'exchange' || key === 'size' || key === 'academicFieldsCommaSeparated' || key === 'subjectsList') {
+      if (
+        key === 'exchange' ||
+        key === 'size' ||
+        key === 'academicFieldsCommaSeparated' ||
+        key === 'subjectsList' ||
+        key === 'logo'
+      ) {
         continue;
       }
 
@@ -347,13 +355,51 @@ export class UniversityService {
     return transformedUni;
   }
 
+  /**
+   * Helper method to process and validate subjects from an array of names.
+   * This version assumes all subjects already exist in the database.
+   * @param subjects - An array of subject names.
+   * @returns An object containing arrays of SubjectEntity and AcademicFieldEntity.
+   * @throws NotFoundException if any subject from the input array is not found in the database.
+   */
+  private async _processUniversitySubjects(
+    subjects: string[]
+  ): Promise<{ subjectEntities: SubjectEntity[]; academicFields: AcademicFieldEntity[] }> {
+    if (!subjects || subjects.length === 0) {
+      return { subjectEntities: [], academicFields: [] };
+    }
+
+    const subjectEntities = await this._subjectRepository.find({
+      where: { name: In(subjects) },
+      relations: ['academicField'],
+    });
+
+    if (subjectEntities.length !== subjects.length) {
+      const foundNames = new Set(subjectEntities.map((s) => s.name));
+      const missingNames = subjects.filter((name) => !foundNames.has(name));
+      throw new NotFoundException(
+        `One or more subjects not found in the database: ${missingNames.join(
+          ', '
+        )}. Please ensure all subjects in the Excel file exist in the system.`
+      );
+    }
+
+    const academicFieldsSet = new Set<AcademicFieldEntity>();
+    for (const subject of subjectEntities) {
+      if (subject.academicField) {
+        academicFieldsSet.add(subject.academicField);
+      }
+    }
+    return { subjectEntities, academicFields: Array.from(academicFieldsSet) };
+  }
+
   async findAll(
     query?: GetUniversityDto,
     ipAddress?: string,
     isAdminContext = false
   ): Promise<UniversityPaginationResult> {
     try {
-      const defaultLimit = isAdminContext ? 12 : 18;
+      const defaultLimit = isAdminContext ? DEFAULT_ADMIN_LIMIT : DEFAULT_USER_LIMIT;
 
       const { universities, totalCount, currentPage, limit } = await this._getUniversitiesPaginated(
         query,
@@ -420,7 +466,8 @@ export class UniversityService {
         qb.leftJoin('uni.academicFields', 'academicField');
       }
 
-      if ((query as any)?.subjectNames && (query as any).subjectNames.length > 0) {
+      const typedQuery = query as GetUniversityDto;
+      if (typedQuery?.subjectNames && typedQuery.subjectNames.length > 0) {
         qb.leftJoin('uni.subjects', 'subject');
       }
 
@@ -529,26 +576,23 @@ export class UniversityService {
       exchange: dto.exchange,
     });
 
-    if (dto.subjects && dto.subjects.length > 0) {
-      const subjectEntities = await this._subjectRepository.find({
-        where: { name: In(dto.subjects) },
-        relations: ['academicField'],
-      });
+    let excelFilePathToDelete: string | null = null;
 
-      if (subjectEntities.length !== dto.subjects.length) {
-        const foundNames = new Set(subjectEntities.map((s) => s.name));
-        const missingNames = dto.subjects.filter((name) => !foundNames.has(name));
-        throw new NotFoundException(`Subject(s) not found: ${missingNames.join(', ')}`);
-      }
-      uni.subjects = subjectEntities;
-
-      const academicFieldsSet = new Set<AcademicFieldEntity>();
-      for (const subject of subjectEntities) {
-        if (subject.academicField) {
-          academicFieldsSet.add(subject.academicField);
+    if (dto.subjectsExcelFilePath) {
+      excelFilePathToDelete = dto.subjectsExcelFilePath;
+      try {
+        const subjectsFromFile = await this.extractSubjectsFromExcel(dto.subjectsExcelFilePath);
+        const { subjectEntities, academicFields } = await this._processUniversitySubjects(subjectsFromFile);
+        uni.subjects = subjectEntities;
+        uni.academicFields = academicFields;
+      } catch (error) {
+        this._logger.error(`Error processing subjects from Excel for new university: ${error.message}`, error.stack);
+        throw new BadRequestException(`Failed to process subjects from Excel: ${error.message}`);
+      } finally {
+        if (excelFilePathToDelete) {
+          await this._deleteTempFile(excelFilePathToDelete);
         }
       }
-      uni.academicFields = Array.from(academicFieldsSet);
     } else {
       uni.subjects = [];
       uni.academicFields = [];
@@ -566,6 +610,37 @@ export class UniversityService {
     }
   }
 
+  /**
+   * Extracts subject names from a given Excel file path.
+   * Assumes specific columns for subject names and boolean flags.
+   * @param filePath The path to the Excel file.
+   * @returns A promise that resolves to an array of unique subject names.
+   */
+  public async extractSubjectsFromExcel(filePath: string): Promise<string[]> {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+
+    const worksheet = workbook.worksheets[0];
+    const selectedSubjects: Set<string> = new Set();
+
+    worksheet.eachRow((row) => {
+      const subject1 = row.getCell(2).text?.trim();
+      const bool1 = row.getCell(4).value;
+
+      const subject2 = row.getCell(5).text?.trim();
+      const bool2 = row.getCell(7).value;
+
+      if ((bool1 === true || String(bool1).toUpperCase() === 'TRUE') && subject1) {
+        selectedSubjects.add(subject1);
+      }
+      if ((bool2 === true || String(bool2).toUpperCase() === 'TRUE') && subject2) {
+        selectedSubjects.add(subject2);
+      }
+    });
+
+    return [...selectedSubjects].filter(Boolean);
+  }
+
   //Update University
   async updateUniversity(id: number, dto: UpdateUniversityDto): Promise<UniversityDto> {
     const university = await this._uniRepository.findOne({ where: { id } });
@@ -574,37 +649,35 @@ export class UniversityService {
       throw new NotFoundException(`University with ID ${id} not found`);
     }
 
+    const subjectNamesToProcess = dto.subjectNames;
     const updateData: Partial<UpdateUniversityDto> = { ...dto };
     delete updateData.subjectNames;
 
-    Object.assign(university, updateData);
+    let excelFilePathToDelete: string | null = null;
 
-    if (dto.subjectNames !== undefined) {
-      if (dto.subjectNames.length > 0) {
-        const subjectEntities = await this._subjectRepository.find({
-          where: { name: In(dto.subjectNames) },
-          relations: ['academicField'],
-        });
-
-        if (subjectEntities.length !== dto.subjectNames.length) {
-          const foundNames = new Set(subjectEntities.map((s) => s.name));
-          const missingNames = dto.subjectNames.filter((name) => !foundNames.has(name));
-          throw new NotFoundException(`Subject(s) not found: ${missingNames.join(', ')}`);
-        }
+    if (dto.subjectsExcelFilePath) {
+      excelFilePathToDelete = dto.subjectsExcelFilePath;
+      try {
+        const subjectsFromFile = await this.extractSubjectsFromExcel(dto.subjectsExcelFilePath);
+        const combinedSubjects = subjectsFromFile;
+        const { subjectEntities, academicFields } = await this._processUniversitySubjects(combinedSubjects);
         university.subjects = subjectEntities;
-
-        const academicFieldsSet = new Set<AcademicFieldEntity>();
-        for (const subject of subjectEntities) {
-          if (subject.academicField) {
-            academicFieldsSet.add(subject.academicField);
-          }
+        university.academicFields = academicFields;
+      } catch (error) {
+        this._logger.error(`Error processing subjects from Excel for university update: ${error.message}`, error.stack);
+        throw new BadRequestException(`Failed to process subjects from Excel: ${error.message}`);
+      } finally {
+        if (excelFilePathToDelete) {
+          await this._deleteTempFile(excelFilePathToDelete);
         }
-        university.academicFields = Array.from(academicFieldsSet);
-      } else {
-        university.subjects = [];
-        university.academicFields = [];
       }
+    } else if (subjectNamesToProcess !== undefined) {
+      const { subjectEntities, academicFields } = await this._processUniversitySubjects(subjectNamesToProcess);
+      university.subjects = subjectEntities;
+      university.academicFields = academicFields;
     }
+
+    Object.assign(university, updateData);
 
     try {
       const savedUniversity = await this._uniRepository.save(university);
@@ -650,6 +723,19 @@ export class UniversityService {
     }
   }
 
+  /**
+   * Deletes a temporary file from the file system.
+   * @param filePath The full path to the file to delete.
+   */
+  private async _deleteTempFile(filePath: string): Promise<void> {
+    try {
+      await unlink(filePath);
+      this._logger.log(`Successfully deleted temporary file: ${filePath}`);
+    } catch (error) {
+      this._logger.warn(`Failed to delete temporary file ${filePath}: ${error.message}`);
+    }
+  }
+
   //Export University
   async exportUniversities(
     query: Omit<ExportUniversityDto, 'format'>,
@@ -661,7 +747,7 @@ export class UniversityService {
         .leftJoinAndSelect('uni.academicFields', 'academicField')
         .leftJoinAndSelect('uni.subjects', 'subject');
 
-      this._applyFilters(qb, query);
+      await this._applyFilters(qb, query);
       this._applySorting(qb, query?.sortOrder);
 
       const uniEntities = await qb.getMany();
@@ -702,6 +788,7 @@ export class UniversityService {
           'description',
           'exchange',
           'subjectsList',
+          ...academicFieldHeaders,
         ];
       }
 
@@ -729,6 +816,7 @@ export class UniversityService {
         }
         if (col === 'id') return 'ID';
         if (col === 'academicFieldsCommaSeparated') return 'Academic Fields';
+        if (col === 'subjectsList') return 'Subjects';
         return col.charAt(0).toUpperCase() + col.slice(1);
       });
 
@@ -758,7 +846,7 @@ export class UniversityService {
       universities.forEach((u) => {
         const row: Record<string, any> = {};
         columns.forEach((col) => {
-          row[col] = u[col];
+          row[col] = u[col] !== undefined ? u[col] : '-';
         });
         stringifier.write(row);
       });
@@ -781,6 +869,7 @@ export class UniversityService {
       } else {
         if (col === 'id') headerText = 'ID';
         else if (col === 'academicFieldsCommaSeparated') headerText = 'Academic Fields';
+        else if (col === 'subjectsList') headerText = 'Subjects';
         else headerText = col.charAt(0).toUpperCase() + col.slice(1);
       }
       return {
@@ -793,7 +882,7 @@ export class UniversityService {
     universities.forEach((u) => {
       const row: Record<string, any> = {};
       columns.forEach((col) => {
-        row[col] = u[col];
+        row[col] = u[col] !== undefined ? u[col] : '-';
       });
       worksheet.addRow(row);
     });
