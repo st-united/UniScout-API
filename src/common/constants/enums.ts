@@ -1,6 +1,8 @@
 export enum StatusEnum {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
+  PENDING = 'PENDING',
+  BLOCKED = 'BLOCKED',
 }
 
 export enum Order {
@@ -22,4 +24,8 @@ export enum UserRole {
 export enum RequestTypeEnum {
   NEW_UNIVERSITY = 'New University',
   UPDATE_INFORMATION = 'Update Information',
+}
+export enum Job {
+  MARKETING = 'Marketing',
+  BUSINESS_DEVELOPMENT = 'Business Development',
 }
