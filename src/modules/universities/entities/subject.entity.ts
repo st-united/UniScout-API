@@ -19,4 +19,5 @@ export class SubjectEntity extends AbstractEntity {
 
   @ManyToMany(() => UniEntity, (uni) => uni.subjects)
   universities: UniEntity[];
+  isDeleted: any;
 }

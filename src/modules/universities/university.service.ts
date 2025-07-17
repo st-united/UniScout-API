@@ -23,7 +23,12 @@ import { GeoIpService, SearchLogService, TrackingService } from '@DashboardModul
 import { ExportUniversityDto, ExportFormat } from './dto/export-university.dto';
 import { UniversityDto, UniversityDisplayDto } from './dto/university.dto';
 import { GetSubjectsDto } from './dto/get-subject-dto';
+import { ChatbotGetUniversityDto } from './dto/chatbot-get-university-dto';
 
+interface UniversitySizeRange {
+  min?: number;
+  max?: number;
+} //reverttillhere
 type UniversityPaginationResult = {
   universities: UniversityDisplayDto[];
   totalCount: number;
@@ -31,7 +36,7 @@ type UniversityPaginationResult = {
   limit: number;
 };
 
-const UniversitySizeThresholds = {
+const UniversitySizeThresholds: Record<UniversitySizeEnum, UniversitySizeRange> = {
   [UniversitySizeEnum.SMALL]: { max: 20000 },
   [UniversitySizeEnum.MEDIUM]: { min: 20000, max: 40000 },
   [UniversitySizeEnum.LARGE]: { min: 40000, max: 100000 },
@@ -54,13 +59,15 @@ export class UniversityService {
     private readonly _searchLogService: SearchLogService
   ) {}
 
+  // Existing _applyFilters method (UNCHANGED to avoid breaking existing callers)
   private async _applyFilters(
     qb: SelectQueryBuilder<UniEntity>,
-    query: GetUniversityDto | ExportUniversityDto
+    query: GetUniversityDto | ExportUniversityDto // Original DTOs this function was designed for
   ): Promise<boolean> {
     let isExactMatch = false;
     qb.andWhere('uni.isDeleted = :isDeleted', { isDeleted: false });
 
+    // Apply main search term
     if (query?.search?.trim()) {
       const searchTerm = query.search.trim();
 
@@ -109,6 +116,7 @@ export class UniversityService {
       }
     }
 
+    // Apply type, country, and size filters
     if (query?.type && query.type.length > 0) {
       qb.andWhere('uni.type IN (:...types)', { types: query.type });
     }
@@ -143,15 +151,31 @@ export class UniversityService {
       );
     }
 
-    if (query?.fieldNames && query.fieldNames.length > 0) {
+    // Apply academic field names (from direct query or inferred from subjects)
+    if ((query as GetUniversityDto)?.fieldNames && (query as GetUniversityDto).fieldNames.length > 0) {
+      const hasAcademicFieldJoin = qb.expressionMap.joinAttributes.some(
+        (join) => join.entityOrProperty === 'uni.academicFields' || (join.alias && join.alias.name === 'academicField')
+      );
+      if (!hasAcademicFieldJoin) {
+        qb.leftJoin('uni.academicFields', 'academicField');
+      }
       qb.andWhere('LOWER(academicField.name) IN (:...fieldNames)', {
-        fieldNames: query.fieldNames.map((name) => name.toLowerCase()),
+        fieldNames: (query as GetUniversityDto).fieldNames.map((name) => name.toLowerCase()),
       });
     }
 
+    // This block is for existing usage of subjectNames if it ever existed in GetUniversityDto/ExportUniversityDto
+    // It is NOT the chatbot specific one, so keeping it simple here.
     if ((query as any)?.subjectNames && (query as any).subjectNames.length > 0) {
       const subjectSearchTerms = (query as any).subjectNames.map((name: string) => name.toLowerCase());
       const similarityThreshold = 0.4;
+
+      const hasSubjectJoin = qb.expressionMap.joinAttributes.some(
+        (join) => join.entityOrProperty === 'uni.subjects' || (join.alias && join.alias.name === 'subject')
+      );
+      if (!hasSubjectJoin) {
+        qb.leftJoin('uni.subjects', 'subject');
+      }
 
       qb.andWhere(
         new Brackets((qbInner) => {
@@ -182,6 +206,195 @@ export class UniversityService {
       });
     }
 
+    // Apply rank filters
+    if (query?.minRank) {
+      qb.andWhere('uni.rank >= :minRank', { minRank: query.minRank });
+    }
+    if (query?.maxRank) {
+      qb.andWhere('uni.rank <= :maxRank', { maxRank: query.maxRank });
+    }
+    if (query?.rank) {
+      qb.andWhere('uni.rank = :rank', { rank: query.rank });
+    }
+    return isExactMatch;
+  }
+
+  // NEW DEDICATED CHATBOT FILTER FUNCTION
+  private async _applyChatbotFilters(
+    qb: SelectQueryBuilder<UniEntity>,
+    query: ChatbotGetUniversityDto
+  ): Promise<boolean> {
+    let isExactMatch = false;
+    qb.andWhere('uni.isDeleted = :isDeleted', { isDeleted: false });
+
+    // Apply main search term (similar to _applyFilters)
+    if (query?.search?.trim()) {
+      const searchTerm = query.search.trim();
+
+      const similarityThreshold = 0.4;
+      const exactMatchQb = this._uniRepository.createQueryBuilder('uni_exact');
+
+      exactMatchQb.andWhere(
+        new Brackets((qbInner) => {
+          qbInner
+            .where('uni_exact.abbreviation ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+            .orWhere('uni_exact.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+            .orWhere('uni_exact.location ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
+        })
+      );
+      exactMatchQb.andWhere('uni_exact.isDeleted = :isDeleted', { isDeleted: false });
+
+      const exactCount = await exactMatchQb.getCount();
+
+      if (exactCount > 0) {
+        qb.andWhere(
+          new Brackets((qbInner) => {
+            qbInner
+              .where('uni.abbreviation ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+              .orWhere('uni.university ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` })
+              .orWhere('uni.location ILIKE :exactSearchTerm', { exactSearchTerm: `%${searchTerm}%` });
+          })
+        );
+        isExactMatch = true;
+      } else {
+        qb.andWhere(
+          new Brackets((qbInner) => {
+            qbInner
+              .where('word_similarity(:searchTerm, uni.university) > :similarityThreshold', {
+                searchTerm,
+                similarityThreshold,
+              })
+              .orWhere('word_similarity(:searchTerm,uni.location) > :similarityThreshold', {
+                searchTerm,
+                similarityThreshold,
+              });
+          })
+        );
+        qb.addSelect(`similarity(uni.abbreviation, :searchTerm)`, 'abbreviation_similarity');
+        qb.addSelect(`similarity(uni.university, :searchTerm)`, 'university_similarity');
+        qb.addSelect(`similarity(uni.location, :searchTerm)`, 'location_similarity');
+      }
+    }
+
+    // Apply type, country, and size filters (same as _applyFilters)
+    if (query?.type && query.type.length > 0) {
+      qb.andWhere('uni.type IN (:...types)', { types: query.type });
+    }
+
+    if (query?.country && query.country.length > 0) {
+      qb.andWhere('uni.country IN (:...countries)', { countries: query.country });
+    }
+
+    if (query?.size && query.size.length > 0) {
+      qb.andWhere(
+        new Brackets((qbInner) => {
+          query.size.forEach((size) => {
+            const thresholds = UniversitySizeThresholds[size];
+            if (thresholds) {
+              qbInner.orWhere(
+                new Brackets((subQb) => {
+                  if (thresholds.min !== undefined && thresholds.max !== undefined) {
+                    subQb.where('uni.studentPopulation >= :min AND uni.studentPopulation < :max', {
+                      min: thresholds.min,
+                      max: thresholds.max,
+                    });
+                  } else if (thresholds.min !== undefined) {
+                    subQb.where('uni.studentPopulation >= :min', { min: thresholds.min });
+                  } else if (thresholds.max !== undefined) {
+                    subQb.where('uni.studentPopulation < :max', { max: thresholds.max });
+                  }
+                })
+              );
+            }
+          });
+        })
+      );
+    }
+
+    // Apply academic field names (from direct query or inferred from subjects)
+    if (query?.fieldNames && query.fieldNames.length > 0) {
+      const hasAcademicFieldJoin = qb.expressionMap.joinAttributes.some(
+        (join) => join.entityOrProperty === 'uni.academicFields' || (join.alias && join.alias.name === 'academicField')
+      );
+      if (!hasAcademicFieldJoin) {
+        qb.leftJoin('uni.academicFields', 'academicField');
+      }
+      qb.andWhere('LOWER(academicField.name) IN (:...fieldNames)', {
+        fieldNames: query.fieldNames.map((name) => name.toLowerCase()),
+      });
+    }
+
+    // **** THIS IS THE NEW / MODIFIED SUBJECT FILTERING LOGIC for chatbot ****
+    if (query?.subjectNames && query.subjectNames.length > 0) {
+      const subjectNamesFromQuery = query.subjectNames;
+      const similarityThreshold = 0.4; // Default similarity for individual terms
+
+      // Ensure the subject join is present (already handled in searchUniversitiesForChatbot, but good for safety)
+      const hasSubjectJoin = qb.expressionMap.joinAttributes.some(
+        (join) => join.entityOrProperty === 'uni.subjects' || (join.alias && join.alias.name === 'subject')
+      );
+      if (!hasSubjectJoin) {
+        qb.leftJoin('uni.subjects', 'subject');
+      }
+
+      // We need an OR condition for each requested subject name (e.g., "Software Engineering" OR "Physics")
+      // And for each multi-word subject name, we'll use an AND condition for its keywords.
+      qb.andWhere(
+        new Brackets((mainSubjectQb) => {
+          subjectNamesFromQuery.forEach((fullSearchTerm: string, mainIndex: number) => {
+            const lowerFullSearchTerm = fullSearchTerm.toLowerCase();
+            // Split by space and filter out empty strings
+            const individualKeywords = lowerFullSearchTerm.split(' ').filter((word) => word.length > 0);
+
+            mainSubjectQb.orWhere(
+              // OR for different subject names (e.g., "Software Engineering" OR "Biochemistry")
+              new Brackets((individualSubjectQb) => {
+                // Prioritize exact phrase match or very high similarity for the full term
+                individualSubjectQb.where('LOWER(subject.name) ILIKE :fullSubjectTerm' + mainIndex, {
+                  ['fullSubjectTerm' + mainIndex]: `%${lowerFullSearchTerm}%`,
+                });
+                individualSubjectQb.orWhere(
+                  'word_similarity(:fullSubjectTerm' +
+                    mainIndex +
+                    ', LOWER(subject.name)) > :fullSubjectThreshold' +
+                    mainIndex,
+                  {
+                    ['fullSubjectTerm' + mainIndex]: lowerFullSearchTerm,
+                    ['fullSubjectThreshold' + mainIndex]: 0.7, // Higher threshold for overall phrase similarity
+                  }
+                );
+
+                // If it's a multi-word search term, add an additional OR path for keyword-based AND conditions
+                if (individualKeywords.length > 1) {
+                  individualSubjectQb.orWhere(
+                    // OR with the keyword-based search
+                    new Brackets((keywordQb) => {
+                      individualKeywords.forEach((keyword: string, keywordIndex: number) => {
+                        // Each keyword MUST be present (AND condition)
+                        keywordQb.andWhere('LOWER(subject.name) ILIKE :keyword' + mainIndex + '_' + keywordIndex, {
+                          ['keyword' + mainIndex + '_' + keywordIndex]: `%${keyword}%`,
+                        });
+                      });
+                    })
+                  );
+                }
+              })
+            );
+          });
+        })
+      );
+
+      // Add similarity selections for each *full* subject search term (for sorting later)
+      subjectNamesFromQuery.forEach((fullSearchTerm: string, index: number) => {
+        // Corrected line: Add setParameter here
+        const paramName = `subjectSearchTerm${index}`;
+        qb.addSelect(`similarity(LOWER(subject.name), :${paramName})`, `subject_similarity_${index}`);
+        qb.setParameter(paramName, fullSearchTerm.toLowerCase()); // Set the parameter value
+      });
+    }
+    // **** END NEW / MODIFIED SUBJECT FILTERING LOGIC ****
+
+    // Apply rank filters
     if (query?.minRank) {
       qb.andWhere('uni.rank >= :minRank', { minRank: query.minRank });
     }
@@ -198,7 +411,8 @@ export class UniversityService {
     qb: SelectQueryBuilder<UniEntity>,
     sortOrder?: SortOrderEnum,
     searchTerm?: string,
-    isExactMatch?: boolean
+    isExactMatch?: boolean,
+    hasSubjectSearch?: boolean // This parameter is for backward compatibility with _applyFilters
   ) {
     const requestedSortOrder = sortOrder?.toUpperCase() === SortOrderEnum.DESC ? SortOrderEnum.DESC : SortOrderEnum.ASC;
     const nullsOrder = requestedSortOrder === SortOrderEnum.DESC ? 'NULLS FIRST' : 'NULLS LAST';
@@ -212,7 +426,17 @@ export class UniversityService {
         qb.addOrderBy('abbreviation_similarity', 'DESC', 'NULLS LAST');
         qb.addOrderBy('university_similarity', 'DESC', 'NULLS LAST');
         qb.addOrderBy('location_similarity', 'DESC', 'NULLS LAST');
-        qb.addOrderBy('subject_similarity_0', 'DESC', 'NULLS LAST');
+        // If subject search was performed and added similarity columns (for original _applyFilters logic)
+        if (hasSubjectSearch && searchTerm) {
+          // Assuming searchTerm could be an array of subjects for sort if coming from legacy subject search
+          // This part might need refinement if the old subject search in _applyFilters
+          // was indeed adding multiple `subject_similarity_X` for a single string `searchTerm`.
+          // For now, keeping it as is based on provided code.
+          const subjectSearchTerms = (searchTerm as any).map((name: string) => name.toLowerCase());
+          subjectSearchTerms.forEach((s: string, index: number) => {
+            qb.addOrderBy(`subject_similarity_${index}`, 'DESC', 'NULLS LAST');
+          });
+        }
       }
     } else {
       qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
@@ -220,13 +444,13 @@ export class UniversityService {
 
     qb.addSelect(
       `CASE "uni"."country"
-            WHEN 'Vietnam' THEN 1
-            WHEN 'Korea' THEN 2
-            WHEN 'Japan' THEN 3
-            WHEN 'India' THEN 4
-            WHEN 'Australia' THEN 5
-            WHEN 'USA' THEN 6
-            ELSE 7 END`,
+         WHEN 'Vietnam' THEN 1
+         WHEN 'Korea' THEN 2
+         WHEN 'Japan' THEN 3
+         WHEN 'India' THEN 4
+         WHEN 'Australia' THEN 5
+         WHEN 'USA' THEN 6
+         ELSE 7 END`,
       'country_order'
     );
 
@@ -251,8 +475,61 @@ export class UniversityService {
     return university;
   }
 
+  private _applyChatbotSorting(
+    qb: SelectQueryBuilder<UniEntity>,
+    query: ChatbotGetUniversityDto, // Pass the full DTO here for flexibility
+    isExactMatch: boolean
+  ) {
+    const requestedSortOrder =
+      query.sortOrder?.toUpperCase() === SortOrderEnum.DESC ? SortOrderEnum.DESC : SortOrderEnum.ASC;
+    const nullsOrder = requestedSortOrder === SortOrderEnum.DESC ? 'NULLS FIRST' : 'NULLS LAST';
+
+    // Apply general search term sorting if present
+    if (query.search) {
+      qb.setParameter('searchTerm', query.search); // Ensure search term is a single string here
+
+      if (isExactMatch) {
+        qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
+      } else {
+        qb.addOrderBy('abbreviation_similarity', 'DESC', 'NULLS LAST');
+        qb.addOrderBy('university_similarity', 'DESC', 'NULLS LAST');
+        qb.addOrderBy('location_similarity', 'DESC', 'NULLS LAST');
+      }
+    }
+
+    // Apply subject-specific sorting if subjectNames are provided
+    // This assumes `_applyChatbotFilters` has already added `subject_similarity_X` columns.
+    if (query.subjectNames && query.subjectNames.length > 0) {
+      // Iterate based on the actual number of subject names that would have
+      // generated similarity columns.
+      query.subjectNames.forEach((s: string, index: number) => {
+        qb.addOrderBy(`subject_similarity_${index}`, 'DESC', 'NULLS LAST');
+      });
+    }
+
+    // Default sorting if no specific search/subject terms for ranking
+    if (!query.search && (!query.subjectNames || query.subjectNames.length === 0)) {
+      qb.addOrderBy('uni.rank', requestedSortOrder, nullsOrder);
+    }
+
+    qb.addSelect(
+      `CASE "uni"."country"
+           WHEN 'Vietnam' THEN 1
+           WHEN 'Korea' THEN 2
+           WHEN 'Japan' THEN 3
+           WHEN 'India' THEN 4
+           WHEN 'Australia' THEN 5
+           WHEN 'USA' THEN 6
+           ELSE 7 END`,
+      'country_order'
+    );
+
+    qb.addOrderBy('country_order', 'ASC');
+    qb.addOrderBy('uni.university', SortOrderEnum.ASC);
+  }
+
   private async _getUniversitiesPaginated(
-    query?: GetUniversityDto,
+    query?: GetUniversityDto, // Keep this for existing `findAll`
     defaultLimit = 18
   ): Promise<UniversityPaginationResult> {
     const qb = this._uniRepository
@@ -261,7 +538,7 @@ export class UniversityService {
       .leftJoinAndSelect('uni.subjects', 'subject');
 
     const isExactMatch = await this._applyFilters(qb, query);
-    this._applySorting(qb, query?.sortOrder, query?.search, isExactMatch);
+    this._applySorting(qb, query?.sortOrder, query?.search, isExactMatch); // No subject search parameter for existing method
 
     const page = query?.page ?? 1;
     const limit = query?.limit ?? defaultLimit;
@@ -319,6 +596,7 @@ export class UniversityService {
 
     allAcademicFieldNames.forEach((fieldName) => {
       const fieldHeader = fieldName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      // Set boolean flag based on presence in academicFields
       transformedUni[fieldHeader] = universityAcademicFields.has(fieldName.toLowerCase()) ? 'Yes' : 'No';
     });
 
@@ -375,6 +653,72 @@ export class UniversityService {
     }
   }
 
+  async searchUniversitiesForChatbot(
+    query: ChatbotGetUniversityDto, // Use the new DTO here
+    ipAddress?: string
+  ): Promise<UniversityPaginationResult> {
+    try {
+      const defaultLimit = 18; // Or whatever default limit for chatbot results
+
+      const qb = this._uniRepository.createQueryBuilder('uni');
+
+      // Always join academicFields and subjects for chatbot context, as subjects can infer academic fields
+      qb.leftJoinAndSelect('uni.academicFields', 'academicField');
+      qb.leftJoinAndSelect('uni.subjects', 'subject');
+
+      // Infer academic fields from subjects if subjectNames are provided
+      const academicFieldsToFilter: string[] = query.fieldNames || [];
+      if (query.subjectNames && query.subjectNames.length > 0) {
+        const subjectsFound = await this._subjectRepository.find({
+          where: { name: In(query.subjectNames) },
+          relations: ['academicField'],
+        });
+
+        // Add academic fields of found subjects to the filter list
+        subjectsFound.forEach((s) => {
+          if (s.academicField && !academicFieldsToFilter.includes(s.academicField.name)) {
+            academicFieldsToFilter.push(s.academicField.name);
+          }
+        });
+      }
+
+      // Create a temporary query object to pass to _applyChatbotFilters, ensuring correct types
+      const queryForFilters: ChatbotGetUniversityDto = { ...query };
+      if (academicFieldsToFilter.length > 0) {
+        queryForFilters.fieldNames = academicFieldsToFilter;
+      }
+
+      // **** IMPORTANT CHANGE HERE: Call the new chatbot-specific filter function ****
+      const isExactMatch = await this._applyChatbotFilters(qb, queryForFilters);
+
+      // CALL THE NEW CHATBOT-SPECIFIC SORTING FUNCTION
+      this._applyChatbotSorting(qb, queryForFilters, isExactMatch); // Pass the full DTO
+
+      const page = query?.page ?? 1;
+      const limit = query?.limit ?? defaultLimit;
+
+      const [uniEntities, totalCount] = await qb
+        .skip((page - 1) * limit)
+        .take(limit)
+        .getManyAndCount();
+
+      const allAcademicFieldNames = await this.getAllAcademicFieldNamesDefined();
+      const universities = await Promise.all(
+        uniEntities.map(async (uniEntity) => this._transformUniEntityToDisplayDto(uniEntity, allAcademicFieldNames))
+      );
+
+      if (query && query.search) {
+        await this._logSearch(query.search, ipAddress); // Log chatbot searches
+      } else if (query.subjectNames && query.subjectNames.length > 0) {
+        await this._logSearch(`Subject search: ${query.subjectNames.join(', ')}`, ipAddress); // Log specific subject searches
+      }
+
+      return { universities, totalCount, currentPage: page, limit };
+    } catch (error) {
+      this._handleServiceError(error, 'searchUniversitiesForChatbot');
+    }
+  }
+
   //View University
   async getUniversity(id: number, ipAddress?: string): Promise<UniversityDisplayDto> {
     try {
@@ -411,20 +755,54 @@ export class UniversityService {
     }
   }
 
-  async countAll(query?: GetUniversityDto | ExportUniversityDto): Promise<number> {
+  async countAll(query?: GetUniversityDto | ExportUniversityDto | ChatbotGetUniversityDto): Promise<number> {
+    // Updated to accept Chatbot DTO for counting
     try {
       const qb = this._uniRepository.createQueryBuilder('uni');
       qb.where('uni.isDeleted = :isDeleted', { isDeleted: false });
 
-      if (query?.fieldNames && query.fieldNames.length > 0) {
-        qb.leftJoin('uni.academicFields', 'academicField');
+      // Always join academicFields and subjects if the query might use them
+      // This ensures that the _applyFilters method can correctly build the query.
+      qb.leftJoin('uni.academicFields', 'academicField');
+      qb.leftJoin('uni.subjects', 'subject');
+
+      // Infer academic fields from subjects if subjectNames are provided (for counting purposes)
+      const academicFieldsToFilter: string[] = (query as ChatbotGetUniversityDto)?.fieldNames || [];
+      if (
+        (query as ChatbotGetUniversityDto)?.subjectNames &&
+        (query as ChatbotGetUniversityDto).subjectNames.length > 0
+      ) {
+        const subjectsFound = await this._subjectRepository.find({
+          where: { name: In((query as ChatbotGetUniversityDto).subjectNames) },
+          relations: ['academicField'],
+        });
+
+        subjectsFound.forEach((s) => {
+          if (s.academicField && !academicFieldsToFilter.includes(s.academicField.name)) {
+            academicFieldsToFilter.push(s.academicField.name);
+          }
+        });
       }
 
-      if ((query as any)?.subjectNames && (query as any).subjectNames.length > 0) {
-        qb.leftJoin('uni.subjects', 'subject');
+      // Create a temporary query object for counting
+      // Note: countAll needs to decide which filter to use based on the DTO type or context.
+      // For simplicity, if subjectNames are present, we'll assume it's a chatbot-like count.
+      // If `ExportUniversityDto` or `GetUniversityDto` also have `subjectNames`, this might
+      // need more nuanced handling to distinguish between them, or `_applyFilters` itself needs
+      // the advanced logic (which we wanted to avoid).
+      // Given the `ChatbotGetUniversityDto` cast, let's pass it to _applyChatbotFilters for consistency
+      // in how subjectNames are processed for the count if they exist.
+      const queryForFilters: ChatbotGetUniversityDto = { ...(query as ChatbotGetUniversityDto) };
+      if (academicFieldsToFilter.length > 0) {
+        queryForFilters.fieldNames = academicFieldsToFilter;
       }
 
-      await this._applyFilters(qb, query);
+      // Decide which filter to apply based on whether subjectNames are present (indicative of chatbot context)
+      if (queryForFilters.subjectNames && queryForFilters.subjectNames.length > 0) {
+        await this._applyChatbotFilters(qb, queryForFilters);
+      } else {
+        await this._applyFilters(qb, query as GetUniversityDto | ExportUniversityDto);
+      }
 
       const totalCount = await qb.getCount();
       return totalCount;
@@ -575,7 +953,7 @@ export class UniversityService {
     }
 
     const updateData: Partial<UpdateUniversityDto> = { ...dto };
-    delete updateData.subjectNames;
+    delete updateData.subjectNames; // Ensure subjectNames is not directly assigned to entity
 
     Object.assign(university, updateData);
 
@@ -650,7 +1028,6 @@ export class UniversityService {
     }
   }
 
-  //Export University
   async exportUniversities(
     query: Omit<ExportUniversityDto, 'format'>,
     format: ExportFormat
@@ -661,8 +1038,14 @@ export class UniversityService {
         .leftJoinAndSelect('uni.academicFields', 'academicField')
         .leftJoinAndSelect('uni.subjects', 'subject');
 
-      this._applyFilters(qb, query);
-      this._applySorting(qb, query?.sortOrder);
+      // Cast to GetUniversityDto | ExportUniversityDto as _applyFilters expects one of these types
+      const queryForFilters: GetUniversityDto | ExportUniversityDto = query as GetUniversityDto | ExportUniversityDto;
+
+      this._applyFilters(qb, queryForFilters);
+      // Removed 'hasSubjectSearch' param from _applySorting for export, as it's not strictly relevant here
+      // and _applyFilters won't add `subject_similarity_X` columns for ExportUniversityDto typically.
+      // If ExportUniversityDto *can* contain subjectNames, this might need re-evaluation.
+      this._applySorting(qb, query?.sortOrder, query?.search, false, false);
 
       const uniEntities = await qb.getMany();
 
@@ -702,6 +1085,8 @@ export class UniversityService {
           'description',
           'exchange',
           'subjectsList',
+          'academicFieldsCommaSeparated', // Ensure this is explicitly included if you want it
+          ...academicFieldHeaders, // Include academic field dynamic columns
         ];
       }
 
@@ -721,7 +1106,8 @@ export class UniversityService {
   private async exportCSV(universities: UniversityDisplayDto[], columns: string[]) {
     return new Promise<{ data: Buffer; filename: string; contentType: string }>((resolve, reject) => {
       const csvColumns = columns.map((col) => {
-        if (col.includes('_')) {
+        if (col.includes('_') && !['subjectsList', 'academicFieldsCommaSeparated'].includes(col)) {
+          // Exclude special fields
           return col
             .split('_')
             .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -729,6 +1115,7 @@ export class UniversityService {
         }
         if (col === 'id') return 'ID';
         if (col === 'academicFieldsCommaSeparated') return 'Academic Fields';
+        if (col === 'subjectsList') return 'Subjects';
         return col.charAt(0).toUpperCase() + col.slice(1);
       });
 
@@ -773,7 +1160,8 @@ export class UniversityService {
 
     worksheet.columns = columns.map((col) => {
       let headerText = col;
-      if (col.includes('_')) {
+      if (col.includes('_') && !['subjectsList', 'academicFieldsCommaSeparated'].includes(col)) {
+        // Exclude special fields
         headerText = col
           .split('_')
           .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -781,6 +1169,7 @@ export class UniversityService {
       } else {
         if (col === 'id') headerText = 'ID';
         else if (col === 'academicFieldsCommaSeparated') headerText = 'Academic Fields';
+        else if (col === 'subjectsList') headerText = 'Subjects';
         else headerText = col.charAt(0).toUpperCase() + col.slice(1);
       }
       return {
@@ -814,6 +1203,7 @@ export class UniversityService {
       }
       const universities = await this._uniRepository.find({
         where: { id: In(ids), isDeleted: false },
+        relations: ['academicFields', 'subjects'], // Eager load relations for findByIds too
       });
       return universities;
     } catch (error) {

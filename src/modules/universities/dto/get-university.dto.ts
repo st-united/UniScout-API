@@ -17,6 +17,10 @@ export enum UniversityTypeEnum {
   COLLEGE = 'college',
   ACADEMY = 'academy',
   INTERNATIONAL = 'international',
+  SMALL = 'SMALL',
+  MEDIUM = 'MEDIUM',
+  LARGE = 'LARGE',
+  EXTRA_LARGE = 'EXTRA_LARGE',
 }
 
 export enum SortOrderEnum {

@@ -14,12 +14,29 @@ export interface UniversityQuery {
   rank?: number;
   location?: string;
   size?: UniversitySizeEnum[];
-  fields?: Record<string, boolean>;
-  academicFields?: string[];
   limit?: number;
   exportFormat?: 'excel' | 'pdf';
   exportLimit?: number;
   sortOrder?: SortOrderEnum;
+
+  subjectNames?: string[];
+  fieldNames?: string[];
+
+  fields?: Record<string, boolean>;
+
+  agricultural_veterinary_sciences?: boolean;
+  arts_design?: boolean;
+  business_management_law?: boolean;
+  education_training?: boolean;
+  engineering_technology?: boolean;
+  health_medicine?: boolean;
+  humanities_languages?: boolean;
+  ict?: boolean;
+  natural_sciences?: boolean;
+  social_behavioral_sciences?: boolean;
+  services?: boolean;
+  transport_safety_security_military?: boolean;
+  exchange?: boolean;
 }
 
 export interface ChatResponseData {

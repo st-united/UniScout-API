@@ -28,18 +28,6 @@ export class FileExportService {
         { header: 'Student Population', key: 'studentPopulation', width: 20 },
         { header: 'Website', key: 'website', width: 30 },
         { header: 'Contact', key: 'contact', width: 25 },
-        { header: 'Agricultural & Veterinary Sciences', key: 'agricultural_veterinary_sciences', width: 10 },
-        { header: 'Arts & Design', key: 'arts_design', width: 10 },
-        { header: 'Business, Management & Law', key: 'business_management_law', width: 10 },
-        { header: 'Education & Training', key: 'education_training', width: 10 },
-        { header: 'Engineering & Technology', key: 'engineering_technology', width: 10 },
-        { header: 'Health & Medicine', key: 'health_medicine', width: 10 },
-        { header: 'Humanities & Languages', key: 'humanities_languages', width: 10 },
-        { header: 'Information & Communication Technologies (ICT)', key: 'ict', width: 10 },
-        { header: 'Natural Sciences', key: 'natural_sciences', width: 10 },
-        { header: 'Social & Behavioral Sciences', key: 'social_behavioral_sciences', width: 10 },
-        { header: 'Services', key: 'services', width: 10 },
-        { header: 'Transport, Safety & Security, Military', key: 'transport_safety_security_military', width: 10 },
       ];
 
       data.forEach((uni) => {
@@ -52,19 +40,6 @@ export class FileExportService {
           studentPopulation: uni.studentPopulation,
           website: uni.website,
           contact: uni.email || uni.contact,
-          // Now dynamically check academicFields array
-          agricultural_veterinary_sciences: this._hasAcademicField(uni, 'Agricultural & Veterinary Sciences'),
-          arts_design: this._hasAcademicField(uni, 'Arts & Design'),
-          business_management_law: this._hasAcademicField(uni, 'Business, Management & Law'),
-          education_training: this._hasAcademicField(uni, 'Education & Training'),
-          engineering_technology: this._hasAcademicField(uni, 'Engineering & Technology'),
-          health_medicine: this._hasAcademicField(uni, 'Health & Medicine'),
-          humanities_languages: this._hasAcademicField(uni, 'Humanities & Languages'),
-          ict: this._hasAcademicField(uni, 'Information & Communication Technologies (ICT)'),
-          natural_sciences: this._hasAcademicField(uni, 'Natural Sciences'),
-          social_behavioral_sciences: this._hasAcademicField(uni, 'Social & Behavioral Sciences'),
-          services: this._hasAcademicField(uni, 'Services'),
-          transport_safety_security_military: this._hasAcademicField(uni, 'Transport, Safety & Security, Military'),
         });
       });
 

@@ -6,6 +6,7 @@ import { UniversityService } from '@UniversitiesModule/university.service';
 import { GetUniversityDto, UniversityTypeEnum } from '@UniversitiesModule/dto/get-university.dto';
 import { FileExportService } from './file-export/file-export.service';
 import { UniversityDisplayDto } from '@UniversitiesModule/dto/university.dto';
+import { ChatbotGetUniversityDto } from '@UniversitiesModule/dto/chatbot-get-university-dto';
 
 @Injectable()
 export class ChatbotService {
@@ -143,6 +144,21 @@ export class ChatbotService {
         }
       }
 
+      const chatbotSearchParams: ChatbotGetUniversityDto = {
+        search: queryParams.search,
+        type: queryParams.type,
+        country: queryParams.country,
+        size: queryParams.size as any,
+        minRank: queryParams.minRank,
+        maxRank: queryParams.maxRank,
+        rank: queryParams.rank,
+        subjectNames: queryParams.subjectNames,
+        fieldNames: queryParams.fieldNames,
+
+        limit: queryParams.limit || 10,
+        page: 1,
+      };
+
       const isGeneralCountryCountQuery =
         queryParams.country &&
         queryParams.country.length === 1 &&
@@ -154,7 +170,9 @@ export class ChatbotService {
         !queryParams.size &&
         !queryParams.fields &&
         !queryParams.limit &&
-        !queryParams.exportFormat;
+        !queryParams.exportFormat &&
+        !queryParams.subjectNames &&
+        !queryParams.fieldNames;
 
       if (isGeneralCountryCountQuery) {
         const countryName = queryParams.country[0];
@@ -173,11 +191,12 @@ export class ChatbotService {
         const actualTotalUniversitiesInDb = await this._universityService.countAll(countFilter);
 
         if (actualTotalUniversitiesInDb > 0) {
-          const { universities: universitiesSampleForOverview } = await this._universityService.findAll({
-            country: queryParams.country,
-            limit: 10,
-            page: 1,
-          });
+          const { universities: universitiesSampleForOverview } =
+            await this._universityService.searchUniversitiesForChatbot({
+              country: queryParams.country,
+              limit: 10,
+              page: 1,
+            });
 
           responseText = `Hi there! That's a great question. I have information on **${actualTotalUniversitiesInDb} universities** in my database for ${countryName}.\n\n`;
 
@@ -259,25 +278,21 @@ export class ChatbotService {
         }
       }
 
-      const universitySearchParams: GetUniversityDto = {
-        ...(queryParams as GetUniversityDto),
-        page: 1,
-        limit: queryParams.exportFormat ? queryParams.exportLimit : queryParams.limit || 10,
-      };
+      const { universities, totalCount } = await this._universityService.searchUniversitiesForChatbot(
+        chatbotSearchParams
+      );
 
       if (queryParams.exportFormat) {
         this._logger.log(
           `[DEBUG] Export request detected. Format: ${queryParams.exportFormat}, Query: ${JSON.stringify(
-            universitySearchParams
+            chatbotSearchParams
           )}`
         );
-
-        const totalMatchingUniversities = await this._universityService.countAll(universitySearchParams);
 
         let exportMessage = '';
         const requestedExportLimit = queryParams.exportLimit;
 
-        if (totalMatchingUniversities === 0) {
+        if (totalCount === 0) {
           return {
             response: 'No matching universities found. Please try another query or submit a contact request.',
             timestamp: new Date().toISOString(),
@@ -287,28 +302,25 @@ export class ChatbotService {
 
         let actualLimitToExport: number;
 
-        if (
-          requestedExportLimit !== undefined &&
-          requestedExportLimit !== null &&
-          requestedExportLimit <= totalMatchingUniversities
-        ) {
+        if (requestedExportLimit !== undefined && requestedExportLimit !== null && requestedExportLimit <= totalCount) {
           actualLimitToExport = requestedExportLimit;
           exportMessage = `I'm preparing a file for ${requestedExportLimit} universities matching your request. `;
         } else if (
           requestedExportLimit !== undefined &&
           requestedExportLimit !== null &&
-          requestedExportLimit > totalMatchingUniversities
+          requestedExportLimit > totalCount
         ) {
-          actualLimitToExport = totalMatchingUniversities;
-          exportMessage = `Sorry, we do not have ${requestedExportLimit} universities that match your criteria. However, I found ${totalMatchingUniversities} universities that do. I'm preparing a file for these ${totalMatchingUniversities} universities. `;
+          actualLimitToExport = totalCount;
+          exportMessage = `Sorry, we do not have ${requestedExportLimit} universities that match your criteria. However, I found ${totalCount} universities that do. I'm preparing a file for these ${totalCount} universities. `;
         } else {
-          actualLimitToExport = totalMatchingUniversities;
-          exportMessage = `I'm preparing a file for all ${totalMatchingUniversities} universities matching your request. `;
+          actualLimitToExport = totalCount;
+          exportMessage = `I'm preparing a file for all ${totalCount} universities matching your request. `;
         }
 
-        universitySearchParams.limit = actualLimitToExport;
-
-        const { universities: universitiesToExport } = await this._universityService.findAll(universitySearchParams);
+        const { universities: universitiesToExport } = await this._universityService.searchUniversitiesForChatbot({
+          ...chatbotSearchParams,
+          limit: actualLimitToExport,
+        });
 
         const universitiesDisplayDto: UniversityDisplayDto[] = universitiesToExport.map((uni) => ({
           ...uni,
@@ -353,8 +365,6 @@ export class ChatbotService {
         };
       }
 
-      const { universities } = await this._universityService.findAll(universitySearchParams);
-
       if (universities.length === 0) {
         return {
           response: 'No matching universities found. Please try another query or submit a contact request.',
@@ -382,6 +392,7 @@ export class ChatbotService {
         suggestedQuestions: dynamicSuggestedQuestions,
       };
     } catch (error) {
+      this._logger.error(`Error in chat method: ${error.message}`, error.stack);
       const fallbackSuggestedQuestions = this.STANDARD_QUESTIONS;
 
       return {
@@ -456,7 +467,9 @@ export class ChatbotService {
         }
       });
 
-      if (uni.academicFieldsCommaSeparated && uni.academicFieldsCommaSeparated !== 'NA') {
+      if (uni.academicFields && Array.isArray(uni.academicFields)) {
+        allAcademicFieldsFound.push(...(uni.academicFields as any[]).map((af) => af.name).filter(Boolean));
+      } else if (uni.academicFieldsCommaSeparated && uni.academicFieldsCommaSeparated !== 'NA') {
         allAcademicFieldsFound.push(...uni.academicFieldsCommaSeparated.split(', ').map((field) => field.trim()));
       }
 
@@ -515,6 +528,10 @@ export class ChatbotService {
         fields.push(fieldMap[key]);
       }
     });
+
+    if (uni.academicFields && Array.isArray(uni.academicFields)) {
+      fields.push(...(uni.academicFields as any[]).map((af) => af.name).filter(Boolean));
+    }
 
     return fields;
   }
@@ -587,7 +604,7 @@ export class ChatbotService {
       return response.includes('yes');
     } catch (error) {
       this._logger.error(`Error in isUniversityRelatedQuery: ${error.message}`, error.stack);
-      return true;
+      return true; // Fallback to true to not block legitimate university queries on AI error
     }
   }
 
@@ -598,78 +615,129 @@ export class ChatbotService {
     ).join(', ');
 
     const prompt = `
-    You are an expert at extracting university search parameters from natural language.
-    Based on the following conversation history and the latest user message, extract specific parameters for a university search.
-    If a parameter is not explicitly mentioned or clearly implied, leave it as undefined.
-    Infer boolean values (e.g., for 'exchange' or specific academic fields) as true if mentioned.
-    If the user asks for "top" universities, infer minRank: 1 and a reasonable maxRank (e.g., 100).
-    If the user asks for "all" universities or an export without a limit, infer exportLimit: null.
-    If the user asks to "export" as "pdf" or "excel", set exportFormat accordingly.
-
-    Available university types: Public, Private, For-Profit, Non-Profit.
-    Available academic fields (use these exact strings as boolean flags if inferred): ${this.CANONICAL_UNIVERSITY_FIELDS.join(
+        You are an expert at extracting university search parameters from natural language.
+        Based on the following conversation history and the latest user message, extract specific parameters for a university search.
+        If a parameter is not explicitly mentioned or clearly implied, leave it as undefined.
+        Infer boolean values (e.g., for 'exchange' or specific academic fields) as true if mentioned.
+        If the user asks for "top" universities, infer minRank: 1 and a reasonable maxRank (e.g., 100).
+        If the user asks for "all" universities or an export without a limit, infer exportLimit: null.
+        If the user asks to "export" as "pdf" or "excel", set exportFormat accordingly.
+        Crucially, if the user mentions specific 'subjects' or 'fields of study', extract them into 'subjectNames' (for specific subjects) and 'fieldNames' (for broader academic fields) arrays.
+    
+        Available university types: Public, Private, For-Profit, Non-Profit.
+        Available academic fields (use these exact strings as boolean flags if inferred): ${this.CANONICAL_UNIVERSITY_FIELDS.join(
       ', '
     )}.
-    Available countries: ${validCountriesList}
-
-    Example of expected JSON output:
-    {
-      "search": "engineering",
-      "country": ["USA", "Canada"],
-      "minRank": 1,
-      "maxRank": 50,
-      "type": ["Public"],
-      "location": "New York",
-      "size": "medium",
-      "limit": 10,
-      "exportFormat": "pdf",
-      "exportLimit": 100,
-      "agricultural_veterinary_sciences": true,
-      "arts_design": true
-    }
-
-    Conversation History:
-    ${this.formatConversationHistory(conversationHistory)}
-
-    User's latest message: "${message}"
-
-    Extracted parameters (JSON format):
-    `;
+        Available countries: ${validCountriesList}
+    
+        Example of expected JSON output:
+        {
+          "search": "engineering",
+          "country": ["USA", "Canada"],
+          "minRank": 1,
+          "maxRank": 50,
+          "type": ["Public"],
+          "location": "New York",
+          "size": "medium",
+          "limit": 10,
+          "exportFormat": "pdf",
+          "exportLimit": 100,
+          "agricultural_veterinary_sciences": true,
+          "arts_design": true,
+          "subjectNames": ["Computer Science", "Artificial Intelligence"], // New field
+          "fieldNames": ["ICT", "Engineering & Technology"] // New field
+        }
+    
+        Conversation History:
+        ${this.formatConversationHistory(conversationHistory)}
+    
+        User's latest message: "${message}"
+    
+        Extracted parameters (JSON format):
+        `;
 
     try {
       const result = await this._model.generateContent(prompt);
-      const jsonResponse = result.response.text().trim();
-      this._logger.log(`[DEBUG] Extracted query JSON: ${jsonResponse}`);
+      let jsonResponse = result.response.text().trim();
+      this._logger.log(`[DEBUG] Raw AI response for query extraction: ${jsonResponse}`); // Log raw AI response // --- FIX STARTS HERE --- // Check if the response starts with the Markdown code block and remove it
+
+      if (jsonResponse.startsWith('```json')) {
+        jsonResponse = jsonResponse.replace(/^```json\s*\n/, '').replace(/\n```$/, '');
+        this._logger.log(`[DEBUG] Cleaned JSON response: ${jsonResponse}`); // Log cleaned response
+      } // --- FIX ENDS HERE ---
       const parsed = JSON.parse(jsonResponse) as UniversityQuery;
 
       if (parsed.country && Array.isArray(parsed.country)) {
         parsed.country = parsed.country.map((c) => this.normalizeCountryName(c)).filter((c) => c !== null) as string[];
-      }
+      } // --- CORRECTED 'fields' PROCESSING BLOCK --- // Handle 'fields' object (Record<string, boolean>) and map to boolean flags and new 'fieldNames' array
 
-      if (parsed.fields && Array.isArray(parsed.fields)) {
-        (parsed.fields as string[]).some((field) => {
-          this.CANONICAL_UNIVERSITY_FIELDS.forEach((canonicalField) => {
-            if (
-              field.toLowerCase().includes(canonicalField.replace(/_/g, ' ').toLowerCase()) ||
-              canonicalField.replace(/_/g, ' ').toLowerCase().includes(field.toLowerCase())
-            ) {
-              (parsed as any)[canonicalField] = true;
+      if (parsed.fields && typeof parsed.fields === 'object' && Object.keys(parsed.fields).length > 0) {
+        parsed.fieldNames = parsed.fieldNames || []; // Initialize fieldNames
+        for (const fieldKey in parsed.fields) {
+          if (Object.prototype.hasOwnProperty.call(parsed.fields, fieldKey) && parsed.fields[fieldKey] === true) {
+            // The AI should output canonical field keys here, e.g., "engineering_technology"
+            const canonicalFormatted = this.formatFieldKeyForDisplay(fieldKey); // Format for adding to fieldNames // Set the boolean flag directly on the parsed object (if it's one of the canonical fields)
+
+            if (this.CANONICAL_UNIVERSITY_FIELDS.includes(fieldKey)) {
+              (parsed as any)[fieldKey] = true; // Add to fieldNames if it's a valid canonical field and not already present
+              if (!parsed.fieldNames.includes(canonicalFormatted)) {
+                parsed.fieldNames.push(canonicalFormatted);
+              }
+            } else {
+              // If the AI returns a fieldKey that is NOT in CANONICAL_UNIVERSITY_FIELDS
+              // but it's set to true, you might want to add it to fieldNames anyway,
+              // or log a warning. For now, let's just add it to fieldNames.
+              this._logger.warn(`AI returned unknown field '${fieldKey}' in 'fields' object. Adding to fieldNames.`);
+              if (!parsed.fieldNames.includes(canonicalFormatted)) {
+                parsed.fieldNames.push(canonicalFormatted);
+              }
             }
-          });
-          return false;
-        });
-        delete parsed.fields;
-      }
+          }
+        }
+        delete parsed.fields; // Remove the old 'fields' property as its content is now mapped
+      } // --- END OF CORRECTED 'fields' PROCESSING BLOCK ---
       return parsed;
     } catch (error) {
+      // Improved error logging to capture the malformed raw response from AI
       this._logger.error(
-        `Error extracting university query: ${error.message}. Raw response: ${error.response?.text()}`,
+        `Error extracting university query: ${error.message}. ` +
+          `AI response that caused parsing error (might be undefined if error occurred before getting text): "${(
+            error as any
+          ).response?.text?.()}"`,
         error.stack
-      );
-      return {};
+      ); // Return an empty object to allow for a graceful fallback in the chat method
+      return {
+        search: undefined,
+        type: undefined,
+        country: undefined,
+        size: undefined,
+        minRank: undefined,
+        maxRank: undefined,
+        rank: undefined,
+        subjectNames: [],
+        fieldNames: [],
+        location: undefined,
+        limit: undefined,
+        exportFormat: undefined,
+        exportLimit: undefined,
+        sortOrder: undefined,
+        fields: undefined, // Keep this for the interface definition, but the code effectively moves its data // Include all other properties from UniversityQuery as undefined or their default empty values
+        agricultural_veterinary_sciences: undefined,
+        arts_design: undefined,
+        business_management_law: undefined,
+        education_training: undefined,
+        engineering_technology: undefined,
+        health_medicine: undefined,
+        humanities_languages: undefined,
+        ict: undefined,
+        natural_sciences: undefined,
+        social_behavioral_sciences: undefined,
+        services: undefined,
+        transport_safety_security_military: undefined,
+        exchange: undefined,
+      };
     }
   }
-
   private async generateUniversityResponse(
     userMessage: string,
     universities: UniversityDisplayDto[],

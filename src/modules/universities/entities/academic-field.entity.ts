@@ -21,4 +21,5 @@ export class AcademicFieldEntity extends AbstractEntity {
 
   @OneToMany(() => SubjectEntity, (subject: SubjectEntity) => subject.academicField)
   subjects: SubjectEntity[];
+  isDeleted: any;
 }
