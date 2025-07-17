@@ -123,13 +123,8 @@ export class CreateUniversityDto {
   @Type(() => Boolean)
   exchange?: boolean;
 
-  @ApiPropertyOptional({
-    description: 'List of subject names offered by the university.',
-    type: [String],
-  })
-  @IsNotEmpty({ message: 'Subject names are required' })
-  @IsArray({ message: 'Subject names must be an array' })
-  @IsString({ each: true, message: 'Each subject name must be a string' })
-  @IsString({ each: true, message: 'Each subject name must be a string' })
-  subjects: string[];
+  @ApiPropertyOptional({ description: 'Path to subjects Excel file from contact submission' })
+  @IsNotEmpty()
+  @IsString()
+  subjectsExcelFilePath?: string;
 }

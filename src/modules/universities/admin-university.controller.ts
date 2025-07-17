@@ -24,6 +24,7 @@ import { extname } from 'path';
 import { plainToInstance } from 'class-transformer';
 import { Response } from 'express';
 import { Readable } from 'stream';
+import { Express } from 'express';
 
 import { UniversityService } from './university.service';
 import { GetUniversityDto } from './dto/get-university.dto';
@@ -119,7 +120,7 @@ export class AdminController {
 
   // Create University
   @Post()
-  @ApiOperation({ summary: 'Create university (Admin)' })
+  @ApiOperation({ summary: 'Create a new university (Admin)' })
   @UseInterceptors(
     FileInterceptor('logo', {
       storage: diskStorage({
@@ -132,22 +133,48 @@ export class AdminController {
           return cb(null, `${randomName}${extname(file.originalname)}`);
         },
       }),
+    }),
+    FileInterceptor('subjectsExcel', {
+      storage: diskStorage({
+        destination: './uploads/temp',
+        filename: (req, file, cb) => {
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          return cb(null, `${randomName}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (req, file, cb) => {
+        if (file.mimetype.match(/\/(vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|vnd\.ms-excel)$/)) {
+          cb(null, true);
+        } else {
+          cb(new BadRequestException('Only Excel files are allowed for subjects import!'), false);
+        }
+      },
     })
   )
   async create(
     @Body(new ValidationPipe({ transform: true, whitelist: true })) createDto: CreateUniversityDto,
-    @UploadedFile() logo: Express.Multer.File
+    @UploadedFile('logo') logo: Express.Multer.File,
+    @UploadedFile('subjectsExcel') subjectsExcel?: Express.Multer.File
   ) {
     if (!logo) {
       throw new BadRequestException('Logo file is required.');
     }
-    const createdUniversity = await this._universityService.create({
+
+    const universityData: Partial<CreateUniversityDto> = {
       ...createDto,
       logo: logo.filename,
-    });
-    return plainToInstance(UniversityDto, createdUniversity, {
-      excludeExtraneousValues: true,
-    });
+    };
+
+    if (subjectsExcel) {
+      universityData.subjectsExcelFilePath = subjectsExcel.path;
+    }
+
+    const createdUniversity = await this._universityService.create(universityData as CreateUniversityDto);
+
+    return plainToInstance(UniversityDto, createdUniversity, { excludeExtraneousValues: true });
   }
 
   // Update University
@@ -165,18 +192,42 @@ export class AdminController {
           return cb(null, `${randomName}${extname(file.originalname)}`);
         },
       }),
+    }),
+    FileInterceptor('subjectsExcel', {
+      storage: diskStorage({
+        destination: './uploads/temp',
+        filename: (req, file, cb) => {
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          return cb(null, `${randomName}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (req, file, cb) => {
+        if (file.mimetype.match(/\/(vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|vnd\.ms-excel)$/)) {
+          cb(null, true);
+        } else {
+          cb(new BadRequestException('Only Excel files are allowed for subjects import!'), false);
+        }
+      },
     })
   )
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body(new ValidationPipe({ transform: true, whitelist: true, skipMissingProperties: true }))
     updateDto: UpdateUniversityDto,
-    @UploadedFile() logo?: Express.Multer.File
+    @UploadedFile('logo') logo?: Express.Multer.File,
+    @UploadedFile('subjectsExcel') subjectsExcel?: Express.Multer.File
   ) {
     const universityData = { ...updateDto };
     if (logo) {
       (universityData as any).logo = logo.filename;
     }
+    if (subjectsExcel) {
+      (universityData as any).subjectsExcelFilePath = subjectsExcel.path;
+    }
+
     const updatedUniversity = await this._universityService.updateUniversity(id, universityData);
     if (!updatedUniversity) {
       throw new NotFoundException(`University with ID ${id} not found.`);

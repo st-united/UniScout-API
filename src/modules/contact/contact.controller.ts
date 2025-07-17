@@ -43,7 +43,7 @@ export class ContactController {
   constructor(private readonly _contactService: ContactService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Submit a contact form with optional file attachments and an optional subjects Excel file' })
+  @ApiOperation({ summary: 'Submit contact form' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -73,12 +73,12 @@ export class ContactController {
             format: 'binary',
           },
           maxItems: MAX_ATTACHMENT_FILES,
-          description: 'Optional general attachments (PDF, Word, images) up to 5MB each',
+          description: 'General attachments (PDF, Word, images) up to 5MB each',
         },
         subjectsExcel: {
           type: 'string',
           format: 'binary',
-          description: 'Optional Excel file (.xlsx, .xls) for subjects, up to 5MB',
+          description: 'Excel file (.xlsx, .xls) for subjects, up to 5MB',
         },
       },
       required: ['requestType', 'universityName'],
@@ -219,7 +219,7 @@ export class ContactController {
           });
         });
       }
-      if (tempExcelFilePath) {
+      if (tempExcelFilePath && fs.existsSync(tempExcelFilePath)) {
         fs.unlink(tempExcelFilePath, (err) => {
           if (err)
             console.error(
@@ -256,7 +256,7 @@ export class ContactController {
 
   @Get('template/:filename')
   @ApiOperation({ summary: 'Download template' })
-  @ApiParam({ name: 'filename', description: 'Name of the Excel template file (e.g., Sample.xlsx)' })
+  @ApiParam({ name: 'filename', description: 'Name of the Excel template file (e.g., Subjects_Template.xlsx)' })
   @ApiResponse({
     status: 200,
     description: 'Excel template file downloaded successfully',

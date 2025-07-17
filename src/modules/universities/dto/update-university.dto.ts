@@ -121,4 +121,9 @@ export class UpdateUniversityDto {
   @IsArray({ message: 'Subject names must be an array' })
   @IsString({ each: true, message: 'Each subject name must be a string' })
   subjectNames?: string[];
+
+  @ApiPropertyOptional({ description: 'Path to subjects Excel file from contact submission' })
+  @IsOptional()
+  @IsString()
+  subjectsExcelFilePath?: string;
 }

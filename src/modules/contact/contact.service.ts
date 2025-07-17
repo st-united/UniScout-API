@@ -26,13 +26,20 @@ export class ContactService {
     private readonly _uniRepository: Repository<UniEntity>,
     private readonly _universityService: UniversityService
   ) {
+    const secure = this._configService.get<string>('MAIL_SECURE') === 'true';
+
     this._transporter = nodemailer.createTransport({
       host: this._configService.get<string>('MAIL_HOST'),
-      port: this._configService.get<number>('MAIL_PORT'),
-      secure: this._configService.get<boolean>('MAIL_SECURE'),
+      port: parseInt(this._configService.get<string>('MAIL_PORT') || '587', 10),
+      secure,
+      requireTLS: !secure,
       auth: {
         user: this._configService.get<string>('MAIL_USER'),
         pass: this._configService.get<string>('MAIL_PASSWORD'),
+      },
+      tls: {
+        minVersion: 'TLSv1.2',
+        rejectUnauthorized: false,
       },
     });
   }
@@ -40,10 +47,12 @@ export class ContactService {
   async handleSubmitContactForm(
     createContactDto: CreateContactDto,
     attachmentPaths: string[] = [],
-    excelFilePath?: string
+    excelTempFilePath?: string
   ): Promise<{ message: string }> {
     const senderEmail = createContactDto.representativeEmail;
     this._logger.log(`Received contact form submission from: ${senderEmail || 'Anonymous'}`);
+
+    let permanentExcelFilePath: string | undefined;
 
     try {
       const {
@@ -63,6 +72,18 @@ export class ContactService {
         numberOfStudents,
         description,
       } = createContactDto;
+
+      if (excelTempFilePath && fs.existsSync(excelTempFilePath)) {
+        const uploadsDir = path.join(process.cwd(), 'uploads', 'excel-submissions');
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        const fileName = `${Date.now()}-${path.basename(excelTempFilePath)}`;
+        permanentExcelFilePath = path.join(uploadsDir, fileName);
+
+        fs.renameSync(excelTempFilePath, permanentExcelFilePath);
+        this._logger.log(`Moved Excel file from ${excelTempFilePath} to ${permanentExcelFilePath}`);
+      }
 
       const attachments = attachmentPaths.map((filePath) => ({
         filename: path.basename(filePath),
@@ -87,11 +108,7 @@ export class ContactService {
           <p><strong>University Email:</strong> ${universityEmail || 'N/A'}</p>
           <p><strong>University Number:</strong> ${universityNumber || 'N/A'}</p>
           <p><strong>Website:</strong> <a href="${website}">${website}</a></p>
-          ${
-            excelFilePath
-              ? `<p><strong>Subjects Excel File:</strong> <a href="${excelFilePath}">Download Here</a></p>`
-              : ''
-          }
+          ${permanentExcelFilePath ? `<p><strong>Subjects Excel File:</strong> Available on server</p>` : ''}
           ${
             typeof numberOfStudents === 'number'
               ? `<p><strong>Number of Students:</strong> ${numberOfStudents}</p>`
@@ -109,7 +126,7 @@ export class ContactService {
           University Email: ${universityEmail || 'N/A'}
           University Number: ${universityNumber || 'N/A'}
           Website: ${website}
-          Subjects Excel File: ${excelFilePath || 'N/A'}
+          Subjects Excel File: ${permanentExcelFilePath ? 'Available on server' : 'N/A'}
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
           ${description ? `Description: ${description}\n` : ''}
         `;
@@ -162,7 +179,7 @@ export class ContactService {
         from: `"${representativeName || 'Contact Form'}" <${
           representativeEmail || this._configService.get<string>('EMAIL_USER')
         }>`,
-        to: this._configService.get<string>('CONTACT_FORM_RECEIVER_EMAIL'),
+        to: this._configService.get<string>('MAIL_CONTACT_FORM_RECEIVER_EMAIL'),
         subject: `UNISCOUT - ${requestType} Request from ${representativeName || 'Anonymous'}`,
         html: `
           <p><strong>Request Type:</strong> ${requestType}</p>
@@ -202,11 +219,7 @@ export class ContactService {
           <p><strong>University Email:</strong> ${universityEmail || 'N/A'}</p>
           <p><strong>University Number:</strong> ${universityNumber || 'N/A'}</p>
           <p><strong>Website:</strong> <a href="${website}">${website}</a></p>
-          ${
-            excelFilePath
-              ? `<p><strong>Subjects Excel File:</strong> <a href="${excelFilePath}">Download Here</a></p>`
-              : ''
-          }
+          ${permanentExcelFilePath ? `<p><strong>Subjects Excel File:</strong> Available on server</p>` : ''}
           ${
             typeof numberOfStudents === 'number'
               ? `<p><strong>Number of Students:</strong> ${numberOfStudents}</p>`
@@ -224,7 +237,7 @@ export class ContactService {
           University Email: ${universityEmail || 'N/A'}
           University Number: ${universityNumber || 'N/A'}
           Website: ${website}
-          Subjects Excel File: ${excelFilePath || 'N/A'}
+          Subjects Excel File: ${permanentExcelFilePath ? 'Available on server' : 'N/A'}
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
           ${description ? `Description: ${description}\n` : ''}
         `;
@@ -327,7 +340,7 @@ export class ContactService {
           universityEmail: universityEmail,
           universityNumber: universityNumber,
           website: website,
-          subjectsExcelFilePath: excelFilePath,
+          subjectsExcelFilePath: path.relative(process.cwd(), permanentExcelFilePath),
           studentPopulation: numberOfStudents,
           description: description,
         }),
@@ -344,18 +357,19 @@ export class ContactService {
       );
       throw new Error('Failed to submit contact form. Please try again later.');
     } finally {
+      if (excelTempFilePath && fs.existsSync(excelTempFilePath)) {
+        fs.unlink(excelTempFilePath, (err) => {
+          if (err)
+            this._logger.error(`Failed to delete temporary Excel file: ${excelTempFilePath}, Error: ${err.message}`);
+          else this._logger.log(`Successfully deleted temporary Excel file: ${excelTempFilePath}`);
+        });
+      }
       attachmentPaths.forEach((filePath) => {
         fs.unlink(filePath, (err) => {
           if (err) this._logger.error(`Failed to delete temporary attachment file: ${filePath}, Error: ${err.message}`);
           else this._logger.log(`Successfully deleted temporary attachment file: ${filePath}`);
         });
       });
-      if (excelFilePath && fs.existsSync(excelFilePath) && !excelFilePath.startsWith('http')) {
-        fs.unlink(excelFilePath, (err) => {
-          if (err) this._logger.error(`Failed to delete temporary Excel file: ${excelFilePath}, Error: ${err.message}`);
-          else this._logger.log(`Successfully deleted temporary Excel file: ${excelFilePath}`);
-        });
-      }
     }
   }
 
