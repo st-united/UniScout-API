@@ -13,9 +13,9 @@ export class SearchLogService {
     private readonly _uniRepo: Repository<UniEntity>
   ) {}
 
-  async logSearch(university: string, country: string) {
+  async logSearch(university: string) {
     if (!university || university.trim().length < 2) return;
-    const log = this._searchLogRepo.create({ university, country });
+    const log = this._searchLogRepo.create({ university });
     await this._searchLogRepo.save(log);
   }
 
@@ -28,7 +28,10 @@ export class SearchLogService {
       .orderBy('count', 'DESC')
       .getRawMany();
 
-    const enrichedMap = new Map<string, { name: string; logo: string | null; country: string; count: number }>();
+    const enrichedMap = new Map<
+      string,
+      { name: string; logo: string | null; country: string; location: string | null; count: number }
+    >();
 
     for (const entry of logs) {
       const term = entry.searchTerm;
@@ -43,6 +46,7 @@ export class SearchLogService {
           name: uni.university,
           logo: uni.logo || null,
           country: uni.country,
+          location: uni.location || null,
           count: Number(entry.count),
         });
       }
@@ -52,17 +56,6 @@ export class SearchLogService {
     return Array.from(enrichedMap.values())
       .sort((a, b) => b.count - a.count)
       .slice(0, limit);
-  }
-
-  async getTrafficByCountry(limit = 10) {
-    return this._searchLogRepo
-      .createQueryBuilder('log')
-      .select('log.country', 'country')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('log.country')
-      .orderBy('count', 'DESC')
-      .limit(limit)
-      .getRawMany();
   }
 
   async totalSearches() {

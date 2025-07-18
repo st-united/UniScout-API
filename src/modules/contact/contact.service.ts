@@ -510,4 +510,42 @@ export class ContactService {
   async getAvailableCountriesForContactForm(): Promise<string[]> {
     return this._universityService.getAllAvailableCountries();
   }
+
+  async countSubmissionsByStatus(
+    month?: number,
+    year?: number,
+    status?: SubmissionStatusEnum
+  ): Promise<Array<{ status: SubmissionStatusEnum; count: number }>> {
+    const qb = this._contactSubmissionRepo.createQueryBuilder('submission');
+
+    if (year) {
+      qb.andWhere('EXTRACT(YEAR FROM submission.submittedAt) = :year', { year });
+    }
+    if (month) {
+      qb.andWhere('EXTRACT(MONTH FROM submission.submittedAt) = :month', { month });
+    }
+    if (status) {
+      qb.andWhere('submission.status = :status', { status });
+    }
+
+    qb.select('submission.status', 'status').addSelect('COUNT(*)', 'count').groupBy('submission.status');
+
+    const result = await qb.getRawMany();
+
+    const finalResult: Array<{ status: SubmissionStatusEnum; count: number }> = Object.values(SubmissionStatusEnum).map(
+      (s) => ({
+        status: s,
+        count: 0,
+      })
+    );
+
+    result.forEach((row) => {
+      const index = finalResult.findIndex((item) => item.status === row.status);
+      if (index !== -1) {
+        finalResult[index].count = parseInt(row.count, 10);
+      }
+    });
+
+    return finalResult;
+  }
 }

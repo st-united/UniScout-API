@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserController } from './university.controller';
 import { AdminController } from './admin-university.controller';
@@ -11,7 +11,10 @@ import { AcademicFieldEntity } from './entities/academic-field.entity';
 import { DashboardModule } from '@DashboardModule/dashboard.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UniEntity, SubjectEntity, AcademicFieldEntity]), DashboardModule],
+  imports: [
+    TypeOrmModule.forFeature([UniEntity, SubjectEntity, AcademicFieldEntity]),
+    forwardRef(() => DashboardModule),
+  ],
   controllers: [UserController, AdminController],
   providers: [UniversityService, CsvImport, IsCountryValidConstraint, IsUniqueConstraint],
   exports: [UniversityService, CsvImport],

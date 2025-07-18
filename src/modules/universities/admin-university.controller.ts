@@ -56,7 +56,7 @@ export class AdminController {
     this._logger.log('Raw Query Params (req.query) for Admin List:', req.query);
     this._logger.log('Transformed Query DTO (query) for Admin List:', query);
 
-    const { universities, totalCount, currentPage, limit } = await this._universityService.findAll(query, req.ip, true);
+    const { universities, totalCount, currentPage, limit } = await this._universityService.findAll(query, true);
 
     if (!universities || universities.length === 0) {
       return {
@@ -108,8 +108,8 @@ export class AdminController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get university by ID (Admin)' })
-  async getUniversity(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
-    const university = await this._universityService.getUniversity(id, req.ip);
+  async getUniversity(@Param('id', ParseIntPipe) id: number) {
+    const university = await this._universityService.getUniversity(id);
     if (!university) {
       throw new NotFoundException(`University with ID ${id} not found.`);
     }
