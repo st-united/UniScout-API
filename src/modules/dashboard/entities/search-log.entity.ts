@@ -8,11 +8,6 @@ export class SearchLogEntity {
   @Column()
   university: string;
 
-  @Column()
-  country: string;
-
   @CreateDateColumn()
   searched_at: Date;
 }
-
-//Redefine country: University or User

@@ -19,7 +19,7 @@ import { AcademicFieldEntity } from './entities/academic-field.entity';
 import { GetUniversityDto, UniversitySizeEnum, SortOrderEnum } from './dto/get-university.dto';
 import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
-import { GeoIpService, SearchLogService, TrackingService } from '@DashboardModule/services';
+import { SearchLogService, TrackingService } from '@DashboardModule/services';
 import { ExportUniversityDto, ExportFormat } from './dto/export-university.dto';
 import { UniversityDto, UniversityDisplayDto } from './dto/university.dto';
 import { GetSubjectsDto } from './dto/get-subject-dto';
@@ -53,8 +53,6 @@ export class UniversityService {
     private readonly _subjectRepository: Repository<SubjectEntity>,
     @InjectRepository(AcademicFieldEntity)
     private readonly _academicFieldRepository: Repository<AcademicFieldEntity>,
-    private readonly _trackingService: TrackingService,
-    private readonly _geoIpService: GeoIpService,
     private readonly _searchLogService: SearchLogService
   ) {}
 
@@ -290,18 +288,6 @@ export class UniversityService {
     throw new InternalServerErrorException(`Operation failed in ${context}${identifier}: ${error.message}`);
   }
 
-  private async _logSearch(searchTerm: string, ipAddress?: string): Promise<void> {
-    let country = 'Unknown';
-    if (ipAddress) {
-      country = await this._geoIpService.getCountryFromIp(ipAddress);
-      this._logger.log(`Country resolved by GeoIpService for search: ${country}`);
-    } else {
-      this._logger.warn('No IP address provided to UniversityService.findAll. Country will be Unknown.');
-    }
-    await this._searchLogService.logSearch(searchTerm, country);
-    this._logger.log(`Logging search with country: ${country}`);
-  }
-
   private async _transformUniEntityToDisplayDto(
     uniEntity: UniEntity,
     allAcademicFieldNames: string[]
@@ -328,14 +314,6 @@ export class UniversityService {
 
     transformedUni.subjectsList = uniEntity.subjects?.map((s) => s.name).join(', ') || 'NA';
 
-    if (uniDtoExchange === true) {
-      transformedUni.exchange = 'Yes';
-    } else if (uniDtoExchange === false) {
-      transformedUni.exchange = 'No';
-    } else {
-      transformedUni.exchange = '-';
-    }
-
     for (const key in transformedUni) {
       if (
         key === 'exchange' ||
@@ -355,13 +333,6 @@ export class UniversityService {
     return transformedUni;
   }
 
-  /**
-   * Helper method to process and validate subjects from an array of names.
-   * This version assumes all subjects already exist in the database.
-   * @param subjects - An array of subject names.
-   * @returns An object containing arrays of SubjectEntity and AcademicFieldEntity.
-   * @throws NotFoundException if any subject from the input array is not found in the database.
-   */
   private async _processUniversitySubjects(
     subjects: string[]
   ): Promise<{ subjectEntities: SubjectEntity[]; academicFields: AcademicFieldEntity[] }> {
@@ -395,7 +366,7 @@ export class UniversityService {
 
   async findAll(
     query?: GetUniversityDto,
-    ipAddress?: string,
+
     isAdminContext = false
   ): Promise<UniversityPaginationResult> {
     try {
@@ -410,7 +381,8 @@ export class UniversityService {
         if (isAdminContext) {
           this._logger.log(`Admin search performed: "${query.search}"`);
         } else {
-          await this._logSearch(query.search, ipAddress);
+          this._logger.log(`User search performed: "${query.search}"`);
+          await this._searchLogService.logSearch(query.search);
         }
       }
 
@@ -422,26 +394,21 @@ export class UniversityService {
   }
 
   //View University
-  async getUniversity(id: number, ipAddress?: string): Promise<UniversityDisplayDto> {
-    try {
-      const university = await this._getUniversityById(id);
+  async getUniversity(id: number): Promise<UniversityDisplayDto> {
+    const university = await this._uniRepository.findOne({
+      where: { id },
+      relations: ['academicFields', 'subjects'],
+    });
 
-      let country = 'Unknown';
-      if (ipAddress) {
-        country = await this._geoIpService.getCountryFromIp(ipAddress);
-        this._logger.log(`Country resolved by GeoIpService for getUniversity: ${country}`);
-        await this._trackingService.incrementCountryTraffic(country);
-      } else {
-        this._logger.warn('No IP address provided to UniversityService.getUniversity. Country will be Unknown.');
-      }
-
-      this._logger.log(`Tracking view for university ID ${id} with country: ${country}`);
-
-      const allAcademicFieldNames = await this.getAllAcademicFieldNamesDefined();
-      return this._transformUniEntityToDisplayDto(university, allAcademicFieldNames);
-    } catch (error) {
-      this._handleServiceError(error, 'getUniversity', id);
+    if (!university) {
+      throw new NotFoundException(`University with ID ${id} not found`);
     }
+
+    if (university.university) {
+      await this._searchLogService.logSearch(university.university);
+    }
+
+    return plainToInstance(UniversityDisplayDto, university);
   }
 
   //View University (Admin)
@@ -610,12 +577,6 @@ export class UniversityService {
     }
   }
 
-  /**
-   * Extracts subject names from a given Excel file path.
-   * Assumes specific columns for subject names and boolean flags.
-   * @param filePath The path to the Excel file.
-   * @returns A promise that resolves to an array of unique subject names.
-   */
   public async extractSubjectsFromExcel(filePath: string): Promise<string[]> {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(filePath);
@@ -723,10 +684,6 @@ export class UniversityService {
     }
   }
 
-  /**
-   * Deletes a temporary file from the file system.
-   * @param filePath The full path to the file to delete.
-   */
   private async _deleteTempFile(filePath: string): Promise<void> {
     try {
       await unlink(filePath);

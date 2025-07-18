@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ContactController } from './contact.controller';
 import { AdminContactController } from './admin-contact.controller';
 import { ContactService } from './contact.service';
@@ -8,16 +8,16 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ContactSubmissionEntity } from './entities';
 import { AcademicFieldEntity, SubjectEntity, UniEntity } from '@UniversitiesModule/entities';
 import { UniversitiesModule } from '@UniversitiesModule/university.module';
-import { Subject } from 'rxjs';
 
 @Module({
   imports: [
     MulterModule.register({}),
     ConfigModule,
     TypeOrmModule.forFeature([ContactSubmissionEntity, UniEntity, SubjectEntity, AcademicFieldEntity]),
-    UniversitiesModule,
+    forwardRef(() => UniversitiesModule),
   ],
   controllers: [ContactController, AdminContactController],
   providers: [ContactService],
+  exports: [ContactService],
 })
 export class ContactModule {}

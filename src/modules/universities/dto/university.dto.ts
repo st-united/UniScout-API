@@ -1,4 +1,5 @@
 import { Expose, Transform } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class UniversityDto {
   @Expose() id: number;
@@ -43,27 +44,97 @@ export class UniversityDto {
   subjectsList?: string;
 }
 
-export interface UniversityDisplayDto {
+export class UniversityDisplayDto {
+  @Expose()
+  @ApiProperty()
   id: number;
+
+  @Expose()
+  @ApiProperty()
   university: string;
+
+  @Expose()
+  @ApiProperty()
   abbreviation: string;
+
+  @Expose()
+  @ApiProperty()
   latitude: number;
+
+  @Expose()
+  @ApiProperty()
   longitude: number;
+
+  @Expose()
+  @ApiProperty({ required: false })
   logo?: string;
+
+  @Expose()
+  @ApiProperty({ required: false })
   rank?: number;
+
+  @Expose()
+  @ApiProperty({ required: false })
   type?: string;
+
+  @Expose()
+  @ApiProperty()
   country: string;
+
+  @Expose()
+  @ApiProperty({ required: false })
   location?: string;
+
+  @Expose()
+  @ApiProperty({ required: false })
   studentPopulation?: number;
+
+  @Expose()
+  @ApiProperty({ enum: ['small', 'medium', 'large', 'extra large'], required: false })
   size: 'small' | 'medium' | 'large' | 'extra large' | null;
+
+  @Expose()
+  @ApiProperty({ required: false })
   year?: number;
+
+  @Expose()
+  @ApiProperty({ required: false })
   contact?: string;
+
+  @Expose()
+  @ApiProperty({ required: false })
   email?: string;
+
+  @Expose()
+  @ApiProperty({ required: false })
   website?: string;
+
+  @Expose()
+  @ApiProperty({ required: false })
   strength?: string;
+
+  @Expose()
+  @ApiProperty({ required: false })
   description?: string;
+
+  @Expose()
+  @ApiProperty({ required: false, description: 'Indicates if exchange is available (Yes/No/-)' })
+  @Transform(({ value }) => {
+    if (value === true) {
+      return 'Yes';
+    } else if (value === false) {
+      return 'No';
+    } else {
+      return '-';
+    }
+  })
   exchange?: string;
+
+  @Expose()
+  @ApiProperty({ required: false })
   academicFieldsCommaSeparated?: string;
+
+  @Expose()
+  @ApiProperty({ required: false })
   subjectsList?: string;
-  [key: string]: any;
 }

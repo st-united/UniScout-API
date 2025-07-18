@@ -40,7 +40,7 @@ export class UserController {
     this._logger.log('Transformed Query DTO (query):', query);
     this._logger.log('Query.fieldNames:', query.fieldNames);
 
-    const { universities, totalCount, currentPage, limit } = await this._universityService.findAll(query, req.ip);
+    const { universities, totalCount, currentPage, limit } = await this._universityService.findAll(query);
 
     if (!universities || universities.length === 0) {
       return {
@@ -120,8 +120,8 @@ export class UserController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get university by ID (User)' })
-  async getUniversity(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
-    const university = await this._universityService.getUniversity(id, req.ip);
+  async getUniversity(@Param('id', ParseIntPipe) id: number) {
+    const university = await this._universityService.getUniversity(id);
     if (!university) {
       throw new NotFoundException(`University with ID ${id} not found.`);
     }

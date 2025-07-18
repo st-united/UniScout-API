@@ -230,10 +230,7 @@ export class ChatbotService {
                 ...uni,
                 exchange: String(uni.exchange),
                 size: this.categorizeUniversitySize(uni.studentPopulation),
-                subjects:
-                  uni.subjects && Array.isArray(uni.subjects)
-                    ? (uni.subjects as any[]).map((s) => s.name).join(', ')
-                    : '',
+                subjects: uni.subjectsList && uni.subjectsList !== 'NA' ? uni.subjectsList : '',
               }))
             )}.\n\n`;
           }
@@ -314,8 +311,7 @@ export class ChatbotService {
           ...uni,
           exchange: String(uni.exchange),
           size: this.categorizeUniversitySize(uni.studentPopulation),
-          subjects:
-            uni.subjects && Array.isArray(uni.subjects) ? (uni.subjects as any[]).map((s) => s.name).join(', ') : '',
+          subjects: uni.subjectsList && uni.subjectsList !== 'NA' ? uni.subjectsList : '',
         }));
 
         try {
@@ -366,8 +362,7 @@ export class ChatbotService {
         ...uni,
         exchange: String(uni.exchange),
         size: this.categorizeUniversitySize(uni.studentPopulation),
-        subjects:
-          uni.subjects && Array.isArray(uni.subjects) ? (uni.subjects as any[]).map((s) => s.name).join(', ') : '',
+        subjects: uni.subjectsList && uni.subjectsList !== 'NA' ? uni.subjectsList : '',
       }));
       responseText = await this.generateUniversityResponse(
         message,
@@ -451,7 +446,7 @@ export class ChatbotService {
 
     universities.forEach((uni) => {
       this.CANONICAL_UNIVERSITY_FIELDS.forEach((fieldKey) => {
-        if (uni[fieldKey as keyof UniversityDisplayDto] === true) {
+        if (uni[fieldKey as keyof UniversityDisplayDto] === 'Yes') {
           allAcademicFieldsFound.push(this.formatFieldKeyForDisplay(fieldKey));
         }
       });
@@ -460,8 +455,8 @@ export class ChatbotService {
         allAcademicFieldsFound.push(...uni.academicFieldsCommaSeparated.split(', ').map((field) => field.trim()));
       }
 
-      if (uni.subjects && uni.subjects !== 'NA') {
-        subjectsFromDto.push(...uni.subjects.split(', ').map((subject) => subject.trim()));
+      if (uni.subjectsList && uni.subjectsList !== 'NA') {
+        subjectsFromDto.push(...uni.subjectsList.split(', ').map((subject) => subject.trim()));
       }
     });
 
@@ -511,7 +506,7 @@ export class ChatbotService {
     };
 
     this.CANONICAL_UNIVERSITY_FIELDS.forEach((key) => {
-      if (uni[key as keyof UniversityDisplayDto] === true) {
+      if (uni[key as keyof UniversityDisplayDto] === 'Yes') {
         fields.push(fieldMap[key]);
       }
     });

@@ -1,16 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
 
 @Entity('tracking')
-@Unique(['country'])
 export class TrackingEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
-  country: string;
-
-  @Column({ default: 0 })
-  count: number;
+  @CreateDateColumn()
+  accessed_at: Date;
 }
-
-//Redefine country: University or User

@@ -10,18 +10,24 @@ export class TrackingService {
     private readonly _trackingRepo: Repository<TrackingEntity>
   ) {}
 
-  async incrementCountryTraffic(country: string) {
-    const record = await this._trackingRepo.findOne({ where: { country } });
-
-    if (record) {
-      record.count += 1;
-      await this._trackingRepo.save(record);
-    } else {
-      await this._trackingRepo.save({ country, count: 1 });
-    }
+  async logWebsiteAccess() {
+    await this._trackingRepo.save({ accessed_at: new Date() });
   }
 
-  async getTrafficByCountry() {
-    return this._trackingRepo.find({ order: { count: 'DESC' } });
+  async getTotalWebsiteAccesses() {
+    return this._trackingRepo.count();
+  }
+
+  async getWebsiteAccessesByMonthAndYear(month?: number, year?: number) {
+    const query = this._trackingRepo.createQueryBuilder('tracking');
+
+    if (year) {
+      query.andWhere('EXTRACT(YEAR FROM tracking.accessed_at) = :year', { year });
+    }
+    if (month) {
+      query.andWhere('EXTRACT(MONTH FROM tracking.accessed_at) = :month', { month });
+    }
+
+    return query.getCount();
   }
 }
