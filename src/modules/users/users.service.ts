@@ -166,17 +166,66 @@ export class UsersService {
     const usersQuery = this.userRepository
       .createQueryBuilder('users')
       .select(['users.id', 'users.name', 'users.email', 'users.role', 'users.job', 'users.status', 'users.createdAt'])
-      .where('users.status = ANY(:status)', {
-        status: params.status ? [params.status] : [StatusEnum.ACTIVE, StatusEnum.INACTIVE, StatusEnum.PENDING],
-      })
-      .andWhere('LOWER(users.name) LIKE LOWER(:name)', {
-        name: `%${params.search ?? ''}%`,
-      })
-      .orderBy(`users.${params.orderBy}`, params.order)
-      .skip(params.skip)
-      .take(params.take);
+      .andWhere('users.deletedAt IS NULL'); // Always filter out soft-deleted users
 
-    usersQuery.andWhere('users.deletedAt IS NULL');
+    // 1. Search filter (name, email, phone)
+    if (params.search) {
+      const searchTerm = `%${params.search.toLowerCase()}%`;
+      usersQuery.andWhere(
+        '(LOWER(users.name) LIKE :searchTerm OR LOWER(users.email) LIKE :searchTerm OR LOWER(users.phone) LIKE :searchTerm)',
+        { searchTerm }
+      );
+    }
+
+    // 2. Status filter
+    if (params.status) {
+      // If params.status is provided, filter by that single status
+      usersQuery.andWhere('users.status = :status', { status: params.status });
+    } else {
+      // Default: If no status is provided, get all active, inactive, pending, blocked
+      usersQuery.andWhere('users.status IN (:...defaultStatuses)', {
+        defaultStatuses: [StatusEnum.ACTIVE, StatusEnum.INACTIVE, StatusEnum.PENDING, StatusEnum.BLOCKED],
+      });
+    }
+
+    // 3. Role filter
+    if (params.role && params.role.length > 0) {
+      // Check if array exists AND is not empty
+      usersQuery.andWhere('users.role IN (:...roles)', { roles: params.role });
+    }
+
+    // 4. Job filter
+    if (params.job && params.job.length > 0) {
+      // Check if array exists AND is not empty
+      usersQuery.andWhere('users.job IN (:...jobs)', { jobs: params.job });
+    }
+
+    // 5. Creation Date Range filter
+    if (params.createdAtStart || params.createdAtEnd) {
+      const startDate = params.createdAtStart ? new Date(params.createdAtStart) : null;
+      const endDate = params.createdAtEnd ? new Date(params.createdAtEnd) : null;
+
+      if (startDate && endDate) {
+        // To ensure the end date includes the full day
+        endDate.setHours(23, 59, 59, 999);
+        usersQuery.andWhere('users.createdAt BETWEEN :startDate AND :endDate', {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        });
+      } else if (startDate) {
+        usersQuery.andWhere('users.createdAt >= :startDate', { startDate: startDate.toISOString() });
+      } else if (endDate) {
+        endDate.setHours(23, 59, 59, 999); // Include full end day
+        usersQuery.andWhere('users.createdAt <= :endDate', { endDate: endDate.toISOString() });
+      }
+    }
+
+    // Order by clause
+    usersQuery.orderBy(`users.${params.orderBy || 'createdAt'}`, params.order || 'DESC'); // Default sort by createdAt DESC
+
+    // Pagination clause
+    usersQuery.skip(params.skip);
+    usersQuery.take(params.take);
 
     const [result, total] = await usersQuery.getManyAndCount();
 
