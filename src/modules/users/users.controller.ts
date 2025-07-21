@@ -28,10 +28,10 @@ import { UserDto } from './dto/user.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from '@AuthModule/guards/roles.guard';
 import { Roles } from '@AuthModule/decorators/roles.decorator';
-import { UserRole } from '@Constant/enums';
+import { Job, StatusEnum, UserRole } from '@Constant/enums';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserListResponseDto } from './dto/user-list-response.dto';
-import { ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 
 @Controller('users')
 @UseGuards(JwtAccessTokenGuard)
@@ -90,6 +90,73 @@ export class UsersController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles(UserRole.SUPER)
+  @ApiOperation({ summary: 'Get a paginated and filterable list of users (SUPER only)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
+  @ApiQuery({ name: 'take', required: false, type: Number, description: 'Items per page' })
+  @ApiQuery({
+    name: 'orderBy',
+    required: false,
+    type: String,
+    description: 'Field to order by (e.g., createdAt, name)',
+  })
+  @ApiQuery({
+    name: 'order',
+    required: false,
+    enum: ['ASC', 'DESC'],
+    description: 'Order direction (ASC or DESC)',
+    type: String, // FIXED: Changed type: [] to type: String
+  })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by name, email, or phone' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String, // Keep as String for single enum value as per your DTO
+    enum: StatusEnum,
+    description: 'Filter by user status (e.g., ACTIVE, PENDING)',
+  })
+  @ApiQuery({
+    name: 'role',
+    required: false,
+    isArray: true,
+    schema: {
+      type: 'array',
+      items: {
+        type: 'string',
+        enum: Object.values(UserRole),
+      },
+    },
+    description: 'Filter by user role (can be multiple)',
+  })
+  @ApiQuery({
+    name: 'job',
+    required: false,
+    // type: [String], // <--- REMOVE THIS LINE
+    isArray: true, // <--- ADD THIS LINE
+    schema: {
+      // <--- ADD THIS BLOCK
+      type: 'array',
+      items: {
+        type: 'string',
+        enum: Object.values(Job), // Use Object.values to get string values from enum
+      },
+    },
+    description: 'Filter by user job (can be multiple)',
+  })
+  @ApiQuery({
+    name: 'createdAtStart',
+    required: false,
+    type: String,
+    description: 'Filter by creation date from (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'createdAtEnd',
+    required: false,
+    type: String,
+    description: 'Filter by creation date to (YYYY-MM-DD)',
+  })
+  @ApiResponse({ status: 200, description: 'Users retrieved successfully', type: UserListResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden (Insufficient role)' })
   async getUsers(@Query() getUsersDto: GetUsersDto): Promise<ResponsePaginate<UserListResponseDto>> {
     return await this.usersService.getUsers(getUsersDto);
   }

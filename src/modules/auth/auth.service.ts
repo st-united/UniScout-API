@@ -28,7 +28,7 @@ export class AuthService {
     private userRepository: Repository<UserEntity>
   ) {
     this.MAX_LOGIN_ATTEMPTS = this.configService.get<number>('MAX_LOGIN_ATTEMPTS', 3);
-    this.LOCKOUT_DURATION_MINUTES = this.configService.get<number>('LOCKOUT_DURATION_MINUTES', 15);
+    this.LOCKOUT_DURATION_MINUTES = this.configService.get<number>('LOCKOUT_DURATION_MINUTES', 1);
   }
 
   async register(registerDto: RegisterUserDto): Promise<ResponseItem<UserDto>> {
@@ -64,13 +64,19 @@ export class AuthService {
       if (!user) {
         throw new UnauthorizedException('Invalid username or password.');
       }
-
-      if (user.lockoutUntil && user.lockoutUntil > new Date()) {
-        const remainingTime = Math.ceil((user.lockoutUntil.getTime() - new Date().getTime()) / (1000 * 60));
-        throw new UnauthorizedException(`Account locked. Please try again in ${remainingTime} minutes.`);
+      if (user.status === StatusEnum.BLOCKED) {
+        if (user.lockoutUntil && user.lockoutUntil > new Date()) {
+          const remainingTime = Math.ceil((user.lockoutUntil.getTime() - new Date().getTime()) / (1000 * 60));
+          throw new UnauthorizedException(`Account locked. Please try again in ${remainingTime} minutes.`);
+        } else {
+          user.status = StatusEnum.ACTIVE;
+          user.failedLoginAttempts = 0;
+          user.lockoutUntil = null;
+          await this.userRepository.save(user);
+        }
       }
 
-      if (user.status !== StatusEnum.ACTIVE) {
+      if (user.status !== StatusEnum.ACTIVE && user.status !== StatusEnum.PENDING) {
         throw new UnauthorizedException('Account is not active. Please contact support.');
       }
 
@@ -82,6 +88,7 @@ export class AuthService {
         if (user.failedLoginAttempts >= this.MAX_LOGIN_ATTEMPTS) {
           user.lockoutUntil = new Date(Date.now() + this.LOCKOUT_DURATION_MINUTES * 60 * 1000);
           user.failedLoginAttempts = 0;
+          user.status = StatusEnum.BLOCKED;
           await this.userRepository.save(user);
           throw new UnauthorizedException(
             `Invalid username or password. Account locked for ${this.LOCKOUT_DURATION_MINUTES} minutes due to multiple failed attempts.`
@@ -90,6 +97,9 @@ export class AuthService {
           await this.userRepository.save(user);
           throw new UnauthorizedException('Invalid username or password.');
         }
+      }
+      if (user.status === StatusEnum.PENDING) {
+        user.status = StatusEnum.ACTIVE;
       }
 
       user.failedLoginAttempts = 0;
