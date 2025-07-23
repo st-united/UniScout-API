@@ -122,18 +122,18 @@ export class AdminController {
   @Post()
   @ApiOperation({ summary: 'Create a new university (Admin)' })
   @UseInterceptors(
-    FileInterceptor('logo', {
-      storage: diskStorage({
-        destination: './uploads/university',
-        filename: (req, file, cb) => {
-          const randomName = Array(32)
-            .fill(null)
-            .map(() => Math.round(Math.random() * 16).toString(16))
-            .join('');
-          return cb(null, `${randomName}${extname(file.originalname)}`);
-        },
-      }),
-    }),
+    // FileInterceptor('logo', {
+    //   storage: diskStorage({
+    //     destination: './uploads/university',
+    //     filename: (req, file, cb) => {
+    //       const randomName = Array(32)
+    //         .fill(null)
+    //         .map(() => Math.round(Math.random() * 16).toString(16))
+    //         .join('');
+    //       return cb(null, `${randomName}${extname(file.originalname)}`);
+    //     },
+    //   }),
+    // }),
     FileInterceptor('subjectsExcel', {
       storage: diskStorage({
         destination: './uploads/temp',
@@ -156,16 +156,16 @@ export class AdminController {
   )
   async create(
     @Body(new ValidationPipe({ transform: true, whitelist: true })) createDto: CreateUniversityDto,
-    @UploadedFile('logo') logo: Express.Multer.File,
+    // @UploadedFile('logo') logo: Express.Multer.File,
     @UploadedFile('subjectsExcel') subjectsExcel?: Express.Multer.File
   ) {
-    if (!logo) {
-      throw new BadRequestException('Logo file is required.');
-    }
+    // if (!logo) {
+    //   throw new BadRequestException('Logo file is required.');
+    // }
 
     const universityData: Partial<CreateUniversityDto> = {
       ...createDto,
-      logo: logo.filename,
+      // logo: logo.filename,
     };
 
     if (subjectsExcel) {
