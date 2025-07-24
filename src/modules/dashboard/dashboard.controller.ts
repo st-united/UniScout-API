@@ -1,10 +1,13 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { UserOverviewDto } from './dto/user-overview.dto';
 import { UserRole } from '@Constant/enums';
 import { Roles } from '@AuthModule/decorators/roles.decorator';
 import { ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { SubmissionStatusEnum } from '@ContactModule/entities';
+
+import { JwtAccessTokenGuard } from '../auth/guards/jwt-access-token.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 @Controller('dashboard')
 export class DashboardController {
@@ -62,7 +65,8 @@ export class DashboardController {
   }
 
   @Get('users-overview')
-  @Roles(UserRole.SUPER, UserRole.ADMIN)
+  @UseGuards(JwtAccessTokenGuard, RolesGuard)
+  @Roles(UserRole.SUPER)
   @ApiOperation({ summary: 'Get an overview of user statistics by status' })
   @ApiResponse({ status: 200, description: 'User overview fetched successfully', type: UserOverviewDto })
   getUserOverview() {
