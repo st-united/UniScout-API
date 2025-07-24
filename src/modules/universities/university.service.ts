@@ -334,34 +334,40 @@ export class UniversityService {
   }
 
   private async _processUniversitySubjects(
-    subjects: string[]
+    subjects: { subject: string; academicField: string }[]
   ): Promise<{ subjectEntities: SubjectEntity[]; academicFields: AcademicFieldEntity[] }> {
     if (!subjects || subjects.length === 0) {
       return { subjectEntities: [], academicFields: [] };
     }
 
-    const subjectEntities = await this._subjectRepository.find({
-      where: { name: In(subjects) },
-      relations: ['academicField'],
-    });
+    const subjectEntities: SubjectEntity[] = [];
 
-    if (subjectEntities.length !== subjects.length) {
-      const foundNames = new Set(subjectEntities.map((s) => s.name));
-      const missingNames = subjects.filter((name) => !foundNames.has(name));
-      throw new NotFoundException(
-        `One or more subjects not found in the database: ${missingNames.join(
-          ', '
-        )}. Please ensure all subjects in the Excel file exist in the system.`
-      );
-    }
+    for (const { subject, academicField } of subjects) {
+      const found = await this._subjectRepository.findOne({
+        where: { name: subject },
+        relations: ['academicFields'],
+      });
 
-    const academicFieldsSet = new Set<AcademicFieldEntity>();
-    for (const subject of subjectEntities) {
-      if (subject.academicField) {
-        academicFieldsSet.add(subject.academicField);
+      if (!found) {
+        throw new NotFoundException(
+          `Subject "${subject}" not found under academic field "${academicField}". Please check your Excel file or database.`
+        );
       }
+
+      subjectEntities.push(found);
     }
-    return { subjectEntities, academicFields: Array.from(academicFieldsSet) };
+
+    const allAcademicFields = subjectEntities.flatMap((s) => s.academicFields);
+
+    const uniqueAcademicFieldsMap = new Map<number, AcademicFieldEntity>();
+    allAcademicFields.forEach((af) => {
+      if (!uniqueAcademicFieldsMap.has(af.id)) {
+        uniqueAcademicFieldsMap.set(af.id, af);
+      }
+    });
+    const academicFields = Array.from(uniqueAcademicFieldsMap.values());
+
+    return { subjectEntities, academicFields };
   }
 
   async findAll(
@@ -500,7 +506,7 @@ export class UniversityService {
   async getAllSubjects(query?: GetSubjectsDto): Promise<SubjectEntity[]> {
     try {
       const qb = this._subjectRepository.createQueryBuilder('subject');
-      qb.leftJoinAndSelect('subject.academicField', 'academicField');
+      qb.leftJoinAndSelect('subject.academicFields', 'academicField');
 
       if (query?.startsWith?.trim()) {
         const startsWithTerm = query.startsWith.trim().toLowerCase();
@@ -554,7 +560,9 @@ export class UniversityService {
     if (dto.subjectsExcelFilePath) {
       excelFilePathToDelete = dto.subjectsExcelFilePath;
       try {
-        const subjectsFromFile = await this.extractSubjectsFromExcel(dto.subjectsExcelFilePath);
+        const subjectsFromFile: { subject: string; academicField: string }[] = await this.extractSubjectsFromExcel(
+          dto.subjectsExcelFilePath
+        );
         const { subjectEntities, academicFields } = await this._processUniversitySubjects(subjectsFromFile);
         uni.subjects = subjectEntities;
         uni.academicFields = academicFields;
@@ -589,29 +597,53 @@ export class UniversityService {
     }
   }
 
-  public async extractSubjectsFromExcel(filePath: string): Promise<string[]> {
+  public async extractSubjectsFromExcel(filePath: string): Promise<{ subject: string; academicField: string }[]> {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(filePath);
 
     const worksheet = workbook.worksheets[0];
     const selectedSubjects: Set<string> = new Set();
 
+    const academicFieldNameMap: Record<string, string> = {
+      'Agricultural and Veterinary Sciences': 'agricultural_veterinary_sciences',
+      'Arts and Design': 'arts_design',
+      'Business, Management and Law': 'business_management_law',
+      'Education and Training': 'education_training',
+      'Engineering and Technology': 'engineering_technology',
+      'Health and Medicine': 'health_medicine',
+      'Humanities and Languages': 'humanities_languages',
+      ICT: 'ict',
+      'Natural Sciences': 'natural_sciences',
+      'Social and Behavioral Sciences': 'social_behavioral_sciences',
+      Services: 'services',
+      'Transport, Safety and Security, Military': 'transport_safety_security_military',
+    };
+
     worksheet.eachRow((row) => {
+      const field1Raw = row.getCell(1).text?.trim();
       const subject1 = row.getCell(2).text?.trim();
       const bool1 = row.getCell(4).value;
 
-      const subject2 = row.getCell(5).text?.trim();
-      const bool2 = row.getCell(7).value;
+      const field2Raw = row.getCell(5).text?.trim();
+      const subject2 = row.getCell(6).text?.trim();
+      const bool2 = row.getCell(8).value;
 
-      if ((bool1 === true || String(bool1).toUpperCase() === 'TRUE') && subject1) {
-        selectedSubjects.add(subject1);
+      const field1 = academicFieldNameMap[field1Raw];
+      const field2 = academicFieldNameMap[field2Raw];
+
+      if ((bool1 === true || String(bool1).toUpperCase() === 'TRUE') && subject1 && field1) {
+        selectedSubjects.add(`${field1}|||${subject1}`);
       }
-      if ((bool2 === true || String(bool2).toUpperCase() === 'TRUE') && subject2) {
-        selectedSubjects.add(subject2);
+
+      if ((bool2 === true || String(bool2).toUpperCase() === 'TRUE') && subject2 && field2) {
+        selectedSubjects.add(`${field2}|||${subject2}`);
       }
     });
 
-    return [...selectedSubjects].filter(Boolean);
+    return [...selectedSubjects].map((entry) => {
+      const [academicField, subject] = entry.split('|||');
+      return { subject, academicField };
+    });
   }
 
   //Update University
@@ -640,7 +672,9 @@ export class UniversityService {
     if (dto.subjectsExcelFilePath) {
       excelFilePathToDelete = dto.subjectsExcelFilePath;
       try {
-        const subjectsFromFile = await this.extractSubjectsFromExcel(dto.subjectsExcelFilePath);
+        const subjectsFromFile: { subject: string; academicField: string }[] = await this.extractSubjectsFromExcel(
+          dto.subjectsExcelFilePath
+        );
         const { subjectEntities, academicFields } = await this._processUniversitySubjects(subjectsFromFile);
         university.subjects = subjectEntities;
         university.academicFields = academicFields;

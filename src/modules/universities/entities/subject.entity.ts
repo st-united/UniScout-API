@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, ManyToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, ManyToMany, JoinTable } from 'typeorm';
 import { AbstractEntity } from '@Entity/abstract.entity';
 import { UniEntity } from './uni.entity';
 import { AcademicFieldEntity } from './academic-field.entity';
@@ -11,11 +11,13 @@ export class SubjectEntity extends AbstractEntity {
   @Column({ type: 'text', unique: true })
   name: string;
 
-  @ManyToOne(() => AcademicFieldEntity, (academicField) => academicField.subjects)
-  academicField: AcademicFieldEntity;
-
-  @Column({ nullable: false })
-  academicFieldId: number;
+  @ManyToMany(() => AcademicFieldEntity, (af) => af.subjects, { cascade: true })
+  @JoinTable({
+    name: 'subject_academic_fields',
+    joinColumn: { name: 'subjectId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'academicFieldId', referencedColumnName: 'id' },
+  })
+  academicFields: AcademicFieldEntity[];
 
   @ManyToMany(() => UniEntity, (uni) => uni.subjects)
   universities: UniEntity[];
