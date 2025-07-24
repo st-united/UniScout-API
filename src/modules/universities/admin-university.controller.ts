@@ -17,10 +17,15 @@ import {
   UsePipes,
   Req,
   Res,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
+  HttpStatus,
+  UploadedFiles,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { extname, join } from 'path';
 import { plainToInstance } from 'class-transformer';
 import { Response } from 'express';
 import { Readable } from 'stream';
@@ -33,7 +38,7 @@ import { CreateUniversityDto } from './dto/create-university.dto';
 import { UpdateUniversityDto } from './dto/update-university.dto';
 import { ExportUniversityDto } from './dto/export-university.dto';
 import { ConfirmDeleteDto } from './dto/confirm-delete.dto';
-import { ApiOperation } from '@nestjs/swagger';
+import { ApiOperation, ApiConsumes, ApiBody, getSchemaPath } from '@nestjs/swagger';
 
 @Controller('admin/universities')
 export class AdminController {
@@ -121,117 +126,192 @@ export class AdminController {
   // Create University
   @Post()
   @ApiOperation({ summary: 'Create a new university (Admin)' })
-  @UseInterceptors(
-    // FileInterceptor('logo', {
-    //   storage: diskStorage({
-    //     destination: './uploads/university',
-    //     filename: (req, file, cb) => {
-    //       const randomName = Array(32)
-    //         .fill(null)
-    //         .map(() => Math.round(Math.random() * 16).toString(16))
-    //         .join('');
-    //       return cb(null, `${randomName}${extname(file.originalname)}`);
-    //     },
-    //   }),
-    // }),
-    FileInterceptor('subjectsExcel', {
-      storage: diskStorage({
-        destination: './uploads/temp',
-        filename: (req, file, cb) => {
-          const randomName = Array(32)
-            .fill(null)
-            .map(() => Math.round(Math.random() * 16).toString(16))
-            .join('');
-          return cb(null, `${randomName}${extname(file.originalname)}`);
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      allOf: [
+        { $ref: getSchemaPath(CreateUniversityDto) },
+        {
+          properties: {
+            logo: {
+              type: 'string',
+              format: 'binary',
+              description: 'University logo image file (max 5MB, jpeg/png/gif/webp)',
+            },
+            subjectsExcel: {
+              type: 'string',
+              format: 'binary',
+              description: 'Excel file for subjects (xlsx/xls)',
+            },
+          },
         },
-      }),
-      fileFilter: (req, file, cb) => {
-        if (file.mimetype.match(/\/(vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|vnd\.ms-excel)$/)) {
-          cb(null, true);
-        } else {
-          cb(new BadRequestException('Only Excel files are allowed for subjects import!'), false);
-        }
-      },
-    })
+      ],
+    },
+  })
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        {
+          name: 'logo',
+          maxCount: 1,
+        },
+        {
+          name: 'subjectsExcel',
+          maxCount: 1,
+        },
+      ],
+      {
+        storage: diskStorage({
+          destination: (req, file, cb) => {
+            if (file.fieldname === 'logo') {
+              cb(null, './uploads/university-logos');
+            } else {
+              cb(null, './uploads/temp');
+            }
+          },
+          filename: (req, file, cb) => {
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+            cb(null, `${file.fieldname}-${uniqueSuffix}${extname(file.originalname)}`);
+          },
+        }),
+        fileFilter: (req, file, cb) => {
+          if (file.fieldname === 'subjectsExcel') {
+            if (
+              file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+              file.mimetype === 'application/vnd.ms-excel'
+            ) {
+              cb(null, true);
+            } else {
+              cb(new BadRequestException('Only Excel files are allowed!'), false);
+            }
+          } else {
+            cb(null, true);
+          }
+        },
+        limits: { fileSize: 5 * 1024 * 1024 },
+      }
+    )
   )
   async create(
     @Body(new ValidationPipe({ transform: true, whitelist: true })) createDto: CreateUniversityDto,
-    // @UploadedFile('logo') logo: Express.Multer.File,
-    @UploadedFile('subjectsExcel') subjectsExcel?: Express.Multer.File
+    @UploadedFiles()
+    files: {
+      logo?: Express.Multer.File[];
+      subjectsExcel?: Express.Multer.File[];
+    }
   ) {
-    // if (!logo) {
-    //   throw new BadRequestException('Logo file is required.');
-    // }
+    const logoFile = files.logo?.[0];
+    const subjectsExcelFile = files.subjectsExcel?.[0];
 
-    const universityData: Partial<CreateUniversityDto> = {
-      ...createDto,
-      // logo: logo.filename,
-    };
-
-    if (subjectsExcel) {
-      universityData.subjectsExcelFilePath = subjectsExcel.path;
+    if (logoFile) {
+      createDto.logo = logoFile.path;
     }
 
-    const createdUniversity = await this._universityService.create(universityData as CreateUniversityDto);
+    if (subjectsExcelFile) {
+      createDto.subjectsExcelFilePath = subjectsExcelFile.path;
+    }
 
+    const createdUniversity = await this._universityService.create(createDto);
     return plainToInstance(UniversityDto, createdUniversity, { excludeExtraneousValues: true });
   }
 
   // Update University
   @Patch(':id')
   @ApiOperation({ summary: 'Edit university details (Admin)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      allOf: [
+        { $ref: getSchemaPath(UpdateUniversityDto) },
+        {
+          properties: {
+            logo: {
+              type: 'string',
+              format: 'binary',
+              description:
+                'University logo image file (max 5MB, jpeg/png/gif/webp). Send "null" or empty string in body to remove existing logo.',
+            },
+            subjectsExcel: {
+              type: 'string',
+              format: 'binary',
+              description: 'Excel file for subjects (xlsx/xls)',
+            },
+          },
+        },
+      ],
+    },
+  })
   @UseInterceptors(
-    FileInterceptor('logo', {
-      storage: diskStorage({
-        destination: './uploads/university',
-        filename: (req, file, cb) => {
-          const randomName = Array(32)
-            .fill(null)
-            .map(() => Math.round(Math.random() * 16).toString(16))
-            .join('');
-          return cb(null, `${randomName}${extname(file.originalname)}`);
+    FileFieldsInterceptor(
+      [
+        { name: 'logo', maxCount: 1 },
+        { name: 'subjectsExcel', maxCount: 1 },
+      ],
+      {
+        storage: diskStorage({
+          destination: (req, file, cb) => {
+            if (file.fieldname === 'logo') {
+              cb(null, './uploads/university-logos');
+            } else {
+              cb(null, './uploads/temp');
+            }
+          },
+          filename: (req, file, cb) => {
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+            cb(null, `${file.fieldname}-${uniqueSuffix}${extname(file.originalname)}`);
+          },
+        }),
+        fileFilter: (req, file, cb) => {
+          if (file.fieldname === 'subjectsExcel') {
+            if (
+              file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+              file.mimetype === 'application/vnd.ms-excel'
+            ) {
+              cb(null, true);
+            } else {
+              cb(new BadRequestException('Only Excel files are allowed for subjects import!'), false);
+            }
+          } else {
+            cb(null, true);
+          }
         },
-      }),
-    }),
-    FileInterceptor('subjectsExcel', {
-      storage: diskStorage({
-        destination: './uploads/temp',
-        filename: (req, file, cb) => {
-          const randomName = Array(32)
-            .fill(null)
-            .map(() => Math.round(Math.random() * 16).toString(16))
-            .join('');
-          return cb(null, `${randomName}${extname(file.originalname)}`);
-        },
-      }),
-      fileFilter: (req, file, cb) => {
-        if (file.mimetype.match(/\/(vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|vnd\.ms-excel)$/)) {
-          cb(null, true);
-        } else {
-          cb(new BadRequestException('Only Excel files are allowed for subjects import!'), false);
-        }
-      },
-    })
+        limits: { fileSize: 5 * 1024 * 1024 },
+      }
+    )
   )
-  async update(
+  async updateUniversity(
     @Param('id', ParseIntPipe) id: number,
     @Body(new ValidationPipe({ transform: true, whitelist: true, skipMissingProperties: true }))
     updateDto: UpdateUniversityDto,
-    @UploadedFile('logo') logo?: Express.Multer.File,
-    @UploadedFile('subjectsExcel') subjectsExcel?: Express.Multer.File
-  ) {
-    const universityData = { ...updateDto };
-    if (logo) {
-      (universityData as any).logo = logo.filename;
+    @UploadedFiles()
+    files: {
+      logo?: Express.Multer.File[];
+      subjectsExcel?: Express.Multer.File[];
     }
-    if (subjectsExcel) {
-      (universityData as any).subjectsExcelFilePath = subjectsExcel.path;
+  ) {
+    this._logger.log('Received request to update university with possible file uploads.');
+
+    const logoFile = files.logo?.[0];
+    const subjectsExcelFile = files.subjectsExcel?.[0];
+
+    if (logoFile) {
+      updateDto.logo = logoFile.path;
+      this._logger.log(`New logo uploaded to: ${updateDto.logo}`);
+    } else if (updateDto.logo === null || updateDto.logo === '') {
+      updateDto.logo = null;
     }
 
-    const updatedUniversity = await this._universityService.updateUniversity(id, universityData);
+    if (subjectsExcelFile) {
+      updateDto.subjectsExcelFilePath = subjectsExcelFile.path;
+    }
+
+    const updatedUniversity = await this._universityService.updateUniversity(id, updateDto);
     if (!updatedUniversity) {
       throw new NotFoundException(`University with ID ${id} not found.`);
     }
+
     return plainToInstance(UniversityDto, updatedUniversity, {
       excludeExtraneousValues: true,
     });

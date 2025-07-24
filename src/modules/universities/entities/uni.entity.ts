@@ -36,7 +36,7 @@ export class UniEntity extends AbstractEntity {
   @Column({ type: 'double precision' })
   longitude: number;
 
-  @Column({ type: 'text' }) // add nullable: true for swagger testing
+  @Column({ type: 'text' })
   logo: string;
 
   @Column({ type: 'int', nullable: true })

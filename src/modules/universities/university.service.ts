@@ -408,7 +408,8 @@ export class UniversityService {
       await this._searchLogService.logSearch(university.university);
     }
 
-    return plainToInstance(UniversityDisplayDto, university);
+    const allAcademicFieldNames = await this.getAllAcademicFieldNamesDefined();
+    return await this._transformUniEntityToDisplayDto(university, allAcademicFieldNames);
   }
 
   //View University (Admin)
@@ -528,7 +529,6 @@ export class UniversityService {
       abbreviation: dto.abbreviation,
       latitude: dto.latitude,
       longitude: dto.longitude,
-      logo: dto.logo,
       rank: dto.rank,
       type: dto.type,
       country: dto.country,
@@ -542,6 +542,12 @@ export class UniversityService {
       description: dto.description,
       exchange: dto.exchange,
     });
+
+    if (dto.logo) {
+      uni.logo = dto.logo;
+    } else {
+      uni.logo = '-';
+    }
 
     let excelFilePathToDelete: string | null = null;
 
@@ -570,9 +576,15 @@ export class UniversityService {
       return plainToInstance(UniversityDto, savedUni);
     } catch (error) {
       if ((error as any).code === '23505') {
+        if (dto.logo && dto.logo !== '-') {
+          await this._deleteTempFile(dto.logo);
+        }
         throw new BadRequestException('University with this name already exists.');
       }
       Logger.error(`Error creating university: ${(error as Error).message}`, (error as Error).stack);
+      if (dto.logo && dto.logo !== '-') {
+        await this._deleteTempFile(dto.logo);
+      }
       throw new InternalServerErrorException('Failed to create university.');
     }
   }
@@ -607,12 +619,21 @@ export class UniversityService {
     const university = await this._uniRepository.findOne({ where: { id } });
 
     if (!university) {
+      if (dto.logo && dto.logo !== '-') {
+        await this._deleteTempFile(dto.logo);
+      }
       throw new NotFoundException(`University with ID ${id} not found`);
     }
 
-    const subjectNamesToProcess = dto.subjectNames;
+    if (dto.logo !== undefined) {
+      if (university.logo && university.logo !== '-') {
+        await this.deleteLogoFile(university.logo);
+      }
+      university.logo = dto.logo === null ? '-' : dto.logo;
+    }
+
     const updateData: Partial<UpdateUniversityDto> = { ...dto };
-    delete updateData.subjectNames;
+    delete updateData.subjectsExcelFilePath;
 
     let excelFilePathToDelete: string | null = null;
 
@@ -620,8 +641,7 @@ export class UniversityService {
       excelFilePathToDelete = dto.subjectsExcelFilePath;
       try {
         const subjectsFromFile = await this.extractSubjectsFromExcel(dto.subjectsExcelFilePath);
-        const combinedSubjects = subjectsFromFile;
-        const { subjectEntities, academicFields } = await this._processUniversitySubjects(combinedSubjects);
+        const { subjectEntities, academicFields } = await this._processUniversitySubjects(subjectsFromFile);
         university.subjects = subjectEntities;
         university.academicFields = academicFields;
       } catch (error) {
@@ -632,10 +652,6 @@ export class UniversityService {
           await this._deleteTempFile(excelFilePathToDelete);
         }
       }
-    } else if (subjectNamesToProcess !== undefined) {
-      const { subjectEntities, academicFields } = await this._processUniversitySubjects(subjectNamesToProcess);
-      university.subjects = subjectEntities;
-      university.academicFields = academicFields;
     }
 
     Object.assign(university, updateData);
@@ -645,9 +661,15 @@ export class UniversityService {
       return plainToInstance(UniversityDto, savedUniversity);
     } catch (error) {
       if ((error as any).code === '23505') {
+        if (dto.logo && dto.logo !== '-') {
+          await this._deleteTempFile(dto.logo);
+        }
         throw new BadRequestException('University with this name already exists.');
       }
       Logger.error(`Error updating university: ${(error as Error).message}`, (error as Error).stack);
+      if (dto.logo && dto.logo !== '-') {
+        await this._deleteTempFile(dto.logo);
+      }
       throw new InternalServerErrorException('Failed to update university.');
     }
   }
@@ -658,7 +680,7 @@ export class UniversityService {
 
     try {
       const university = await this._getUniversityById(id, false);
-      if (university.logo) {
+      if (university.logo && university.logo !== '-') {
         await this.deleteLogoFile(university.logo);
       }
 
@@ -677,8 +699,10 @@ export class UniversityService {
 
   private async deleteLogoFile(logoFilename: string): Promise<void> {
     try {
-      const filePath = join(process.cwd(), 'uploads', 'university', basename(logoFilename));
+      const fileName = basename(logoFilename);
+      const filePath = join(process.cwd(), 'uploads', 'university-logos', fileName);
       await unlink(filePath);
+      this._logger.log(`Successfully deleted logo file: ${filePath}`);
     } catch (error) {
       this._logger.warn(`Failed to delete logo file ${logoFilename}: ${error.message}`);
     }

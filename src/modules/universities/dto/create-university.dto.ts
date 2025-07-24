@@ -11,11 +11,10 @@ import {
   Min,
   Max,
   Validate,
-  IsArray,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsCountryValidConstraint } from '../validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiHideProperty, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UniversityTypeEnum } from './get-university.dto';
 
 export class CreateUniversityDto {
@@ -43,14 +42,17 @@ export class CreateUniversityDto {
 
   @ApiPropertyOptional({ description: 'University rank' })
   @IsOptional()
-  @Type(() => Number)
+  @Transform(({ value }) => {
+    const num = Number(value);
+    if (value === '' || value === null || value === undefined || isNaN(num) || num === 0) {
+      return null;
+    }
+    return num;
+  })
   @IsInt({ message: 'Rank must be an integer' })
-  @Min(1, { message: 'Rank must be a positive number' })
   rank?: number;
 
-  @ApiPropertyOptional({ description: 'Logo URL of university' })
-  @IsOptional()
-  @IsString({ message: 'Logo must be a string (URL)' })
+  @ApiHideProperty()
   logo?: string;
 
   @ApiProperty({ description: 'Type of university', enum: UniversityTypeEnum })
@@ -65,10 +67,10 @@ export class CreateUniversityDto {
   @Validate(IsCountryValidConstraint)
   country: string;
 
-  @ApiPropertyOptional({ description: 'Location or city name' })
-  @IsOptional()
+  @ApiProperty({ description: 'Location or city name' })
+  @IsNotEmpty()
   @IsString()
-  location?: string;
+  location: string;
 
   @ApiProperty({ description: 'Student population' })
   @IsNotEmpty({ message: 'Student population is required' })
@@ -117,14 +119,15 @@ export class CreateUniversityDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ description: 'Whether or not the university offers exchange programs within Asia' })
-  @IsNotEmpty({ message: 'Exchange is required' })
+  @ApiPropertyOptional({ description: 'Whether or not the university offers exchange programs within Asia' })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    return value === 'true' || value === true;
+  })
   @IsBoolean()
-  @Type(() => Boolean)
   exchange?: boolean;
 
-  @ApiPropertyOptional({ description: 'Path to subjects Excel file from contact submission' })
-  @IsNotEmpty()
-  @IsString()
+  @ApiHideProperty()
   subjectsExcelFilePath?: string;
 }
