@@ -90,8 +90,8 @@ export class CsvImport {
                 const foundSubjects = await this.subjectRepo.find({
                   where: {
                     name: In(validSubjectNames),
-                    academicField: { id: academicField.id },
                   },
+                  relations: ['academicFields'],
                 });
 
                 foundSubjects.forEach((subject) => {
@@ -177,14 +177,14 @@ export class CsvImport {
 
   async importSubjectsCsv(filePath: string): Promise<void> {
     const csvData = fs.readFileSync(filePath, 'utf8');
-
     this._logger.log(`\nImporting subjects from: ${filePath}`);
+
     const results = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
       Papa.parse(csvData, {
         header: true,
         skipEmptyLines: true,
         dynamicTyping: false,
-        transformHeader: (header: string) => header.trim().toLowerCase(),
+        transformHeader: (header: string) => header.trim(),
         complete: resolve,
         error: reject,
       });
@@ -193,15 +193,18 @@ export class CsvImport {
     const records = results.data;
     const headers = results.meta.fields || [];
     const totalRecords = records.length;
-    let subjectsImported = 0;
+    let subjectsImportedOrUpdated = 0;
 
-    const allAcademicFieldNamesFromSubjectsCsv = headers.filter((header) => header.trim() !== '');
     const academicFieldEntities: AcademicFieldEntity[] = [];
-    for (const name of allAcademicFieldNamesFromSubjectsCsv) {
-      let field = await this.academicFieldRepo.findOne({ where: { name } });
+    for (const name of headers) {
+      const cleanHeader = name.trim();
+      if (!cleanHeader) continue;
+
+      let field = await this.academicFieldRepo.findOne({ where: { name: cleanHeader } });
       if (!field) {
-        field = this.academicFieldRepo.create({ name });
+        field = this.academicFieldRepo.create({ name: cleanHeader });
         await this.academicFieldRepo.save(field);
+        this._logger.log(`Created new academic field: ${cleanHeader}`);
       }
       academicFieldEntities.push(field);
     }
@@ -211,31 +214,54 @@ export class CsvImport {
 
     for (let i = 0; i < totalRecords; i++) {
       const record = records[i];
+
       for (const header of headers) {
-        const subjectName = record[header];
+        const academicFieldName = header.trim();
+        const subjectNamesInCell = record[academicFieldName];
+
         if (
-          subjectName &&
-          typeof subjectName === 'string' &&
-          subjectName.trim() !== '' &&
-          subjectName.trim().toLowerCase() !== 'na'
+          !subjectNamesInCell ||
+          typeof subjectNamesInCell !== 'string' ||
+          subjectNamesInCell.trim() === '' ||
+          subjectNamesInCell.trim().toLowerCase() === 'na'
         ) {
-          const academicField = academicFieldMap.get(header.trim());
-          if (!academicField) {
-            this._logger.warn(
-              `Academic field "${header.trim()}" not found for subject "${subjectName.trim()}", skipping.`
-            );
-            continue;
-          }
-          const entity: Partial<SubjectEntity> = {
-            name: subjectName.trim(),
-            academicField: academicField,
-          };
-          try {
-            await this.subjectRepo.upsert(entity, ['name']);
-            subjectsImported++;
-            this._logger.log(`Processed subject: ${entity.name} (${academicField.name})`);
-          } catch (error) {
-            this._logger.error(`Failed to upsert subject ${entity.name}: ${error.message}`);
+          continue;
+        }
+
+        const academicField = academicFieldMap.get(academicFieldName);
+        if (!academicField) {
+          this._logger.warn(`Academic field "${academicFieldName}" not found for subjects in record, skipping.`);
+          continue;
+        }
+
+        const rawSubjectNames = subjectNamesInCell.split(',').map((s: string) => s.trim());
+        const validSubjectNames = rawSubjectNames.filter((name: string) => name !== '' && name.toLowerCase() !== 'na');
+
+        for (const cleanSubjectName of validSubjectNames) {
+          let subject = await this.subjectRepo.findOne({
+            where: { name: cleanSubjectName },
+            relations: ['academicFields'],
+          });
+
+          if (!subject) {
+            subject = this.subjectRepo.create({
+              name: cleanSubjectName,
+              academicFields: [academicField],
+            });
+            await this.subjectRepo.save(subject);
+            subjectsImportedOrUpdated++;
+            this._logger.log(`Created new subject: "${cleanSubjectName}" linked to "${academicField.name}"`);
+          } else {
+            const alreadyLinked = subject.academicFields.some((af) => af.id === academicField.id);
+
+            if (!alreadyLinked) {
+              subject.academicFields.push(academicField);
+              await this.subjectRepo.save(subject);
+              subjectsImportedOrUpdated++;
+              this._logger.log(
+                `Updated subject: "${cleanSubjectName}" linked to additional field "${academicField.name}"`
+              );
+            }
           }
         }
       }
@@ -243,7 +269,7 @@ export class CsvImport {
 
     const totalCount = await this.subjectRepo.count();
     this._logger.log(
-      `Subject import completed! Total subjects imported in this run: ${subjectsImported}. Total subjects in database: ${totalCount}`
+      `Subject import completed! Total subjects imported or updated in this run: ${subjectsImportedOrUpdated}. Total subjects in database: ${totalCount}`
     );
   }
 
