@@ -12,6 +12,9 @@ import { AppModule } from '@app/app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 
+import { CreateUniversityDto } from '@UniversitiesModule/dto/create-university.dto';
+import { UpdateUniversityDto } from '@UniversitiesModule/dto/update-university.dto';
+
 async function bootstrap() {
   const appOptions = { cors: true };
   const app = await NestFactory.create<NestExpressApplication>(AppModule, new ExpressAdapter(), appOptions);
@@ -40,6 +43,10 @@ async function bootstrap() {
     prefix: '/public/',
   });
 
+  app.useStaticAssets(join(__dirname, '..', 'uploads', 'university-logos'), {
+    prefix: '/uploads/university-logos/',
+  });
+
   const options = new DocumentBuilder()
     .setTitle('Uni-Scout')
     .setDescription('The Uni-Scout API description')
@@ -55,7 +62,9 @@ async function bootstrap() {
     )
     .build();
 
-  const document = SwaggerModule.createDocument(app, options);
+  const document = SwaggerModule.createDocument(app, options, {
+    extraModels: [CreateUniversityDto, UpdateUniversityDto],
+  });
   SwaggerModule.setup('/docs', app, document);
 
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
