@@ -35,7 +35,7 @@ if (!fs.existsSync(tempExcelUploadDir)) {
   fs.mkdirSync(tempExcelUploadDir, { recursive: true });
 }
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_ATTACHMENT_FILES = 5;
 
 @Controller('contact')
