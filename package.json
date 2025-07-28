@@ -9,7 +9,7 @@
     "prebuild": "rimraf dist",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\"",
-    "import:data": "ts-node -r tsconfig-paths/register src/modules/universities/import-universities.ts",
+    "import:data": "ts-node -r tsconfig-paths/register  --project tsconfig.script.json src/modules/universities/import-universities.ts",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",

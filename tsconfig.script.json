@@ -1,16 +1,7 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "allowSyntheticDefaultImports": true,
     "baseUrl": "./",
-    "declaration": true,
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-    "forceConsistentCasingInFileNames": false,
-    "incremental": true,
-    "module": "commonjs",
-    "noFallthroughCasesInSwitch": false,
-    "noImplicitAny": false,
-    "outDir": "./dist",
     "paths": {
       "@AuthModule/*": ["src/modules/auth/*"],
       "@Constant/*": ["src/common/constants/*"],
@@ -28,15 +19,10 @@
       "@Library/*": ["src/libraries/*"],
       "@app/*": ["src/*"]
     },
-    "removeComments": true,
-    "skipLibCheck": true,
-    "sourceMap": true,
-    "strictBindCallApply": false,
-    "strictNullChecks": false,
-    "target": "es2017",
-    "typeRoots": ["./node_modules/@types", "./src/common/types"],
-    "types": ["node", "express"]
+
+    "typeRoots": ["./node_modules/@types", "./src/common/types"]
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/seed.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "exclude": ["node_modules", "dist"],
+  "files": ["src/modules/universities/import-universities.ts", "src/common/types/express.d.ts"]
 }
