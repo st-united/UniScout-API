@@ -6,9 +6,10 @@ import { UserEntity } from './entities';
 import { UsersService } from './users.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MailModule } from './mail/mail.module';
+import { AuditLogModule } from '../audit/audit.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UserEntity]), ConfigModule, MailModule],
+  imports: [TypeOrmModule.forFeature([UserEntity]), ConfigModule, MailModule, AuditLogModule],
   controllers: [UsersController],
   providers: [UsersService],
   exports: [UsersService, TypeOrmModule],

@@ -15,6 +15,9 @@ import { ConfigService } from '@nestjs/config';
 import { UserDto } from '@UsersModule/dto/user.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { plainToClass } from 'class-transformer';
+import { AuditLogService } from '../audit/audit.service';
+import { AuditActionType } from '../audit/entities/audit-log.entity';
+import { StringChain } from 'lodash';
 
 @Injectable()
 export class AuthService {
@@ -25,13 +28,19 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     @InjectRepository(UserEntity)
-    private userRepository: Repository<UserEntity>
+    private userRepository: Repository<UserEntity>,
+    private readonly auditLogService: AuditLogService
   ) {
     this.MAX_LOGIN_ATTEMPTS = this.configService.get<number>('MAX_LOGIN_ATTEMPTS', 3);
     this.LOCKOUT_DURATION_MINUTES = this.configService.get<number>('LOCKOUT_DURATION_MINUTES', 1);
   }
 
-  async register(registerDto: RegisterUserDto): Promise<ResponseItem<UserDto>> {
+  async register(
+    registerDto: RegisterUserDto,
+    actorId: number,
+    ipAddress: string,
+    userAgent: string
+  ): Promise<ResponseItem<UserDto>> {
     const emailExisted = await this.userRepository.findOneBy({
       email: registerDto.email,
       deletedAt: null,
@@ -49,12 +58,22 @@ export class AuthService {
       role: UserRole.USER,
     });
     await this.userRepository.save(user);
+    const newUserData = { ...user, password: '[REDACTED]' };
+    await this.auditLogService.log(
+      actorId,
+      AuditActionType.USER_CREATED,
+      user.id,
+      null,
+      newUserData,
+      ipAddress,
+      userAgent
+    );
 
     const userDto = plainToClass(UserDto, user, { excludeExtraneousValues: true });
     return new ResponseItem(userDto, 'Account Created Successful!');
   }
 
-  async validateUser(credentialsDto: CredentialsDto): Promise<UserPayloadDto> {
+  async validateUser(credentialsDto: CredentialsDto, ipAddress?: string, userAgent?: string): Promise<UserPayloadDto> {
     try {
       const user = await this.userRepository.findOneBy({
         email: credentialsDto.email,
@@ -64,6 +83,7 @@ export class AuthService {
       if (!user) {
         throw new UnauthorizedException('Invalid username or password.');
       }
+      const oldStatus = user.status;
       if (user.status === StatusEnum.BLOCKED) {
         if (user.lockoutUntil && user.lockoutUntil > new Date()) {
           const remainingTime = Math.ceil((user.lockoutUntil.getTime() - new Date().getTime()) / (1000 * 60));
@@ -73,6 +93,15 @@ export class AuthService {
           user.failedLoginAttempts = 0;
           user.lockoutUntil = null;
           await this.userRepository.save(user);
+          await this.auditLogService.log(
+            null,
+            AuditActionType.USER_STATUS_UPDATED,
+            user.id,
+            { status: oldStatus },
+            { status: user.status },
+            ipAddress,
+            userAgent
+          );
         }
       }
 
@@ -86,10 +115,20 @@ export class AuthService {
         user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
 
         if (user.failedLoginAttempts >= this.MAX_LOGIN_ATTEMPTS) {
+          const oldStatusForLock = user.status;
           user.lockoutUntil = new Date(Date.now() + this.LOCKOUT_DURATION_MINUTES * 60 * 1000);
           user.failedLoginAttempts = 0;
           user.status = StatusEnum.BLOCKED;
           await this.userRepository.save(user);
+          await this.auditLogService.log(
+            null,
+            AuditActionType.USER_STATUS_UPDATED,
+            user.id,
+            { status: oldStatusForLock },
+            { status: user.status, lockoutUntil: user.lockoutUntil },
+            ipAddress,
+            userAgent
+          );
           throw new UnauthorizedException(
             `Invalid username or password. Account locked for ${this.LOCKOUT_DURATION_MINUTES} minutes due to multiple failed attempts.`
           );
@@ -98,6 +137,7 @@ export class AuthService {
           throw new UnauthorizedException('Invalid username or password.');
         }
       }
+      const oldStatusOnSuccess = user.status;
       if (user.status === StatusEnum.PENDING) {
         user.status = StatusEnum.ACTIVE;
       }
@@ -105,7 +145,17 @@ export class AuthService {
       user.failedLoginAttempts = 0;
       user.lockoutUntil = null;
       await this.userRepository.save(user);
-
+      if (user.status !== oldStatusOnSuccess) {
+        await this.auditLogService.log(
+          null,
+          AuditActionType.USER_STATUS_UPDATED,
+          user.id,
+          { status: oldStatusOnSuccess },
+          { status: user.status },
+          ipAddress,
+          userAgent
+        );
+      }
       const userPayload = plainToClass(UserPayloadDto, user, { excludeExtraneousValues: true });
       return userPayload;
     } catch (error) {
@@ -139,7 +189,7 @@ export class AuthService {
     return new ResponseItem(data, 'Log In Successful!');
   }
 
-  async logout(userId: number): Promise<ResponseItem<string | null>> {
+  async logout(userId: number, ipAddress: string, userAgent: string): Promise<ResponseItem<string | null>> {
     try {
       const user = await this.userRepository.findOneBy({ id: userId } as FindOptionsWhere<UserEntity>);
 
@@ -154,6 +204,15 @@ export class AuthService {
       if (updateResult.affected === 0) {
         throw new InternalServerErrorException('Logout failed due to an unexpected database issue.');
       }
+      await this.auditLogService.log(
+        userId,
+        AuditActionType.USER_LOGGED_OUT,
+        userId,
+        null,
+        { email: user.email },
+        ipAddress,
+        userAgent
+      );
 
       return new ResponseItem(null, 'Logged Out Succesful!');
     } catch (error) {

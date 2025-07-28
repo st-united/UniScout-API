@@ -13,6 +13,7 @@ import { JwtRefreshTokenStrategy } from './strategies/jwt-refresh-token.strategy
 
 import { UsersModule } from '../users/users.module';
 import { UserEntity } from '@UsersModule/entities';
+import { AuditLogModule } from '../audit/audit.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { UserEntity } from '@UsersModule/entities';
 
     UsersModule,
     ConfigModule,
+    AuditLogModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, LocalStrategy, JwtAccessTokenStrategy, JwtRefreshTokenStrategy],

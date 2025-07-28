@@ -62,12 +62,16 @@ export class UsersController {
   async create(
     @UploadedFile()
     avatar: Express.Multer.File,
-    @Body() createUserDto: CreateUserDto
+    @Body() createUserDto: CreateUserDto,
+    @Req() req
   ): Promise<ResponseItem<UserDto>> {
     if (!avatar && createUserDto.containFile === 'true') {
       throw new BadRequestException('Hình ảnh không hợp lệ');
     }
-    return await this.usersService.create(avatar, createUserDto);
+    const actorId = req.user.userId;
+    const ipAddress = req.ip;
+    const userAgent = req.headers['user-agent'];
+    return await this.usersService.create(avatar, createUserDto, actorId, ipAddress, userAgent);
   }
 
   @Patch('reset-password/:id')
@@ -104,13 +108,13 @@ export class UsersController {
     required: false,
     enum: ['ASC', 'DESC'],
     description: 'Order direction (ASC or DESC)',
-    type: String, // FIXED: Changed type: [] to type: String
+    type: String,
   })
   @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by name, email, or phone' })
   @ApiQuery({
     name: 'status',
     required: false,
-    type: String, // Keep as String for single enum value as per your DTO
+    type: String,
     enum: StatusEnum,
     description: 'Filter by user status (e.g., ACTIVE, PENDING)',
   })
@@ -130,14 +134,12 @@ export class UsersController {
   @ApiQuery({
     name: 'job',
     required: false,
-    // type: [String], // <--- REMOVE THIS LINE
-    isArray: true, // <--- ADD THIS LINE
+    isArray: true,
     schema: {
-      // <--- ADD THIS BLOCK
       type: 'array',
       items: {
         type: 'string',
-        enum: Object.values(Job), // Use Object.values to get string values from enum
+        enum: Object.values(Job),
       },
     },
     description: 'Filter by user job (can be multiple)',
@@ -197,9 +199,13 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Forbidden (Insufficient role)' })
   async update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateUserDto: UpdateUserDto
+    @Body() updateUserDto: UpdateUserDto,
+    @Req() req
   ): Promise<ResponseItem<UserDto>> {
-    return await this.usersService.update(id, updateUserDto);
+    const actorId = req.user.userId;
+    const ipAddress = req.ip;
+    const userAgent = req.headers['user-agent'];
+    return await this.usersService.update(id, updateUserDto, actorId, ipAddress, userAgent);
   }
 
   @Post('avatar/:identityId')
