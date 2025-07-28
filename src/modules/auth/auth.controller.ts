@@ -26,7 +26,10 @@ export class AuthController {
   @UseGuards(JwtAccessTokenGuard)
   @Get('logout')
   async logout(@Req() request) {
-    return this.authService.logout(request.user.userId);
+    const actorId = request.user.userId; // Assuming req.user.userId is set by JwtAccessTokenGuard
+    const ipAddress = request.ip;
+    const userAgent = request.headers['user-agent'];
+    return this.authService.logout(actorId, ipAddress, userAgent);
   }
 
   @UseGuards(JwtRefreshTokenGuard)
@@ -41,7 +44,10 @@ export class AuthController {
   @Post('register')
   @UseGuards(JwtAccessTokenGuard, RolesGuard)
   @Roles(UserRole.SUPER)
-  async register(@Body() registerDto: RegisterUserDto): Promise<ResponseItem<UserDto>> {
-    return this.authService.register(registerDto);
+  async register(@Body() registerDto: RegisterUserDto, @Req() req): Promise<ResponseItem<UserDto>> {
+    const actorId = req.user.userId;
+    const ipAddress = req.ip;
+    const userAgent = req.headers['user-agent'];
+    return this.authService.register(registerDto, actorId, ipAddress, userAgent);
   }
 }

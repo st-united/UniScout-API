@@ -19,6 +19,8 @@ import { UserDto } from './dto/user.dto';
 import { avtPathName, baseImageUrl } from '@Constant/url';
 import { MailService } from './mail/mail.service';
 import { UserListResponseDto } from './dto/user-list-response.dto';
+import { AuditLogService } from '../audit/audit.service';
+import { AuditActionType } from '../audit/entities/audit-log.entity';
 
 @Injectable()
 export class UsersService {
@@ -27,7 +29,8 @@ export class UsersService {
 
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
-    private readonly mailService: MailService
+    private readonly mailService: MailService,
+    private readonly auditLogService: AuditLogService
   ) {}
   getJobDropdownOptions(): string[] {
     return [Job.MARKETING, Job.BUSINESS_DEVELOPMENT];
@@ -76,7 +79,13 @@ export class UsersService {
       .join('');
   }
 
-  async create(avatar: Express.Multer.File, params: CreateUserDto): Promise<ResponseItem<UserDto>> {
+  async create(
+    avatar: Express.Multer.File,
+    params: CreateUserDto,
+    actorId: number,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<ResponseItem<UserDto>> {
     const emailExisted = await this.userRepository.findOneBy({
       email: params.email,
       deletedAt: null,
@@ -118,6 +127,16 @@ export class UsersService {
         console.error(`Failed to send welcome email to ${user.email}:`, emailError.message);
       }
     }
+
+    await this.auditLogService.log(
+      actorId,
+      AuditActionType.USER_CREATED,
+      user.id,
+      null,
+      { ...user, password: '[REDACTED]' },
+      ipAddress,
+      userAgent
+    );
 
     const resultUserDto = plainToClass(UserDto, user, { excludeExtraneousValues: true });
 
@@ -166,7 +185,7 @@ export class UsersService {
     const usersQuery = this.userRepository
       .createQueryBuilder('users')
       .select(['users.id', 'users.name', 'users.email', 'users.role', 'users.job', 'users.status', 'users.createdAt'])
-      .andWhere('users.deletedAt IS NULL'); // Always filter out soft-deleted users
+      .andWhere('users.deletedAt IS NULL');
 
     // 1. Search filter (name, email, phone)
     if (params.search) {
@@ -190,13 +209,11 @@ export class UsersService {
 
     // 3. Role filter
     if (params.role && params.role.length > 0) {
-      // Check if array exists AND is not empty
       usersQuery.andWhere('users.role IN (:...roles)', { roles: params.role });
     }
 
     // 4. Job filter
     if (params.job && params.job.length > 0) {
-      // Check if array exists AND is not empty
       usersQuery.andWhere('users.job IN (:...jobs)', { jobs: params.job });
     }
 
@@ -206,7 +223,6 @@ export class UsersService {
       const endDate = params.createdAtEnd ? new Date(params.createdAtEnd) : null;
 
       if (startDate && endDate) {
-        // To ensure the end date includes the full day
         endDate.setHours(23, 59, 59, 999);
         usersQuery.andWhere('users.createdAt BETWEEN :startDate AND :endDate', {
           startDate: startDate.toISOString(),
@@ -314,12 +330,18 @@ export class UsersService {
   //   return new ResponseItem(resultDto, 'Cập nhật dữ liệu thành công');
   // }
 
-  async update(id: number, updateUserDto: UpdateUserDto): Promise<ResponseItem<UserDto>> {
+  async update(
+    id: number,
+    updateUserDto: UpdateUserDto,
+    actorId: number,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<ResponseItem<UserDto>> {
     const user = await this.userRepository.findOneBy({ id, deletedAt: null } as FindOptionsWhere<UserEntity>);
     if (!user) {
       throw new BadRequestException('Người dùng không tồn tại');
     }
-
+    const oldValue = { ...user, password: '[REDACTED]' };
     const updatePayload: Partial<UserEntity> = {};
     if (updateUserDto.name !== undefined) {
       updatePayload.name = updateUserDto.name;
@@ -350,6 +372,8 @@ export class UsersService {
     await this.userRepository.update(id, updatePayload);
 
     const result = await this.userRepository.findOneBy({ id, deletedAt: null } as FindOptionsWhere<UserEntity>);
+    const newValue = { ...result, password: '[REDACTED]' };
+    await this.auditLogService.log(actorId, AuditActionType.USER_UPDATED, id, oldValue, newValue, ipAddress, userAgent);
     const resultDto = plainToClass(UserDto, result, { excludeExtraneousValues: true });
 
     return new ResponseItem(resultDto, 'Cập nhật dữ liệu thành công');
@@ -381,7 +405,6 @@ export class UsersService {
       .where('identityId = :identityId', { identityId })
       .execute();
 
-    // Only attempt to unlink if user.avatar exists before the update
     if (user.avatar && fs.existsSync(user.avatar)) {
       fs.unlinkSync(user.avatar);
     }

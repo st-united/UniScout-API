@@ -6,6 +6,7 @@ import { UniEntity, SubjectEntity, AcademicFieldEntity } from '@UniversitiesModu
 import { UserEntity } from '@UsersModule/entities';
 import { SearchLogEntity, TrackingEntity } from '@DashboardModule/entities';
 import { ContactSubmissionEntity } from '@ContactModule/entities';
+import { AuditLogEntity } from '@app/modules/audit/entities/audit-log.entity';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ContactSubmissionEntity } from '@ContactModule/entities';
           SearchLogEntity,
           TrackingEntity,
           ContactSubmissionEntity,
+          AuditLogEntity,
         ],
       }),
     }),
