@@ -14,6 +14,7 @@ import { join } from 'path';
 
 import { CreateUniversityDto } from '@UniversitiesModule/dto/create-university.dto';
 import { UpdateUniversityDto } from '@UniversitiesModule/dto/update-university.dto';
+import { json, urlencoded } from 'express';
 
 async function bootstrap() {
   const appOptions = { cors: true };
@@ -71,6 +72,10 @@ async function bootstrap() {
     prefix: '/static/',
   });
   const port = configService.get<number>('APP_PORT');
+
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ extended: true, limit: '50mb' }));
+
   await app.listen(port || 6002);
 }
 
