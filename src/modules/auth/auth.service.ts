@@ -184,6 +184,7 @@ export class AuthService {
       name: userPayloadDto.name,
       accessToken,
       refreshToken,
+      role: userPayloadDto.role,
     };
 
     return new ResponseItem(data, 'Log In Successful!');
