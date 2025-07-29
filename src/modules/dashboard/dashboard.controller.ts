@@ -64,6 +64,13 @@ export class DashboardController {
     );
   }
 
+  @Get('track-access')
+  @ApiOperation({ summary: 'Logs a website access' })
+  async trackHomepageAccess() {
+    await this._dashboardService.logHomepageAccess();
+    return { message: 'Access logged successfully' };
+  }
+
   @Get('users-overview')
   @UseGuards(JwtAccessTokenGuard, RolesGuard)
   @Roles(UserRole.SUPER)
