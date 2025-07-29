@@ -65,6 +65,10 @@ export class DashboardService {
     return this._trackingService.getWebsiteAccessesByMonthAndYear(month, year);
   }
 
+  async logHomepageAccess() {
+    await this._trackingService.logWebsiteAccess();
+  }
+
   async getUserOverview() {
     const totalUsers = await this.userRepository.count({
       where: { deletedAt: null },
