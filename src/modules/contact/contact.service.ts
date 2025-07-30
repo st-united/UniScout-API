@@ -6,7 +6,7 @@ import * as nodemailer from 'nodemailer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets, In } from 'typeorm';
+import { Repository, Brackets } from 'typeorm';
 import { ContactSubmissionEntity, SubmissionStatusEnum } from './entities';
 import { RequestTypeEnum } from '@Constant/enums';
 import { UpdateContactSubmissionStatusDto } from './dto/update-contact.dto';
@@ -50,9 +50,17 @@ export class ContactService {
     excelTempFilePath?: string
   ): Promise<{ message: string }> {
     const senderEmail = createContactDto.representativeEmail;
-    this._logger.log(`Received contact form submission from: ${senderEmail || 'Anonymous'}`);
+    this._logger.log(`Received contact form submission`);
 
     let permanentExcelFilePath: string | undefined;
+    const finalAttachmentPaths: string[] = [];
+
+    const permanentAttachmentsDir = path.join(process.cwd(), 'uploads', 'contact_submissions_attachments');
+    if (!fs.existsSync(permanentAttachmentsDir)) {
+      fs.mkdirSync(permanentAttachmentsDir, { recursive: true });
+    }
+
+    const emailAttachments: { filename: string; path: string }[] = [];
 
     try {
       const {
@@ -83,12 +91,27 @@ export class ContactService {
 
         fs.renameSync(excelTempFilePath, permanentExcelFilePath);
         this._logger.log(`Moved Excel file from ${excelTempFilePath} to ${permanentExcelFilePath}`);
+
+        emailAttachments.push({
+          filename: path.basename(permanentExcelFilePath),
+          path: permanentExcelFilePath,
+        });
       }
 
-      const attachments = attachmentPaths.map((filePath) => ({
-        filename: path.basename(filePath),
-        path: filePath,
-      }));
+      for (const tempFilePath of attachmentPaths) {
+        if (fs.existsSync(tempFilePath)) {
+          const fileName = `${Date.now()}-${path.basename(tempFilePath)}`;
+          const permanentPath = path.join(permanentAttachmentsDir, fileName);
+          fs.renameSync(tempFilePath, permanentPath);
+          finalAttachmentPaths.push(path.relative(process.cwd(), permanentPath));
+          this._logger.log(`Moved general attachment from ${tempFilePath} to ${permanentPath}`);
+
+          emailAttachments.push({
+            filename: path.basename(permanentPath),
+            path: permanentPath,
+          });
+        }
+      }
 
       let universityDetailsHtml = '';
       let universityDetailsText = '';
@@ -130,18 +153,8 @@ export class ContactService {
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
           ${description ? `Description: ${description}\n` : ''}
         `;
-        contactDetailsHtml = `
-          <h3>Sender's Contact Details:</h3>
-          <p><strong>Representative Name:</strong> ${representativeName || 'N/A'}</p>
-          <p><strong>Representative Email:</strong> ${representativeEmail || 'N/A'}</p>
-          <p><strong>Representative Phone Number:</strong> ${representativeNumber || 'N/A'}</p>
-        `;
-        contactDetailsText = `
-          Sender's Contact Details:
-          Representative Name: ${representativeName || 'N/A'}
-          Representative Email: ${representativeEmail || 'N/A'}
-          Representative Phone Number: ${representativeNumber || 'N/A'}
-        `;
+        contactDetailsHtml = '';
+        contactDetailsText = '';
         messageContentHtml = '';
         messageContentText = '';
       } else {
@@ -180,26 +193,24 @@ export class ContactService {
           representativeEmail || this._configService.get<string>('EMAIL_USER')
         }>`,
         to: this._configService.get<string>('MAIL_CONTACT_FORM_RECEIVER_EMAIL'),
-        subject: `UNISCOUT - ${requestType} Request from ${representativeName || 'Anonymous'}`,
+        subject: `UNISCOUT - ${requestType} Request`,
         html: `
           <p><strong>Request Type:</strong> ${requestType}</p>
           ${universityDetailsHtml}
-          ${contactDetailsHtml}
-          ${messageContentHtml}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? contactDetailsHtml : ''}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? messageContentHtml : ''}
         `,
         text: `
           Request Type: ${requestType}
           ${universityDetailsText}
-          ${contactDetailsText}
-          ${messageContentText}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? contactDetailsText : ''}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? messageContentText : ''}
         `,
-        attachments: attachments,
+        attachments: emailAttachments,
       };
 
       await this._transporter.sendMail(mailOptions);
-      this._logger.log(
-        `Contact form email sent successfully from ${representativeEmail || 'Anonymous'} for ${requestType} request.`
-      );
+      this._logger.log(`Contact form email sent successfully' for ${requestType} request.`);
 
       let acknowledgmentUniversityDetailsHtml = '';
       let acknowledgmentUniversityDetailsText = '';
@@ -241,18 +252,8 @@ export class ContactService {
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
           ${description ? `Description: ${description}\n` : ''}
         `;
-        acknowledgmentContactDetailsHtml = `
-          <h3>Your Contact Details:</h3>
-          <p><strong>Name:</strong> ${representativeName || 'N/A'}</p>
-          <p><strong>Email:</strong> ${representativeEmail || 'N/A'}</p>
-          <p><strong>Phone Number:</strong> ${representativeNumber || 'N/A'}</p>
-        `;
-        acknowledgmentContactDetailsText = `
-          Your Contact Details:
-          Name: ${representativeName || 'N/A'}
-          Email: ${representativeEmail || 'N/A'}
-          Phone Number: ${representativeNumber || 'N/A'}
-        `;
+        acknowledgmentContactDetailsHtml = '';
+        acknowledgmentContactDetailsText = '';
         acknowledgmentMessageContentHtml = '';
         acknowledgmentMessageContentText = '';
       } else {
@@ -339,7 +340,8 @@ export class ContactService {
           universityEmail: universityEmail,
           universityNumber: universityNumber,
           website: website,
-          subjectsExcelFilePath: path.relative(process.cwd(), permanentExcelFilePath),
+          subjectsExcelFilePath: permanentExcelFilePath ? path.relative(process.cwd(), permanentExcelFilePath) : null,
+          attachmentFilePaths: finalAttachmentPaths,
           studentPopulation: numberOfStudents,
           description: description,
         }),
@@ -349,11 +351,34 @@ export class ContactService {
       return { message: 'Contact form submitted successfully!' };
     } catch (error) {
       this._logger.error(
-        `Failed to send contact form email from ${senderEmail || 'unknown'} (Type: ${
-          createContactDto.requestType || 'unknown'
-        }):`,
+        `Failed to send contact form email (Type: ${createContactDto.requestType || 'unknown'}):`,
         error.stack
       );
+      if (permanentExcelFilePath && fs.existsSync(permanentExcelFilePath)) {
+        fs.unlink(permanentExcelFilePath, (err) => {
+          if (err)
+            this._logger.error(
+              `Failed to delete permanent Excel file during error cleanup: ${permanentExcelFilePath}, Error: ${err.message}`
+            );
+          else
+            this._logger.log(
+              `Successfully deleted permanent Excel file during error cleanup: ${permanentExcelFilePath}`
+            );
+        });
+      }
+      finalAttachmentPaths.forEach((filePath) => {
+        const absolutePath = path.join(process.cwd(), filePath);
+        if (fs.existsSync(absolutePath)) {
+          fs.unlink(absolutePath, (err) => {
+            if (err)
+              this._logger.error(
+                `Failed to delete permanent attachment file during error cleanup: ${absolutePath}, Error: ${err.message}`
+              );
+            else
+              this._logger.log(`Successfully deleted permanent attachment file during error cleanup: ${absolutePath}`);
+          });
+        }
+      });
       throw new Error('Failed to submit contact form. Please try again later.');
     } finally {
       if (excelTempFilePath && fs.existsSync(excelTempFilePath)) {
@@ -364,10 +389,13 @@ export class ContactService {
         });
       }
       attachmentPaths.forEach((filePath) => {
-        fs.unlink(filePath, (err) => {
-          if (err) this._logger.error(`Failed to delete temporary attachment file: ${filePath}, Error: ${err.message}`);
-          else this._logger.log(`Successfully deleted temporary attachment file: ${filePath}`);
-        });
+        if (fs.existsSync(filePath)) {
+          fs.unlink(filePath, (err) => {
+            if (err)
+              this._logger.error(`Failed to delete temporary attachment file: ${filePath}, Error: ${err.message}`);
+            else this._logger.log(`Successfully deleted temporary attachment file: ${filePath}`);
+          });
+        }
       });
     }
   }
