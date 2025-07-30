@@ -108,7 +108,7 @@ export class ContactService {
           <p><strong>University Email:</strong> ${universityEmail || 'N/A'}</p>
           <p><strong>University Number:</strong> ${universityNumber || 'N/A'}</p>
           <p><strong>Website:</strong> <a href="${website}">${website}</a></p>
-          ${permanentExcelFilePath ? `<p><strong>Subjects Excel File:</strong> Available on server</p>` : ''}
+          ${permanentExcelFilePath ? `<p><strong>Subjects Excel File:</strong> Submitted </p>` : ''}
           ${
             typeof numberOfStudents === 'number'
               ? `<p><strong>Number of Students:</strong> ${numberOfStudents}</p>`
@@ -126,7 +126,7 @@ export class ContactService {
           University Email: ${universityEmail || 'N/A'}
           University Number: ${universityNumber || 'N/A'}
           Website: ${website}
-          Subjects Excel File: ${permanentExcelFilePath ? 'Available on server' : 'N/A'}
+          Subjects Excel File: ${permanentExcelFilePath ? 'Submitted' : 'N/A'}
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
           ${description ? `Description: ${description}\n` : ''}
         `;
@@ -219,7 +219,7 @@ export class ContactService {
           <p><strong>University Email:</strong> ${universityEmail || 'N/A'}</p>
           <p><strong>University Number:</strong> ${universityNumber || 'N/A'}</p>
           <p><strong>Website:</strong> <a href="${website}">${website}</a></p>
-          ${permanentExcelFilePath ? `<p><strong>Subjects Excel File:</strong> Available on server</p>` : ''}
+          ${permanentExcelFilePath ? `<p><strong>Subjects Excel File:</strong> Submitted </p>` : ''}
           ${
             typeof numberOfStudents === 'number'
               ? `<p><strong>Number of Students:</strong> ${numberOfStudents}</p>`
@@ -237,7 +237,7 @@ export class ContactService {
           University Email: ${universityEmail || 'N/A'}
           University Number: ${universityNumber || 'N/A'}
           Website: ${website}
-          Subjects Excel File: ${permanentExcelFilePath ? 'Available on server' : 'N/A'}
+          Subjects Excel File: ${permanentExcelFilePath ? 'Submitted' : 'N/A'}
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
           ${description ? `Description: ${description}\n` : ''}
         `;
@@ -291,23 +291,22 @@ export class ContactService {
         to: representativeEmail,
         subject: 'UNISCOUT - We received your message!',
         html: `
-          <p>Dear ${representativeName || 'Valued User'},</p>
           <p>Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon as possible.</p> <p>Here's a copy of your submission details:</p>
           <p><strong>Request Type:</strong> ${requestType}</p>
-          ${acknowledgmentUniversityDetailsHtml}
-          ${acknowledgmentContactDetailsHtml}
-          ${acknowledgmentMessageContentHtml} <p>If you have any urgent queries, feel free to reach out to us directly.</p>
+          ${requestType === RequestTypeEnum.NEW_UNIVERSITY ? acknowledgmentUniversityDetailsHtml : ''}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? acknowledgmentContactDetailsHtml : ''}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? acknowledgmentMessageContentHtml : ''}
+          <p>If you have any urgent queries, feel free to reach out to us directly.</p>
           <p>Best regards,<br>The UNISCOUT Team</p>
         `,
         text: `
-          Dear ${representativeName || 'Valued User'},
-
           Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon as possible. Here's a copy of your submission details:
 
           Request Type: ${requestType}
-          ${acknowledgmentUniversityDetailsText}
-          ${acknowledgmentContactDetailsText}
-          ${acknowledgmentMessageContentText} If you have any urgent queries, feel free to reach out to us directly.
+          ${requestType === RequestTypeEnum.NEW_UNIVERSITY ? acknowledgmentUniversityDetailsText : ''}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? acknowledgmentContactDetailsText : ''}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? acknowledgmentMessageContentText : ''}
+          If you have any urgent queries, feel free to reach out to us directly.
 
           Best regards,
           The UNISCOUT Team
