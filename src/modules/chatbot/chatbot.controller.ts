@@ -1,90 +1,51 @@
-import { Body, Controller, Post, Res, BadRequestException, ValidationPipe, UsePipes } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+// src/chatbot/chatbot.controller.ts
+import { Body, Controller, Post, Res, HttpStatus } from '@nestjs/common';
 import { ChatbotService } from './chatbot.service';
-import { UniversityService } from '@UniversitiesModule/university.service';
-import { ChatRequestDto, ChatResponseData, ChatResponseDto, ChatMessageDto } from './dto/chat-request.dto';
-import { ChatMessage } from './dto/chatbot.dto';
+import { Response } from 'express'; // Import Response from express
 
-@ApiTags('chatbot')
-@Controller('chatbot')
+@Controller('chatbot') // The controller path will be /api/chatbot due to global prefix
 export class ChatbotController {
-  constructor(
-    private readonly _chatbotService: ChatbotService,
-    private readonly _universityService: UniversityService
-  ) {}
+  constructor(private readonly chatbotService: ChatbotService) {}
 
-  @Post()
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  async chat(@Body() chatRequest: ChatRequestDto): Promise<ChatResponseDto> {
+  @Post('message') // This will be accessible at /api/chatbot/message
+  async handleChatMessage(
+    @Body('message') message: string,
+    @Body('sessionId') sessionId: string,
+    @Res() res: Response // Use @Res() to manually control the response
+  ) {
     try {
-      const mappedConversationHistory: ChatMessage[] =
-        chatRequest.conversationHistory?.map((msg: ChatMessageDto) => ({
-          role: msg.role === 'model' ? 'assistant' : 'user',
-          parts: msg.parts,
-        })) || [];
+      // The service returns a plain object: { reply: string, sessionId: string }
+      const chatResponse = await this.chatbotService.sendMessage(message, sessionId);
 
-      const response: ChatResponseData = await this._chatbotService.chat(
-        chatRequest.message,
-        mappedConversationHistory
-      );
-
-      return {
-        success: true,
-        message: 'Chat response generated successfully',
-        data: response,
-      };
+      // Explicitly send a plain JSON response to avoid class-transformer issues
+      res.status(HttpStatus.OK).json({
+        reply: chatResponse.reply,
+        timestamp: new Date().toISOString(), // Include a timestamp
+        sessionId: chatResponse.sessionId, // Send back the session ID
+      });
     } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to generate chat response',
-        error: error.message,
-      };
+      console.error('Error in handleChatMessage:', error);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+        error: 'An internal server error occurred.',
+        // details: error.message, // Consider removing `details` in production for security
+      });
     }
   }
 
-  @Post('countries')
-  async getValidCountries() {
+  @Post('reset') // This will be accessible at /api/chatbot/reset
+  async handleResetChat(
+    @Body('sessionId') sessionId: string,
+    @Res() res: Response // Use @Res() to manually control the response
+  ) {
     try {
-      const countries = await this._universityService.getAllAvailableCountries();
-      return {
-        success: true,
-        message: 'Valid countries retrieved successfully',
-        data: countries,
-      };
+      this.chatbotService.resetChatSession(sessionId);
+      res.status(HttpStatus.OK).json({ message: 'Chat session reset successfully.' });
     } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to retrieve valid countries',
-        error: error.message,
-      };
-    }
-  }
-
-  @Post('export-universities')
-  async exportUniversities(@Body() body: { universities: number[]; type: string }, @Res() res) {
-    if (!body.universities || body.universities.length === 0) {
-      throw new BadRequestException('At least one university ID is required for export.');
-    }
-    if (!body.type || (body.type !== 'excel' && body.type !== 'pdf')) {
-      throw new BadRequestException('Invalid export type. Must be "excel" or "pdf".');
-    }
-
-    if (body.type === 'excel') {
-      const fileBuffer = await this._chatbotService.exportUniversitiesAsExcel(body.universities);
-      res.set({
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="universities.xlsx"`,
+      console.error('Error in handleResetChat:', error);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+        error: 'Failed to reset chat session.',
+        // details: error.message, // Consider removing `details` in production
       });
-      res.send(Buffer.from(fileBuffer, 'base64'));
-    } else if (body.type === 'pdf') {
-      const fileBuffer = await this._chatbotService.exportUniversitiesAsPdf(body.universities);
-      res.set({
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="universities.pdf"`,
-      });
-      res.send(Buffer.from(fileBuffer, 'base64'));
-    } else {
-      throw new BadRequestException('Invalid export type. Must be "excel" or "pdf".');
     }
   }
 }
