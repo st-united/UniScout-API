@@ -14,6 +14,7 @@ import { PdfService } from './pdf.service';
 import * as fs from 'fs'; // Add this import for file system operations
 import * as path from 'path'; // Add this import for path manipulation
 import { ExcelService } from './excel.service';
+import { CsvService } from './csv.service';
 
 interface UniversityQuery {
   type:
@@ -21,7 +22,8 @@ interface UniversityQuery {
     | 'GET_UNIVERSITY_BY_NAME'
     | 'GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY'
     | 'EXPORT_TOP_UNIVERSITIES_PDF'
-    | 'EXPORT_TOP_UNIVERSITIES_EXCEL'; // Add new type for Excel
+    | 'EXPORT_TOP_UNIVERSITIES_EXCEL'
+    | 'EXPORT_TOP_UNIVERSITIES_CSV'; // Add new type for Excel
   country?: string;
   limit?: number;
   universityName?: string;
@@ -30,10 +32,10 @@ interface UniversityQuery {
 }
 
 export interface ChatbotReply {
-  reply: string; // The user-facing message
+  reply: string;
   sessionId: string;
-  action?: 'initiate_pdf_download' | 'initiate_excel_download' | 'query_result' | 'error'; // Add new action for Excel
-  data?: any; // Optional data for the frontend (e.g., download URL, query params)
+  action?: 'initiate_pdf_download' | 'initiate_excel_download' | 'initiate_csv_download' | 'query_result' | 'error'; // Add 'initiate_csv_download'
+  data?: any;
 }
 
 @Injectable()
@@ -47,7 +49,8 @@ export class ChatbotService {
     private configService: ConfigService,
     private universityDataService: UniversityDataService,
     private pdfService: PdfService,
-    private excelService: ExcelService // Inject ExcelService here
+    private excelService: ExcelService,
+    private csvService: CsvService // Inject ExcelService here
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
@@ -89,6 +92,7 @@ export class ChatbotService {
                 4.  Answering general university-related questions using your knowledge.
                 5.  Generating a PDF report of top universities in a country when explicitly requested.
                 6.  Generating an **Excel report** of top universities in a country when explicitly requested.
+                7.  Generating a **CSV report** of top universities in a country when explicitly requested.
 
 
                 When a user asks for 'top', 'best', or 'highest-ranked' universities in a specific country, you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
@@ -104,11 +108,17 @@ export class ChatbotService {
                 \`\`\`
                 Example queries and your expected JSON responses for top universities:
                 - User: "What is the top university in Japan?"
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "Japan", "limit": 1 } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "Japan", "limit": 1 } }
+\`\`\`
                 - User: "List the best 3 universities in USA."
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "USA", "limit": 3 } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "USA", "limit": 3 } }
+\`\`\`
                 - User: "Tell me about top universities in Germany."
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "Germany", "limit": 5 } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "Germany", "limit": 5 } }
+\`\`\`
 
                 When a user asks about a SPECIFIC university by name (e.g., "Tell me more about Harvard University", "What is Harvard University?"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
                 \`\`\`json
@@ -122,11 +132,17 @@ export class ChatbotService {
                 \`\`\`
                 Example queries and your expected JSON responses for specific universities:
                 - User: "Can you tell me more about Harvard University?"
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "Harvard University" } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "Harvard University" } }
+\`\`\`
                 - User: "What about MIT?"
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "Massachusetts Institute of Technology" } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "Massachusetts Institute of Technology" } }
+\`\`\`
                 - User: "Is University of Cambridge good?"
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "University of Cambridge" } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "University of Cambridge" } }
+\`\`\`
 
                 When a user asks for universities that offer a specific subject or are strong in an academic field, possibly in a specific country (e.g., "universities for computing in Korea", "study engineering in Germany"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
                 \`\`\`json
@@ -142,13 +158,21 @@ export class ChatbotService {
                 \`\`\`
                 Example queries and your expected JSON responses for universities by subject/field:
                 - User: "I want to study computing in Korea, which university would you recommend me to go?"
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Computer Science", "country": "Korea" } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Computer Science", "country": "Korea" } }
+\`\`\`
                 - User: "I am interested in IT in Australia."
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Information Technology", "country": "Australia" } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Information Technology", "country": "Australia" } }
+\`\`\`
                 - User: "Which universities offer medicine?"
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Medicine" } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Medicine" } }
+\`\`\`
                 - User: "Best engineering universities in USA."
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "academicFieldName": "Engineering Technology", "country": "USA" } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "academicFieldName": "Engineering Technology", "country": "USA" } }
+\`\`\`
 
                 When a user asks to export or download a list of top universities in a country as a PDF (e.g., "export the top 20 universities in Vietnam in pdf", "download best 10 universities in France as a PDF report"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
                 \`\`\`json
@@ -163,11 +187,17 @@ export class ChatbotService {
                 \`\`\`
                 Example queries and your expected JSON responses for PDF export:
                 - User: "I want to export the top 20 universities in Vietnam in pdf"
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_PDF", "country": "Vietnam", "limit": 20 } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_PDF", "country": "Vietnam", "limit": 20 } }
+\`\`\`
                 - User: "Download best 10 universities in France as a PDF report"
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_PDF", "country": "France", "limit": 10 } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_PDF", "country": "France", "limit": 10 } }
+\`\`\`
                 - User: "Can you give me a PDF of top universities in UK?"
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_PDF", "country": "UK", "limit": 10 } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_PDF", "country": "UK", "limit": 10 } }
+\`\`\`
 
                 When a user asks to export or download a list of top universities in a country as an **Excel** file (e.g., "export the top 20 universities in Vietnam to excel", "download best 10 universities in France as an Excel report"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
                 \`\`\`json
@@ -182,11 +212,42 @@ export class ChatbotService {
                 \`\`\`
                 Example queries and your expected JSON responses for Excel export:
                 - User: "I want to export the top 20 universities in Vietnam to excel"
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_EXCEL", "country": "Vietnam", "limit": 20 } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_EXCEL", "country": "Vietnam", "limit": 20 } }
+\`\`\`
                 - User: "Download best 10 universities in France as an Excel report"
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_EXCEL", "country": "France", "limit": 10 } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_EXCEL", "country": "France", "limit": 10 } }
+\`\`\`
                 - User: "Can you give me an Excel file of top universities in UK?"
-                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_EXCEL", "country": "UK", "limit": 10 } }\n\`\`\`
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_EXCEL", "country": "UK", "limit": 10 } }
+\`\`\`
+
+                When a user asks to export or download a list of top universities in a country as a **CSV** file (e.g., "export the top 20 universities in Vietnam to csv", "download best 10 universities in France as a CSV report"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
+                \`\`\`json
+                {
+                  "action": "query_university_data",
+                  "query": {
+                    "type": "EXPORT_TOP_UNIVERSITIES_CSV",
+                    "country": "[extracted_country_name]", // e.g., "Vietnam", "France" - capitalize first letter if possible
+                    "limit": [number] // Infer the number, e.g., 20, 10. Default to 10 or 20 if not specified.
+                  }
+                }
+                \`\`\`
+                Example queries and your expected JSON responses for CSV export:
+                - User: "I want to export the top 20 universities in Vietnam to csv"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_CSV", "country": "Vietnam", "limit": 20 } }
+\`\`\`
+                - User: "Download best 10 universities in France as a CSV report"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_CSV", "country": "France", "limit": 10 } }
+\`\`\`
+                - User: "Can you give me a CSV file of top universities in UK?"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_CSV", "country": "UK", "limit": 10 } }
+\`\`\`
 
 
                 If the user's question is university-related but CANNOT be answered by a specific data query (e.g., "how to apply to college?", "what are student exchange programs?"), answer it using your general knowledge.
@@ -445,7 +506,7 @@ export class ChatbotService {
               }
               break;
 
-            case 'EXPORT_TOP_UNIVERSITIES_EXCEL': // New case for Excel export
+            case 'EXPORT_TOP_UNIVERSITIES_EXCEL': // Existing case for Excel export
               const excelCountry = query.country;
               const excelLimit = query.limit || 10;
 
@@ -489,6 +550,56 @@ export class ChatbotService {
                 }
               } else {
                 finalReply = `I couldn't find any top universities for ${excelCountry} to export to Excel.`;
+                action = 'query_result';
+              }
+              break;
+
+            case 'EXPORT_TOP_UNIVERSITIES_CSV': // NEW: Case for CSV export
+              const csvCountry = query.country;
+              const csvLimit = query.limit || 10;
+
+              if (!csvCountry) {
+                finalReply = 'Please specify a country to export top universities to CSV.';
+                action = 'error';
+                break;
+              }
+
+              const universitiesForCsv: UniEntity[] = await this.universityDataService.getTopUniversitiesByCountry(
+                csvCountry,
+                csvLimit
+              );
+
+              if (universitiesForCsv.length > 0) {
+                try {
+                  // Call the CsvService to generate the file
+                  const filename = await this.csvService.generateUniversityCsv(
+                    universitiesForCsv,
+                    csvCountry,
+                    csvLimit
+                  );
+
+                  // Construct the download URL for the frontend
+                  const downloadUrl = `/api/chatbot/download-csv/${filename}`;
+
+                  finalReply = `I've prepared a list of the top ${universitiesForCsv.length} universities in ${csvCountry}. You can download the CSV file here: [Download CSV](${downloadUrl})`;
+                  action = 'initiate_csv_download'; // Signal frontend for CSV download
+                  data = {
+                    country: csvCountry,
+                    limit: csvLimit,
+                    downloadUrl: downloadUrl,
+                    filename: filename,
+                  };
+                  this.logger.log(`[Session ${sessionId}] CSV download initiated. URL: ${downloadUrl}`);
+                } catch (csvError) {
+                  this.logger.error(
+                    `[Session ${sessionId}] Error generating or saving CSV: ${csvError.message}`,
+                    csvError.stack
+                  );
+                  finalReply = `I apologize, but I encountered an error while trying to generate the CSV file. Please try again later.`;
+                  action = 'error';
+                }
+              } else {
+                finalReply = `I couldn't find any top universities for ${csvCountry} to export to CSV.`;
                 action = 'query_result';
               }
               break;

@@ -21,43 +21,19 @@ export class ChatbotController {
   // New endpoint to serve the PDF files
   @Get('download-pdf/:filename')
   async downloadPdf(@Param('filename') filename: string, @Res() res: Response) {
-    // Define the directory where PDFs are saved (MUST match ChatbotService)
-    const tempPdfDir = path.join(process.cwd(), 'temp_pdfs');
-    const filePath = path.join(tempPdfDir, filename);
+    const filePath = path.join(process.cwd(), 'downloads', filename); // Ensure this matches the save path in pdf.service.ts
+    this.logger.log(`Attempting to download PDF: ${filePath}`);
 
-    this.logger.log(`Attempting to serve file: ${filePath}`);
-
-    // Check if the file exists
     if (fs.existsSync(filePath)) {
-      // Set headers for file download
       res.setHeader('Content-Type', 'application/pdf');
-      // 'Content-Disposition: attachment' prompts the browser to download the file
-      // 'filename=' specifies the name of the downloaded file
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-      // Stream the file to the client
-      const fileStream = fs.createReadStream(filePath);
-      fileStream.pipe(res);
-
-      fileStream.on('error', (err) => {
-        this.logger.error(`Error streaming file ${filename}: ${err.message}`);
-        res.status(HttpStatus.INTERNAL_SERVER_ERROR).send('Error downloading file.');
-      });
-
-      fileStream.on('end', () => {
-        this.logger.log(`Successfully streamed file: ${filename}`);
-        // Optionally, delete the file after successful download if it's truly temporary
-        // fs.unlink(filePath, (unlinkErr) => {
-        //   if (unlinkErr) this.logger.error(`Error deleting temporary file ${filename}: ${unlinkErr.message}`);
-        //   else this.logger.log(`Deleted temporary file: ${filename}`);
-        // });
-      });
+      fs.createReadStream(filePath).pipe(res);
     } else {
-      // If file not found, send 404
-      this.logger.warn(`File not found: ${filePath}`);
+      this.logger.warn(`PDF file not found: ${filePath}`);
       res.status(HttpStatus.NOT_FOUND).send('File not found.');
     }
   }
+
   @Get('download-excel/:filename')
   async downloadExcel(@Param('filename') filename: string, @Res() res: Response) {
     const filePath = join(process.cwd(), 'temp_excels', filename);
@@ -68,6 +44,35 @@ export class ChatbotController {
       return res.sendFile(filePath);
     } else {
       res.status(404).send('File not found.');
+    }
+  }
+
+  @Get('download-csv/:filename')
+  async downloadCsv(@Param('filename') filename: string, @Res() res: Response) {
+    // Define the directory where CSVs are saved (MUST match CsvService)
+    // CHANGE THIS LINE: Use 'temp_exports' to match CsvService
+    const tempCsvDir = join(process.cwd(), 'temp_exports');
+    const filePath = join(tempCsvDir, filename);
+
+    this.logger.log(`Attempting to serve CSV file from: ${filePath}`);
+
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+
+      fileStream.on('error', (err) => {
+        this.logger.error(`Error streaming CSV file ${filename}: ${err.message}`);
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).send('Error downloading file.');
+      });
+
+      fileStream.on('end', () => {
+        this.logger.log(`Successfully streamed CSV file: ${filename}`);
+      });
+    } else {
+      this.logger.warn(`CSV file not found at: ${filePath}`);
+      res.status(HttpStatus.NOT_FOUND).send('File not found.');
     }
   }
 

@@ -10,6 +10,7 @@ import { SubjectEntity } from '@UniversitiesModule/entities/subject.entity'; // 
 import { AcademicFieldEntity } from '@UniversitiesModule/entities/academic-field.entity'; // Assuming this path
 import { PdfService } from './pdf.service'; // <--- ADD THIS IMPORT
 import { ExcelService } from './excel.service';
+import { CsvService } from './csv.service';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ExcelService } from './excel.service';
     ChatbotService,
     UniversityDataService,
     PdfService,
+    CsvService,
     ExcelService, // <--- ADD PDFSERVICE TO PROVIDERS
   ],
   exports: [ChatbotService],
