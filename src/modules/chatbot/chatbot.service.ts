@@ -1,4 +1,4 @@
-// src/chatbot/chatbot.service.ts
+// src/modules/chatbot/chatbot.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import {
   GoogleGenerativeAI,
@@ -10,15 +10,30 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { UniversityDataService } from './university-data.service';
 import { UniEntity } from '@UniversitiesModule/entities';
+import { PdfService } from './pdf.service';
+import * as fs from 'fs'; // Add this import for file system operations
+import * as path from 'path'; // Add this import for path manipulation
+import { ExcelService } from './excel.service';
 
-// Define a type for structured queries Gemini will generate
 interface UniversityQuery {
-  type: 'TOP_UNIVERSITIES_BY_COUNTRY' | 'GET_UNIVERSITY_BY_NAME' | 'GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY';
+  type:
+    | 'TOP_UNIVERSITIES_BY_COUNTRY'
+    | 'GET_UNIVERSITY_BY_NAME'
+    | 'GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY'
+    | 'EXPORT_TOP_UNIVERSITIES_PDF'
+    | 'EXPORT_TOP_UNIVERSITIES_EXCEL'; // Add new type for Excel
   country?: string;
   limit?: number;
   universityName?: string;
-  subjectName?: string; // <--- ADDED NEW FIELD
+  subjectName?: string;
   academicFieldName?: string;
+}
+
+export interface ChatbotReply {
+  reply: string; // The user-facing message
+  sessionId: string;
+  action?: 'initiate_pdf_download' | 'initiate_excel_download' | 'query_result' | 'error'; // Add new action for Excel
+  data?: any; // Optional data for the frontend (e.g., download URL, query params)
 }
 
 @Injectable()
@@ -26,9 +41,14 @@ export class ChatbotService {
   private readonly logger = new Logger(ChatbotService.name);
   private genAI: GoogleGenerativeAI;
   private chatSessions: Map<string, ChatSession> = new Map();
-  private model: GenerativeModel; // Declare model at class level
+  private model: GenerativeModel;
 
-  constructor(private configService: ConfigService, private universityDataService: UniversityDataService) {
+  constructor(
+    private configService: ConfigService,
+    private universityDataService: UniversityDataService,
+    private pdfService: PdfService,
+    private excelService: ExcelService // Inject ExcelService here
+  ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
       this.logger.error('GEMINI_API_KEY is not set in environment variables.');
@@ -36,7 +56,6 @@ export class ChatbotService {
     }
     this.genAI = new GoogleGenerativeAI(apiKey);
 
-    // Initialize the model here once in the constructor
     this.model = this.genAI.getGenerativeModel({
       model: 'models/gemini-1.5-flash',
       safetySettings: [
@@ -49,7 +68,7 @@ export class ChatbotService {
     this.logger.log('Initialized ChatbotService with Gemini model: models/gemini-1.5-flash');
   }
 
-  async sendMessage(message: string, sessionId: string): Promise<{ reply: string; sessionId: string }> {
+  async sendMessage(message: string, sessionId: string): Promise<ChatbotReply> {
     let chatSession = this.chatSessions.get(sessionId);
 
     if (!chatSession) {
@@ -62,79 +81,120 @@ export class ChatbotService {
             parts: [
               {
                 text: `
-              You are UniScout Assistant, an AI designed to help users find university information.
-              Your capabilities include:
-              1.  Answering questions about top universities in a specific country.
-              2.  Answering questions about specific universities by name.
-              3.  Answering questions about universities offering specific subjects or in specific academic fields, potentially filtered by country. // <--- NEW LINE
-              4.  Answering general university-related questions using your knowledge.
+                You are UniScout Assistant, an AI designed to help users find university information.
+                Your capabilities include:
+                1.  Answering questions about top universities in a specific country.
+                2.  Answering questions about specific universities by name.
+                3.  Answering questions about universities offering specific subjects or in specific academic fields, potentially filtered by country.
+                4.  Answering general university-related questions using your knowledge.
+                5.  Generating a PDF report of top universities in a country when explicitly requested.
+                6.  Generating an **Excel report** of top universities in a country when explicitly requested.
 
-              When a user asks for 'top', 'best', or 'highest-ranked' universities in a specific country, you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
-              \`\`\`json
-              {
-                "action": "query_university_data",
-                "query": {
-                  "type": "TOP_UNIVERSITIES_BY_COUNTRY",
-                  "country": "[extracted_country_name]", // e.g., "Japan", "USA", "Vietnam" - capitalize first letter if possible
-                  "limit": [number] // Infer a reasonable number like 1, 3, 5, or 10 based on the user's request (e.g., "top university" -> 1, "best universities" -> 5). Omit if no number is clear.
+
+                When a user asks for 'top', 'best', or 'highest-ranked' universities in a specific country, you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
+                \`\`\`json
+                {
+                  "action": "query_university_data",
+                  "query": {
+                    "type": "TOP_UNIVERSITIES_BY_COUNTRY",
+                    "country": "[extracted_country_name]", // e.g., "Japan", "USA", "Vietnam" - capitalize first letter if possible
+                    "limit": [number] // Infer a reasonable number like 1, 3, 5, or 10 based on the user's request (e.g., "top university" -> 1, "best universities" -> 5). Omit if no number is clear.
+                  }
                 }
-              }
-              \`\`\`
-              Example queries and your expected JSON responses for top universities:
-              - User: "What is the top university in Japan?"
-                Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "Japan", "limit": 1 } }\n\`\`\`
-              - User: "List the best 3 universities in USA."
-                Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "USA", "limit": 3 } }\n\`\`\`
-              - User: "Tell me about top universities in Germany."
-                Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "Germany", "limit": 5 } }\n\`\`\`
+                \`\`\`
+                Example queries and your expected JSON responses for top universities:
+                - User: "What is the top university in Japan?"
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "Japan", "limit": 1 } }\n\`\`\`
+                - User: "List the best 3 universities in USA."
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "USA", "limit": 3 } }\n\`\`\`
+                - User: "Tell me about top universities in Germany."
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "Germany", "limit": 5 } }\n\`\`\`
 
-              When a user asks about a SPECIFIC university by name (e.g., "Tell me more about Harvard University", "What is Harvard University?"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
-              \`\`\`json
-              {
-                "action": "query_university_data",
-                "query": {
-                  "type": "GET_UNIVERSITY_BY_NAME",
-                  "universityName": "[extracted_university_name]" // e.g., "Harvard University", "Massachusetts Institute of Technology" - use the full, likely official name
+                When a user asks about a SPECIFIC university by name (e.g., "Tell me more about Harvard University", "What is Harvard University?"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
+                \`\`\`json
+                {
+                  "action": "query_university_data",
+                  "query": {
+                    "type": "GET_UNIVERSITY_BY_NAME",
+                    "universityName": "[extracted_university_name]" // e.g., "Harvard University", "Massachusetts Institute of Technology" - use the full, likely official name
+                  }
                 }
-              }
-              \`\`\`
-              Example queries and your expected JSON responses for specific universities:
-              - User: "Can you tell me more about Harvard University?"
-                Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "Harvard University" } }\n\`\`\`
-              - User: "What about MIT?"
-                Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "Massachusetts Institute of Technology" } }\n\`\`\`
-              - User: "Is University of Cambridge good?"
-                Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "University of Cambridge" } }\n\`\`\`
+                \`\`\`
+                Example queries and your expected JSON responses for specific universities:
+                - User: "Can you tell me more about Harvard University?"
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "Harvard University" } }\n\`\`\`
+                - User: "What about MIT?"
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "Massachusetts Institute of Technology" } }\n\`\`\`
+                - User: "Is University of Cambridge good?"
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "University of Cambridge" } }\n\`\`\`
 
-              When a user asks for universities that offer a specific subject or are strong in an academic field, possibly in a specific country (e.g., "universities for computing in Korea", "study engineering in Germany"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
-              \`\`\`json
-              {
-                "action": "query_university_data",
-                "query": {
-                  "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", // <--- NEW TYPE
-                  "subjectName": "[extracted_subject_name]", // e.g., "Computing", "Medicine". Prioritize if a specific subject is mentioned. Capitalize first letter if possible.
-                  "academicFieldName": "[extracted_academic_field_name]", // e.g., "Engineering Technology", "Natural Sciences". Use if a broader field is mentioned and no specific subject. Capitalize first letter if possible.
-                  "country": "[extracted_country_name]" // e.g., "Korea", "Germany". Omit if no country is mentioned. Capitalize first letter if possible.
+                When a user asks for universities that offer a specific subject or are strong in an academic field, possibly in a specific country (e.g., "universities for computing in Korea", "study engineering in Germany"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
+                \`\`\`json
+                {
+                  "action": "query_university_data",
+                  "query": {
+                    "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY",
+                    "subjectName": "[extracted_subject_name]", // e.g., "Computing", "Medicine". Prioritize if a specific subject is mentioned. Capitalize first letter if possible.
+                    "academicFieldName": "[extracted_academic_field_name]", // e.g., "Engineering Technology", "Natural Sciences". Use if a broader field is mentioned and no specific subject. Capitalize first letter if possible.
+                    "country": "[extracted_country_name]" // e.g., "Korea", "Germany". Omit if no country is mentioned. Capitalize first letter if possible.
+                  }
                 }
-              }
-              \`\`\`
-              Example queries and your expected JSON responses for universities by subject/field: // <--- NEW EXAMPLE SECTION
-              - User: "I want to study computing in Korea, which university would you recommend me to go?"
-                Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Computer Science", "country": "Korea" } }\n\`\`\`
-              - User: "I am interested in IT in Australia."
-              Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Information Technology", "country": "Australia" } }\n\`\`\`
-              - User: "Which universities offer medicine?"
-                Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Medicine" } }\n\`\`\`
-              - User: "Best engineering universities in USA."
-                Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "academicFieldName": "Engineering Technology", "country": "USA" } }\n\`\`\`
+                \`\`\`
+                Example queries and your expected JSON responses for universities by subject/field:
+                - User: "I want to study computing in Korea, which university would you recommend me to go?"
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Computer Science", "country": "Korea" } }\n\`\`\`
+                - User: "I am interested in IT in Australia."
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Information Technology", "country": "Australia" } }\n\`\`\`
+                - User: "Which universities offer medicine?"
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Medicine" } }\n\`\`\`
+                - User: "Best engineering universities in USA."
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "academicFieldName": "Engineering Technology", "country": "USA" } }\n\`\`\`
+
+                When a user asks to export or download a list of top universities in a country as a PDF (e.g., "export the top 20 universities in Vietnam in pdf", "download best 10 universities in France as a PDF report"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
+                \`\`\`json
+                {
+                  "action": "query_university_data",
+                  "query": {
+                    "type": "EXPORT_TOP_UNIVERSITIES_PDF",
+                    "country": "[extracted_country_name]", // e.g., "Vietnam", "France" - capitalize first letter if possible
+                    "limit": [number] // Infer the number, e.g., 20, 10. Default to 10 or 20 if not specified.
+                  }
+                }
+                \`\`\`
+                Example queries and your expected JSON responses for PDF export:
+                - User: "I want to export the top 20 universities in Vietnam in pdf"
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_PDF", "country": "Vietnam", "limit": 20 } }\n\`\`\`
+                - User: "Download best 10 universities in France as a PDF report"
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_PDF", "country": "France", "limit": 10 } }\n\`\`\`
+                - User: "Can you give me a PDF of top universities in UK?"
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_PDF", "country": "UK", "limit": 10 } }\n\`\`\`
+
+                When a user asks to export or download a list of top universities in a country as an **Excel** file (e.g., "export the top 20 universities in Vietnam to excel", "download best 10 universities in France as an Excel report"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
+                \`\`\`json
+                {
+                  "action": "query_university_data",
+                  "query": {
+                    "type": "EXPORT_TOP_UNIVERSITIES_EXCEL",
+                    "country": "[extracted_country_name]", // e.g., "Vietnam", "France" - capitalize first letter if possible
+                    "limit": [number] // Infer the number, e.g., 20, 10. Default to 10 or 20 if not specified.
+                  }
+                }
+                \`\`\`
+                Example queries and your expected JSON responses for Excel export:
+                - User: "I want to export the top 20 universities in Vietnam to excel"
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_EXCEL", "country": "Vietnam", "limit": 20 } }\n\`\`\`
+                - User: "Download best 10 universities in France as an Excel report"
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_EXCEL", "country": "France", "limit": 10 } }\n\`\`\`
+                - User: "Can you give me an Excel file of top universities in UK?"
+                  Your JSON: \`\`\`json\n{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_EXCEL", "country": "UK", "limit": 10 } }\n\`\`\`
 
 
-              If the user's question is university-related but CANNOT be answered by a specific data query (e.g., "how to apply to college?", "what are student exchange programs?"), answer it using your general knowledge.
+                If the user's question is university-related but CANNOT be answered by a specific data query (e.g., "how to apply to college?", "what are student exchange programs?"), answer it using your general knowledge.
 
-              If the user's question is NOT related to universities at all (e.g., "what is the capital of France?", "tell me a joke"), you MUST ONLY reply with the exact phrase: "Please ask me a university-related question".
-              Do not provide any other information or context for non-university questions.
-              Your responses for general university questions should be concise and helpful.
-            `,
+                If the user's question is NOT related to universities at all (e.g., "what is the capital of France?", "tell me a joke"), you MUST ONLY reply with the exact phrase: "Please ask me a university-related question".
+                Do not provide any other information or context for non-university questions.
+                Your responses for general university questions should be concise and helpful.
+                `,
               },
             ],
           },
@@ -157,7 +217,6 @@ export class ChatbotService {
 
     try {
       this.logger.log(`[Session ${sessionId}] User: "${message}"`);
-      // Ensure chatSession is indeed defined before calling sendMessage
       if (!chatSession) {
         throw new Error('Chat session was not initialized. This should not happen after new session creation.');
       }
@@ -167,10 +226,10 @@ export class ChatbotService {
       const text = response.text();
       this.logger.log(`[Session ${sessionId}] Raw Gemini Response: "${text}"`);
 
-      let dbReply: string | null = null;
-      let isDbQueryAttempted = false;
+      let finalReply: string = text;
+      let action: ChatbotReply['action'] = 'query_result';
+      let data: ChatbotReply['data'] = null;
 
-      // Regex to extract content from ```json block
       const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
       let jsonStringFromGemini: string | null = null;
 
@@ -182,21 +241,15 @@ export class ChatbotService {
       try {
         let parsedResponse: any;
         if (jsonStringFromGemini) {
-          parsedResponse = JSON.parse(jsonStringFromGemini); // Parse the extracted JSON string
-        } else {
-          // If no JSON markdown block was found, it's a regular text response.
-          // 'parsedResponse' will remain undefined, and the conditional check below won't trigger.
-          // The original 'text' from Gemini will then be used as the final reply.
+          parsedResponse = JSON.parse(jsonStringFromGemini);
         }
 
         if (parsedResponse && parsedResponse.action === 'query_university_data' && parsedResponse.query) {
-          isDbQueryAttempted = true;
           const query: UniversityQuery = parsedResponse.query;
           this.logger.log(`[Session ${sessionId}] Detected DB Query: ${JSON.stringify(query)}`);
 
           switch (query.type) {
             case 'TOP_UNIVERSITIES_BY_COUNTRY':
-              // ... (existing logic for TOP_UNIVERSITIES_BY_COUNTRY)
               const universities: UniEntity[] = await this.universityDataService.getTopUniversitiesByCountry(
                 query.country,
                 query.limit
@@ -215,15 +268,18 @@ export class ChatbotService {
                   `Based on the user's previous query, here is the university data:\n\n${dataSummary}\n\nFormulate a helpful and concise natural language answer for the user based *only* on this data. Do not add outside information or disclaimers about data. Start directly with the answer.`
                 );
                 const finalResponse = await finalResponseResult.response;
-                dbReply = finalResponse.text();
+                finalReply = finalResponse.text();
+                action = 'query_result';
               } else {
-                dbReply = `I couldn't find any top universities for ${query.country || 'the specified criteria'}.`;
+                finalReply = `I couldn't find any top universities for ${query.country || 'the specified criteria'}.`;
+                action = 'query_result';
               }
               break;
 
-            case 'GET_UNIVERSITY_BY_NAME': // <--- NEW CASE HERE
+            case 'GET_UNIVERSITY_BY_NAME':
               if (!query.universityName) {
-                dbReply = 'I need a university name to search for more details.';
+                finalReply = 'I need a university name to search for more details.';
+                action = 'query_result';
                 break;
               }
               const universityByName: UniEntity | null = await this.universityDataService.getUniversityByName(
@@ -246,7 +302,7 @@ export class ChatbotService {
                   universityDetails += `  Year founded: ${universityByName.year}\n`;
                 }
                 if (universityByName.type) {
-                  universityDetails += `  University Type: ${universityByName.year}\n`;
+                  universityDetails += `  University Type: ${universityByName.type}\n`;
                 }
                 if (universityByName.location) {
                   universityDetails += `  Location: ${universityByName.location}\n`;
@@ -271,8 +327,6 @@ export class ChatbotService {
                   const subjects = universityByName.subjects.map((subject) => subject.name).join(', ');
                   universityDetails += `  Popular Subjects: ${subjects}\n`;
                 }
-                // Add more fields here as needed from UniEntity to provide a richer summary
-                // Example: if (universityByName.description) { universityDetails += `  Description: ${universityByName.description}\n`; }
 
                 this.logger.log(
                   `[Session ${sessionId}] DB Results for Gemini (University by Name): \n${universityDetails}`
@@ -282,14 +336,18 @@ export class ChatbotService {
                   `Based on the user's previous query, here is the university data:\n\n${universityDetails}\n\nFormulate a helpful and concise natural language answer for the user based *only* on this data. Do not add outside information or disclaimers about data. Start directly with the answer.`
                 );
                 const finalResponse = await finalResponseResult.response;
-                dbReply = finalResponse.text();
+                finalReply = finalResponse.text();
+                action = 'query_result';
               } else {
-                dbReply = `I couldn't find any information for a university named "${query.universityName}". Please check the spelling or try another name.`;
+                finalReply = `I couldn't find any information for a university named "${query.universityName}". Please check the spelling or try another name.`;
+                action = 'query_result';
               }
-              break; // <--- END OF NEW CASE
-            case 'GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY': // <--- NEW CASE HERE
+              break;
+
+            case 'GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY':
               if (!query.subjectName && !query.academicFieldName) {
-                dbReply = 'I need a subject or academic field to search for universities.';
+                finalReply = 'I need a subject or academic field to search for universities.';
+                action = 'query_result';
                 break;
               }
 
@@ -308,7 +366,6 @@ export class ChatbotService {
                   const rankText = uni.rank !== null && uni.rank !== undefined ? ` (Rank ${uni.rank})` : '';
                   dataSummary += `- ${uni.university} in ${uni.country}${rankText}\n`;
 
-                  // Add subjects and academic fields for each university if available
                   if (uni.academicFields && uni.academicFields.length > 0) {
                     const fields = uni.academicFields.map((field) => field.name).join(', ');
                     dataSummary += `  Academic Fields: ${fields}\n`;
@@ -327,15 +384,118 @@ export class ChatbotService {
                   `Based on the user's previous query, here is the university data:\n\n${dataSummary}\n\nFormulate a helpful and concise natural language answer for the user based *only* on this data. Do not add outside information or disclaimers about data. Start directly with the answer.`
                 );
                 const finalResponse = await finalResponseResult.response;
-                dbReply = finalResponse.text();
+                finalReply = finalResponse.text();
+                action = 'query_result';
               } else {
-                dbReply = `I couldn't find any universities offering "${
+                finalReply = `I couldn't find any universities offering "${
                   query.subjectName || query.academicFieldName || 'that field'
                 }" ${query.country ? `in ${query.country}` : ''}.`;
+                action = 'query_result';
               }
-              break; // <--- END OF NEW CASE
+              break;
+
+            case 'EXPORT_TOP_UNIVERSITIES_PDF':
+              const pdfCountry = query.country;
+              const pdfLimit = query.limit || 10;
+
+              if (!pdfCountry) {
+                finalReply = 'Please specify a country to export top universities to PDF.';
+                action = 'error';
+                break;
+              }
+
+              const universitiesForPdf: UniEntity[] = await this.universityDataService.getTopUniversitiesByCountry(
+                pdfCountry,
+                pdfLimit
+              );
+
+              if (universitiesForPdf.length > 0) {
+                try {
+                  // The PdfService.generateTopUniversitiesPdf should return a Promise<string> (filename)
+                  // based on your last provided pdf.service.ts
+                  const filename = await this.pdfService.generateTopUniversitiesPdf(
+                    universitiesForPdf,
+                    pdfCountry,
+                    pdfLimit
+                  );
+
+                  // Construct the download URL that the frontend will call
+                  const downloadUrl = `/api/chatbot/download-pdf/${filename}`;
+
+                  finalReply = `I've prepared a list of the top ${universitiesForPdf.length} universities in ${pdfCountry}. You can download the PDF here: [Download PDF](${downloadUrl})`;
+                  action = 'initiate_pdf_download';
+                  data = {
+                    country: pdfCountry,
+                    limit: pdfLimit,
+                    downloadUrl: downloadUrl,
+                    filename: filename,
+                  };
+                  this.logger.log(`[Session ${sessionId}] PDF download initiated. URL: ${downloadUrl}`);
+                } catch (pdfError) {
+                  this.logger.error(
+                    `[Session ${sessionId}] Error generating or saving PDF: ${pdfError.message}`,
+                    pdfError.stack
+                  );
+                  finalReply = `I apologize, but I encountered an error while trying to generate the PDF. Please try again later.`;
+                  action = 'error';
+                }
+              } else {
+                finalReply = `I couldn't find any top universities for ${pdfCountry} to export to PDF.`;
+                action = 'query_result';
+              }
+              break;
+
+            case 'EXPORT_TOP_UNIVERSITIES_EXCEL': // New case for Excel export
+              const excelCountry = query.country;
+              const excelLimit = query.limit || 10;
+
+              if (!excelCountry) {
+                finalReply = 'Please specify a country to export top universities to Excel.';
+                action = 'error';
+                break;
+              }
+
+              const universitiesForExcel: UniEntity[] = await this.universityDataService.getTopUniversitiesByCountry(
+                excelCountry,
+                excelLimit
+              );
+
+              if (universitiesForExcel.length > 0) {
+                try {
+                  const filename = await this.excelService.generateTopUniversitiesExcel(
+                    universitiesForExcel,
+                    excelCountry,
+                    excelLimit
+                  );
+
+                  const downloadUrl = `/api/chatbot/download-excel/${filename}`; // Excel download URL
+
+                  finalReply = `I've prepared a list of the top ${universitiesForExcel.length} universities in ${excelCountry}. You can download the Excel file here: [Download Excel](${downloadUrl})`;
+                  action = 'initiate_excel_download'; // Signal frontend for Excel download
+                  data = {
+                    country: excelCountry,
+                    limit: excelLimit,
+                    downloadUrl: downloadUrl,
+                    filename: filename,
+                  };
+                  this.logger.log(`[Session ${sessionId}] Excel download initiated. URL: ${downloadUrl}`);
+                } catch (excelError) {
+                  this.logger.error(
+                    `[Session ${sessionId}] Error generating or saving Excel: ${excelError.message}`,
+                    excelError.stack
+                  );
+                  finalReply = `I apologize, but I encountered an error while trying to generate the Excel file. Please try again later.`;
+                  action = 'error';
+                }
+              } else {
+                finalReply = `I couldn't find any top universities for ${excelCountry} to export to Excel.`;
+                action = 'query_result';
+              }
+              break;
+
             default:
-              dbReply = 'I received a university data query, but the specific type of query is not yet supported.';
+              finalReply = 'I received a university data query, but the specific type of query is not yet supported.';
+              action = 'error';
               break;
           }
         }
@@ -343,28 +503,26 @@ export class ChatbotService {
         this.logger.debug(
           `[Session ${sessionId}] Failed to parse extracted JSON or process query: ${jsonError.message}`
         );
-        // If an error occurs here, it means the *extracted* JSON was invalid,
-        // or there was some other issue in processing the parsed query.
-        // In this case, we proceed to use the original 'text' from Gemini.
+        action = 'error';
+        finalReply = 'I encountered an issue understanding your request. Could you please rephrase?';
       }
-
-      // If a database query was processed and a reply generated, use that.
-      // Otherwise, use the original text from Gemini (which could be general answer or "Please ask university related...")
-      const finalReply = dbReply || text;
-      this.logger.log(`[Session ${sessionId}] Final Bot Reply: "${finalReply}"`);
-
-      return { reply: finalReply, sessionId };
+      this.logger.log(`[Session ${sessionId}] Final Bot Reply: "${finalReply}" (Action: ${action})`);
+      return { reply: finalReply, sessionId, action, data };
     } catch (error) {
       this.logger.error(`Error communicating with Gemini API or processing query for session ${sessionId}:`, error);
-      // More specific error handling for API content blocking vs. general errors
       if (error.message && error.message.includes('Content was blocked')) {
         return {
           reply:
             'I am unable to answer that question as it violates my safety guidelines. Please ask a university-related question.',
           sessionId,
+          action: 'error',
         };
       }
-      return { reply: 'Something went wrong while processing your request. Please try again.', sessionId };
+      return {
+        reply: 'Something went wrong while processing your request. Please try again.',
+        sessionId,
+        action: 'error',
+      };
     }
   }
 

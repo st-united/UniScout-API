@@ -50,6 +50,25 @@ export class UniversityDataService {
     try {
       const universities = await qb.getMany();
       this.logger.log(`Successfully found ${universities.length} universities for the query.`);
+      if (universities.length > 0) {
+        this.logger.debug(
+          'First 5 universities retrieved for export: ' +
+            JSON.stringify(
+              universities.slice(0, 5).map((uni) => ({
+                id: uni.id,
+                university: uni.university, // Check this!
+                country: uni.country,
+                rank: uni.rank,
+                studentPopulation: uni.studentPopulation, // Check this!
+                website: uni.website,
+              })),
+              null,
+              2
+            )
+        );
+      } else {
+        this.logger.debug('No universities found for the current query parameters.');
+      }
       return universities;
     } catch (error) {
       this.logger.error(`Error in getTopUniversitiesByCountry: ${error.message}`, error.stack);

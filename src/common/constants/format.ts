@@ -1,48 +1,43 @@
-import * as moment from 'moment';
+// src/common/constants/format.ts
+import moment from 'moment'; // <--- Change this line
 import { DATE_TIME } from './datetime';
-
-export const formatDate = (date: string) => `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
+// import * as moment from 'moment'; // Remove or comment this out
 
 export const fDate = (value: Date | moment.Moment | null | string) => moment(value).format(DATE_TIME.DAY_MONTH_YEAR);
 
-export const toDateData = (value: Date | moment.Moment | null | string) =>
+export const fDateTime = (value: Date | moment.Moment | null | string) =>
   moment(value, DATE_TIME.DAY_MONTH_YEAR).format(DATE_TIME.YEAR_MONTH_DATE);
 
-export const toDateDataAdd1Day = (value: Date | moment.Moment | null | string) => {
+export const fToNow = (value: Date | moment.Moment | null | string) => {
   const dateMoment = moment(value, DATE_TIME.DAY_MONTH_YEAR);
-  const nextDayMoment = dateMoment.add(1, 'day');
-  return nextDayMoment.format(DATE_TIME.YEAR_MONTH_DATE);
+  return dateMoment.fromNow();
 };
 
-export const daysRemaining = (targetDate: string): number => {
-  const format = DATE_TIME.DAY_MONTH_YEAR;
-
+export const fRemainingTime = (targetDate: string, format: string): string => {
   const endDate = moment(targetDate, format);
-
   const now = moment();
+  const duration = moment.duration(endDate.diff(now));
 
-  const oneDay = 24 * 60 * 60 * 1000;
-  const diff = endDate.diff(now);
+  if (duration.asSeconds() <= 0) {
+    return 'Expired';
+  }
 
-  const daysRemaining = Math.ceil(diff / oneDay);
+  const days = Math.floor(duration.asDays());
+  const hours = duration.hours();
+  const minutes = duration.minutes();
+  const seconds = duration.seconds();
 
-  return daysRemaining;
+  let result = '';
+  if (days > 0) result += `${days} days `;
+  if (hours > 0) result += `${hours} hours `;
+  if (minutes > 0) result += `${minutes} minutes `;
+  if (seconds > 0) result += `${seconds} seconds`;
+
+  return result.trim();
 };
 
-export const differentDays = (startDate: Date, endDate: Date): number => {
+export const fCalculateDays = (startDate: string, endDate: string): number => {
   const start = moment(startDate, DATE_TIME.YEAR_MONTH_DATE);
   const end = moment(endDate, DATE_TIME.YEAR_MONTH_DATE);
-
-  const duration = moment.duration(end.diff(start));
-  return duration.asDays() + 1;
-};
-
-export const getLastTheoryDate = (startDate: Date, theoryDays: number) => {
-  const lastTheoryDate = new Date(startDate.getTime());
-  lastTheoryDate.setDate(startDate.getDate() + theoryDays);
-  lastTheoryDate.setHours(23);
-  lastTheoryDate.setMinutes(59);
-  lastTheoryDate.setSeconds(59);
-  lastTheoryDate.setMilliseconds(999);
-  return lastTheoryDate;
+  return end.diff(start, 'days');
 };
