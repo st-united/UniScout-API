@@ -52,6 +52,9 @@ export class ContactSubmissionEntity {
   @Column({ nullable: true })
   website: string;
 
+  @Column('simple-array', { nullable: true })
+  attachmentFilePaths: string[];
+
   @Column({ nullable: true })
   subjectsExcelFilePath: string;
 

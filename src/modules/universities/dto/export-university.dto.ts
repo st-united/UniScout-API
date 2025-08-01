@@ -10,7 +10,6 @@ export class ExportUniversityDto extends GetUniversityDto {
   @ApiPropertyOptional({
     description: 'List of columns to include in the export',
     type: [String],
-    example: 'university,rank,country',
   })
   @IsArray()
   @IsString({ each: true })

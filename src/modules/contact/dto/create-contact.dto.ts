@@ -61,7 +61,6 @@ export class CreateContactDto {
   @ApiPropertyOptional({ description: 'Abbreviation' })
   @ValidateIf((o) => o.requestType === RequestTypeEnum.NEW_UNIVERSITY)
   @IsString()
-  @IsNotEmpty({ message: 'Abbreviation cannot be empty for New University requests.' })
   abbreviation?: string;
 
   @ApiPropertyOptional({ description: 'Country' })
