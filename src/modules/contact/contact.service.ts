@@ -12,6 +12,9 @@ import { RequestTypeEnum } from '@Constant/enums';
 import { UpdateContactSubmissionStatusDto } from './dto/update-contact.dto';
 import { UniEntity } from '@UniversitiesModule/entities';
 import { UniversityService } from '@UniversitiesModule/university.service';
+import { ExportContactRequestDto } from './dto/export-contact.dto';
+import { parse as json2csv } from 'json2csv';
+import * as XLSX from 'xlsx';
 
 @Injectable()
 export class ContactService {
@@ -574,5 +577,61 @@ export class ContactService {
     });
 
     return finalResult;
+  }
+
+  async exportContactRequests(dto: ExportContactRequestDto): Promise<Buffer> {
+    const qb = this._contactSubmissionRepo.createQueryBuilder('submission');
+
+    if (dto.status) qb.andWhere('submission.status = :status', { status: dto.status });
+    if (dto.requestType) qb.andWhere('submission.requestType = :requestType', { requestType: dto.requestType });
+    if (dto.country) qb.andWhere('submission.country = :country', { country: dto.country });
+    if (dto.search?.trim()) {
+      const term = `%${dto.search.trim()}%`;
+      qb.andWhere('(submission.universityName ILIKE :term OR submission.abbreviation ILIKE :term)', { term });
+    }
+
+    const data = await qb.getMany();
+
+    const allFields = [
+      'id',
+      'requestType',
+      'universityName',
+      'representativeName',
+      'representativeEmail',
+      'representativeNumber',
+      'message',
+      'abbreviation',
+      'country',
+      'location',
+      'type',
+      'universityEmail',
+      'universityNumber',
+      'website',
+      'numberOfStudents',
+      'description',
+      'submittedAt',
+      'status',
+      'rejectionReason',
+    ];
+
+    const selected = dto.fields?.length ? dto.fields : allFields;
+
+    const filteredData = data.map((item) => {
+      const out = {};
+      for (const field of selected) {
+        out[field] = item[field];
+      }
+      return out;
+    });
+
+    if (dto.format === 'xlsx') {
+      const ws = XLSX.utils.json_to_sheet(filteredData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Requests');
+      return XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
+    }
+
+    const csv = json2csv(filteredData);
+    return Buffer.from(csv, 'utf-8');
   }
 }
