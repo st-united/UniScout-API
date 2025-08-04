@@ -53,6 +53,10 @@ export class UniEntity extends AbstractEntity {
 
   @Column({ type: 'int' })
   studentPopulation: number;
+  totalFaculties: any;
+  totalStudents: any;
+  name: string;
+  students: string;
 
   get size(): 'small' | 'medium' | 'large' | 'extra large' {
     if (this.studentPopulation < 20000) {

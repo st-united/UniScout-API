@@ -1,760 +1,665 @@
-import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+// src/modules/chatbot/chatbot.service.ts stop here
+import { Injectable, Logger } from '@nestjs/common';
+import {
+  GoogleGenerativeAI,
+  ChatSession,
+  HarmBlockThreshold,
+  HarmCategory,
+  GenerativeModel,
+} from '@google/generative-ai';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { ChatMessage, UniversityQuery, ChatResponseDataWithFile } from './dto/chatbot.dto';
-import { UniversityService } from '@UniversitiesModule/university.service';
-import { GetUniversityDto, UniversityTypeEnum } from '@UniversitiesModule/dto/get-university.dto';
-import { FileExportService } from './file-export/file-export.service';
-import { UniversityDisplayDto } from '@UniversitiesModule/dto/university.dto';
+import { UniversityDataService } from './university-data.service';
+import { UniEntity } from '@UniversitiesModule/entities';
+import { PdfService } from './pdf.service';
+import * as fs from 'fs'; // Add this import for file system operations
+import * as path from 'path'; // Add this import for path manipulation
+import { ExcelService } from './excel.service';
+import { CsvService } from './csv.service';
+
+interface UniversityQuery {
+  type:
+    | 'TOP_UNIVERSITIES_BY_COUNTRY'
+    | 'GET_UNIVERSITY_BY_NAME'
+    | 'GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY'
+    | 'EXPORT_TOP_UNIVERSITIES_PDF'
+    | 'EXPORT_TOP_UNIVERSITIES_EXCEL'
+    | 'EXPORT_TOP_UNIVERSITIES_CSV'; // Add new type for Excel
+  country?: string;
+  limit?: number;
+  universityName?: string;
+  subjectName?: string;
+  academicFieldName?: string;
+}
+
+export interface ChatbotReply {
+  reply: string;
+  sessionId: string;
+  action?: 'initiate_pdf_download' | 'initiate_excel_download' | 'initiate_csv_download' | 'query_result' | 'error'; // Add 'initiate_csv_download'
+  data?: any;
+}
 
 @Injectable()
 export class ChatbotService {
-  private readonly _logger = new Logger(ChatbotService.name);
-  private readonly _genAI: GoogleGenerativeAI;
-  private readonly _model: any;
-  private readonly INITIAL_GREETING: string = 'Hello, I’m DevBot! 👋 I’m your personal assistant. How can I help you?';
-  private readonly STANDARD_QUESTIONS: string[] = [
-    'How do I search for universities by location or type?',
-    'How can I contact with DevPlus?',
-    'What are the top-ranked universities in USA?',
-  ];
-  private _validCountries: string[] = [];
-
-  private readonly CANONICAL_UNIVERSITY_FIELDS: string[] = [
-    'agricultural_veterinary_sciences',
-    'arts_design',
-    'business_management_law',
-    'education_training',
-    'engineering_technology',
-    'health_medicine',
-    'humanities_languages',
-    'ict',
-    'natural_sciences',
-    'social_behavioral_sciences',
-    'services',
-    'transport_safety_security_military',
-  ];
+  private readonly logger = new Logger(ChatbotService.name);
+  private genAI: GoogleGenerativeAI;
+  private chatSessions: Map<string, ChatSession> = new Map();
+  private model: GenerativeModel;
 
   constructor(
-    private readonly _configService: ConfigService,
-    private readonly _universityService: UniversityService,
-    private readonly _fileExportService: FileExportService
+    private configService: ConfigService,
+    private universityDataService: UniversityDataService,
+    private pdfService: PdfService,
+    private excelService: ExcelService,
+    private csvService: CsvService // Inject ExcelService here
   ) {
-    const apiKey = this._configService.get<string>('GEMINI_API_KEY');
+    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is not configured');
+      this.logger.error('GEMINI_API_KEY is not set in environment variables.');
+      throw new Error('GEMINI_API_KEY is not set.');
     }
+    this.genAI = new GoogleGenerativeAI(apiKey);
 
-    this._genAI = new GoogleGenerativeAI(apiKey);
-    this._model = this._genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: {
-        temperature: 0.4,
-        topP: 0.7,
-        maxOutputTokens: 2048,
-      },
+    this.model = this.genAI.getGenerativeModel({
+      model: 'models/gemini-1.5-flash',
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
     });
-
-    this.initializeValidCountries();
+    this.logger.log('Initialized ChatbotService with Gemini model: models/gemini-1.5-flash');
   }
 
-  private async initializeValidCountries() {
-    try {
-      this._validCountries = await this._universityService.getAllAvailableCountries();
-    } catch (error) {
-      this._logger.error(`Failed to initialize valid countries: ${error.message}`, error.stack);
-    }
-  }
+  async sendMessage(message: string, sessionId: string): Promise<ChatbotReply> {
+    let chatSession = this.chatSessions.get(sessionId);
 
-  async chat(message: string, conversationHistory: ChatMessage[] = []): Promise<ChatResponseDataWithFile> {
-    try {
-      let dynamicSuggestedQuestions: string[];
+    if (!chatSession) {
+      this.logger.log(`Creating new chat session for ID: ${sessionId}`);
 
-      if (conversationHistory.length === 0 && (!message || message.trim() === '')) {
-        dynamicSuggestedQuestions = this.STANDARD_QUESTIONS;
-        return {
-          response: this.INITIAL_GREETING,
-          timestamp: new Date().toISOString(),
-          suggestedQuestions: dynamicSuggestedQuestions,
-        };
-      }
+      chatSession = this.model.startChat({
+        history: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `
+                You are UniScout Assistant, an AI designed to help users find university information.
+                Your capabilities include:
+                1.  Answering questions about top universities in a specific country.
+                2.  Answering questions about specific universities by name.
+                3.  Answering questions about universities offering specific subjects or in specific academic fields, potentially filtered by country.
+                4.  Answering general university-related questions using your knowledge.
+                5.  Generating a PDF report of top universities in a country when explicitly requested.
+                6.  Generating an **Excel report** of top universities in a country when explicitly requested.
+                7.  Generating a **CSV report** of top universities in a country when explicitly requested.
 
-      const isUniversityRelated = await this.isUniversityRelatedQuery(message, conversationHistory);
 
-      if (!isUniversityRelated) {
-        dynamicSuggestedQuestions = await this.generateSuggestedQuestions(message, conversationHistory, true);
-        return {
-          response:
-            "I'm DevBot, your personal university assistant. I can only provide information about universities. Please ask me something related to universities, like finding specific programs, rankings, or export options. If you need general assistance, please try again with a university-related question or contact DevPlus support.",
-          timestamp: new Date().toISOString(),
-          suggestedQuestions: dynamicSuggestedQuestions,
-        };
-      }
+                When a user asks for 'top', 'best', or 'highest-ranked' universities in a specific country, you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
+                \`\`\`json
+                {
+                  "action": "query_university_data",
+                  "query": {
+                    "type": "TOP_UNIVERSITIES_BY_COUNTRY",
+                    "country": "[extracted_country_name]", // e.g., "Japan", "USA", "Vietnam" - capitalize first letter if possible
+                    "limit": [number] // Infer a reasonable number like 1, 3, 5, or 10 based on the user's request (e.g., "top university" -> 1, "best universities" -> 5). Omit if no number is clear.
+                  }
+                }
+                \`\`\`
+                Example queries and your expected JSON responses for top universities:
+                - User: "What is the top university in Japan?"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "Japan", "limit": 1 } }
+\`\`\`
+                - User: "List the best 3 universities in USA."
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "USA", "limit": 3 } }
+\`\`\`
+                - User: "Tell me about top universities in Germany."
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "TOP_UNIVERSITIES_BY_COUNTRY", "country": "Germany", "limit": 5 } }
+\`\`\`
 
-      dynamicSuggestedQuestions = await this.generateSuggestedQuestions(message, conversationHistory);
+                When a user asks about a SPECIFIC university by name (e.g., "Tell me more about Harvard University", "What is Harvard University?"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
+                \`\`\`json
+                {
+                  "action": "query_university_data",
+                  "query": {
+                    "type": "GET_UNIVERSITY_BY_NAME",
+                    "universityName": "[extracted_university_name]" // e.g., "Harvard University", "Massachusetts Institute of Technology" - use the full, likely official name
+                  }
+                }
+                \`\`\`
+                Example queries and your expected JSON responses for specific universities:
+                - User: "Can you tell me more about Harvard University?"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "Harvard University" } }
+\`\`\`
+                - User: "What about MIT?"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "Massachusetts Institute of Technology" } }
+\`\`\`
+                - User: "Is University of Cambridge good?"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITY_BY_NAME", "universityName": "University of Cambridge" } }
+\`\`\`
 
-      let responseText = '';
-      let fileData: ChatResponseDataWithFile['fileData'] = undefined;
+                When a user asks for universities that offer a specific subject or are strong in an academic field, possibly in a specific country (e.g., "universities for computing in Korea", "study engineering in Germany"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
+                \`\`\`json
+                {
+                  "action": "query_university_data",
+                  "query": {
+                    "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY",
+                    "subjectName": "[extracted_subject_name]", // e.g., "Computing", "Medicine". Prioritize if a specific subject is mentioned. Capitalize first letter if possible.
+                    "academicFieldName": "[extracted_academic_field_name]", // e.g., "Engineering Technology", "Natural Sciences". Use if a broader field is mentioned and no specific subject. Capitalize first letter if possible.
+                    "country": "[extracted_country_name]" // e.g., "Korea", "Germany". Omit if no country is mentioned. Capitalize first letter if possible.
+                  }
+                }
+                \`\`\`
+                Example queries and your expected JSON responses for universities by subject/field:
+                - User: "I want to study computing in Korea, which university would you recommend me to go?"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Computer Science", "country": "Korea" } }
+\`\`\`
+                - User: "I am interested in IT in Australia."
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Information Technology", "country": "Australia" } }
+\`\`\`
+                - User: "Which universities offer medicine?"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "subjectName": "Medicine" } }
+\`\`\`
+                - User: "Best engineering universities in USA."
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY", "academicFieldName": "Engineering Technology", "country": "USA" } }
+\`\`\`
 
-      const queryParams = (await this.extractUniversityQuery(message, conversationHistory)) as UniversityQuery;
+                When a user asks to export or download a list of top universities in a country as a PDF (e.g., "export the top 20 universities in Vietnam in pdf", "download best 10 universities in France as a PDF report"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
+                \`\`\`json
+                {
+                  "action": "query_university_data",
+                  "query": {
+                    "type": "EXPORT_TOP_UNIVERSITIES_PDF",
+                    "country": "[extracted_country_name]", // e.g., "Vietnam", "France" - capitalize first letter if possible
+                    "limit": [number] // Infer the number, e.g., 20, 10. Default to 10 or 20 if not specified.
+                  }
+                }
+                \`\`\`
+                Example queries and your expected JSON responses for PDF export:
+                - User: "I want to export the top 20 universities in Vietnam in pdf"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_PDF", "country": "Vietnam", "limit": 20 } }
+\`\`\`
+                - User: "Download best 10 universities in France as a PDF report"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_PDF", "country": "France", "limit": 10 } }
+\`\`\`
+                - User: "Can you give me a PDF of top universities in UK?"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_PDF", "country": "UK", "limit": 10 } }
+\`\`\`
 
-      if (queryParams.country && queryParams.country.length > 0) {
-        const normalizedCountries = queryParams.country
-          .map((c) => this.normalizeCountryName(c))
-          .filter((c) => c !== null);
+                When a user asks to export or download a list of top universities in a country as an **Excel** file (e.g., "export the top 20 universities in Vietnam to excel", "download best 10 universities in France as an Excel report"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
+                \`\`\`json
+                {
+                  "action": "query_university_data",
+                  "query": {
+                    "type": "EXPORT_TOP_UNIVERSITIES_EXCEL",
+                    "country": "[extracted_country_name]", // e.g., "Vietnam", "France" - capitalize first letter if possible
+                    "limit": [number] // Infer the number, e.g., 20, 10. Default to 10 or 20 if not specified.
+                  }
+                }
+                \`\`\`
+                Example queries and your expected JSON responses for Excel export:
+                - User: "I want to export the top 20 universities in Vietnam to excel"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_EXCEL", "country": "Vietnam", "limit": 20 } }
+\`\`\`
+                - User: "Download best 10 universities in France as an Excel report"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_EXCEL", "country": "France", "limit": 10 } }
+\`\`\`
+                - User: "Can you give me an Excel file of top universities in UK?"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_EXCEL", "country": "UK", "limit": 10 } }
+\`\`\`
 
-        if (normalizedCountries.length === 0 && queryParams.country.length > 0) {
-          const invalidCountries = queryParams.country.join(', ');
-          return {
-            response: `I'm sorry, I don't have data for the country/countries you mentioned (${invalidCountries}). I currently have information for: ${this._validCountries.join(
-              ', '
-            )}. Please try a different country or submit a contact request.`,
-            timestamp: new Date().toISOString(),
-            suggestedQuestions: dynamicSuggestedQuestions,
-          };
-        }
-        queryParams.country = normalizedCountries;
-      }
+                When a user asks to export or download a list of top universities in a country as a **CSV** file (e.g., "export the top 20 universities in Vietnam to csv", "download best 10 universities in France as a CSV report"), you MUST respond with a JSON object in the following format. Ensure the JSON is valid and only contains the action and query fields.
+                \`\`\`json
+                {
+                  "action": "query_university_data",
+                  "query": {
+                    "type": "EXPORT_TOP_UNIVERSITIES_CSV",
+                    "country": "[extracted_country_name]", // e.g., "Vietnam", "France" - capitalize first letter if possible
+                    "limit": [number] // Infer the number, e.g., 20, 10. Default to 10 or 20 if not specified.
+                  }
+                }
+                \`\`\`
+                Example queries and your expected JSON responses for CSV export:
+                - User: "I want to export the top 20 universities in Vietnam to csv"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_CSV", "country": "Vietnam", "limit": 20 } }
+\`\`\`
+                - User: "Download best 10 universities in France as a CSV report"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_CSV", "country": "France", "limit": 10 } }
+\`\`\`
+                - User: "Can you give me a CSV file of top universities in UK?"
+                  Your JSON: \`\`\`json
+{ "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_CSV", "country": "UK", "limit": 10 } }
+\`\`\`
+If a user asks for instructions on how to use the website to find, filter, or sort universities, you MUST respond with a natural language answer based on the following rules:
+                - To filter universities by program (like IT), guide the user to the 'Show Filters' button on the left side of the page.
+                - To sort universities by ranking, guide the user to use the 'Sort by: low to high' dropdown menu on the top right.
+                - To find universities in a specific country (like USA), guide the user to use the search bar.
+                
+                Example queries and your expected natural language responses for website usage:
+                - User: "How do I filter universities by IT programs?"
+                  Your Response: "To filter universities by specific programs, you can scroll down to 'Discover Universities' section to find the filter section at the left hand side of the page. Under subject type IT"
+                - User: "How do I sort universities by ranking?"
+                  Your Response: "You can sort universities by their ranking using the 'Sort by: low to high' dropdown menu located beside the search bar under 'Discover Universities'."
+                - User: "I want to find universities in the USA; where do I start?"
+                  Your Response: "You can either click on USA on the world map and scroll down to the 'Discover Universities' section or scroll down to 'Discover Universities' section to find the filter section at the left hand side of the page. Under country dropdown select USA."
+                   Example queries and your expected natural language responses for website usage:
+                - User: "How do I filter universities by public university type?"
+                  Your Response: "To filter universities by specific programs, you can scroll down to 'Discover Universities' section to find the filter section at the left hand side of the page. Under university type select public"
+                - User: "How do I filter universities if i want to filter by university size?"
+                  Your Response: "To filter universities by specific programs, you can scroll down to 'Discover Universities' section to find the filter section at the left hand side of the page. Under size type select the size you desire."
 
-      const hasMeaningfulQueryParams = Object.keys(queryParams).some(
-        (key) =>
-          queryParams[key] !== undefined &&
-          queryParams[key] !== null &&
-          !(Array.isArray(queryParams[key]) && queryParams[key].length === 0) &&
-          !(typeof queryParams[key] === 'object' && Object.keys(queryParams[key]).length === 0)
-      );
 
-      if (!hasMeaningfulQueryParams && message.length > 5 && !message.includes('hello') && !message.includes('hi')) {
-        return {
-          response:
-            "I'm sorry, I don't understand the specifics of your university request. Can you rephrase it or would you like to submit a contact request?",
-          timestamp: new Date().toISOString(),
-          suggestedQuestions: dynamicSuggestedQuestions,
-        };
-      }
+                If the user's question is university-related but CANNOT be answered by a specific data query (e.g., "how to apply to college?", "what are student exchange programs?"), answer it using your general knowledge.
 
-      if (queryParams.type && queryParams.type.length > 0) {
-        const enumValue = this.toUniversityTypeEnum(queryParams.type[0]);
-        if (enumValue) {
-          queryParams.type = [enumValue];
-        } else {
-          this._logger.warn(`Unknown university type: ${queryParams.type[0]}`);
-          delete queryParams.type;
-        }
-      }
-
-      const isGeneralCountryCountQuery =
-        queryParams.country &&
-        queryParams.country.length === 1 &&
-        !queryParams.search &&
-        !queryParams.minRank &&
-        !queryParams.maxRank &&
-        !queryParams.type &&
-        !queryParams.location &&
-        !queryParams.size &&
-        !queryParams.fields &&
-        !queryParams.limit &&
-        !queryParams.exportFormat;
-
-      if (isGeneralCountryCountQuery) {
-        const countryName = queryParams.country[0];
-
-        const countFilter: GetUniversityDto = {
-          country: queryParams.country,
-          page: 1,
-          limit: 1,
-          search: queryParams.search,
-          minRank: queryParams.minRank,
-          maxRank: queryParams.maxRank,
-          type: queryParams.type,
-          location: queryParams.location,
-          size: queryParams.size,
-        };
-        const actualTotalUniversitiesInDb = await this._universityService.countAll(countFilter);
-
-        if (actualTotalUniversitiesInDb > 0) {
-          const { universities: universitiesSampleForOverview } = await this._universityService.findAll({
-            country: queryParams.country,
-            limit: 10,
-            page: 1,
-          });
-
-          responseText = `Hi there! That's a great question. I have information on **${actualTotalUniversitiesInDb} universities** in my database for ${countryName}.\n\n`;
-
-          if (universitiesSampleForOverview.length > 0) {
-            responseText += `Here's a quick overview of some of them:\n\n`;
-            const topRankedSample =
-              universitiesSampleForOverview.find((u) => u.rank === 1) || universitiesSampleForOverview[0];
-            const largestStudentBodySample = universitiesSampleForOverview.reduce(
-              (prev, current) => ((prev.studentPopulation || 0) > (current.studentPopulation || 0) ? prev : current),
-              universitiesSampleForOverview[0]
-            );
-
-            if (topRankedSample) {
-              responseText += `* **Top-Ranked (Sample):** ${topRankedSample.university} (Rank: ${
-                topRankedSample.rank || 'N/A'
-              })\n`;
-            }
-            if (largestStudentBodySample && largestStudentBodySample.studentPopulation) {
-              responseText += `* **Largest Student Body (Sample):** ${
-                largestStudentBodySample.university
-              } (${largestStudentBodySample.studentPopulation.toLocaleString()} students)\n`;
-            }
-            const presentTypes = new Set<UniversityTypeEnum>();
-            universitiesSampleForOverview.forEach((u) => {
-              if (Object.values(UniversityTypeEnum).includes(u.type as UniversityTypeEnum)) {
-                presentTypes.add(u.type as UniversityTypeEnum);
-              }
-            });
-
-            let typesOverview = '';
-            if (presentTypes.size > 0) {
-              const typeNames = Array.from(presentTypes)
-                .map((type) => type.charAt(0).toUpperCase() + type.slice(1))
-                .sort();
-
-              if (typeNames.length === 1) {
-                typesOverview = typeNames[0];
-              } else if (typeNames.length === 2) {
-                typesOverview = `${typeNames[0]} and ${typeNames[1]}`;
-              } else {
-                const lastType = typeNames.pop();
-                typesOverview = `${typeNames.join(', ')}, and ${lastType}`;
-              }
-              responseText += `* **Diverse Types:** Including ${typesOverview} institutions.\n`;
-            } else {
-              responseText += `* **Diverse Types:** Specific types not found in sample.\n`;
-            }
-            responseText += `* **Common Fields:** You'll find universities specializing in ${this.getCommonFieldsFromSample(
-              universitiesSampleForOverview.map((uni) => ({
-                ...uni,
-                exchange: String(uni.exchange),
-                size: this.categorizeUniversitySize(uni.studentPopulation),
-                subjects: uni.subjectsList && uni.subjectsList !== 'NA' ? uni.subjectsList : '',
-              }))
-            )}.\n\n`;
-          }
-
-          responseText += `Would you like me to export this list of all ${actualTotalUniversitiesInDb} universities for ${countryName} in a **PDF** or **Excel** file?`;
-          dynamicSuggestedQuestions = [
-            `Export all universities in ${countryName} as PDF`,
-            `Export all universities in ${countryName} as Excel`,
-            `Tell me more about the top universities in ${countryName}`,
-          ];
-
-          return {
-            response: responseText,
-            timestamp: new Date().toISOString(),
-            suggestedQuestions: dynamicSuggestedQuestions,
-          };
-        } else {
-          return {
-            response: 'No matching universities found. Please try another query or submit a contact request.',
-            timestamp: new Date().toISOString(),
-            suggestedQuestions: dynamicSuggestedQuestions,
-          };
-        }
-      }
-
-      const universitySearchParams: GetUniversityDto = {
-        ...(queryParams as GetUniversityDto),
-        page: 1,
-        limit: queryParams.exportFormat ? queryParams.exportLimit : queryParams.limit || 10,
-      };
-
-      if (queryParams.exportFormat) {
-        this._logger.log(
-          `[DEBUG] Export request detected. Format: ${queryParams.exportFormat}, Query: ${JSON.stringify(
-            universitySearchParams
-          )}`
-        );
-
-        const totalMatchingUniversities = await this._universityService.countAll(universitySearchParams);
-
-        let exportMessage = '';
-        const requestedExportLimit = queryParams.exportLimit;
-
-        if (totalMatchingUniversities === 0) {
-          return {
-            response: 'No matching universities found. Please try another query or submit a contact request.',
-            timestamp: new Date().toISOString(),
-            suggestedQuestions: dynamicSuggestedQuestions,
-          };
-        }
-
-        let actualLimitToExport: number;
-
-        if (
-          requestedExportLimit !== undefined &&
-          requestedExportLimit !== null &&
-          requestedExportLimit <= totalMatchingUniversities
-        ) {
-          actualLimitToExport = requestedExportLimit;
-          exportMessage = `I'm preparing a file for ${requestedExportLimit} universities matching your request. `;
-        } else if (
-          requestedExportLimit !== undefined &&
-          requestedExportLimit !== null &&
-          requestedExportLimit > totalMatchingUniversities
-        ) {
-          actualLimitToExport = totalMatchingUniversities;
-          exportMessage = `Sorry, we do not have ${requestedExportLimit} universities that match your criteria. However, I found ${totalMatchingUniversities} universities that do. I'm preparing a file for these ${totalMatchingUniversities} universities. `;
-        } else {
-          actualLimitToExport = totalMatchingUniversities;
-          exportMessage = `I'm preparing a file for all ${totalMatchingUniversities} universities matching your request. `;
-        }
-
-        universitySearchParams.limit = actualLimitToExport;
-
-        const { universities: universitiesToExport } = await this._universityService.findAll(universitySearchParams);
-
-        const universitiesDisplayDto: UniversityDisplayDto[] = universitiesToExport.map((uni) => ({
-          ...uni,
-          exchange: String(uni.exchange),
-          size: this.categorizeUniversitySize(uni.studentPopulation),
-          subjects: uni.subjectsList && uni.subjectsList !== 'NA' ? uni.subjectsList : '',
-        }));
-
-        try {
-          if (queryParams.exportFormat === 'excel') {
-            const excelBase64 = await this._fileExportService.generateExcel(
-              universitiesDisplayDto,
-              `universities_export_${new Date().toISOString().slice(0, 10)}.xlsx`
-            );
-            fileData = {
-              type: 'excel',
-              base64: excelBase64,
-              filename: `universities_export_${new Date().toISOString().slice(0, 10)}.xlsx`,
-            };
-            responseText = `${exportMessage}You should see a download prompt.`;
-          } else if (queryParams.exportFormat === 'pdf') {
-            const pdfBase64 = await this._fileExportService.generatePdf(
-              universitiesDisplayDto,
-              `universities_export_${new Date().toISOString().slice(0, 10)}.pdf`
-            );
-            fileData = {
-              type: 'pdf',
-              base64: pdfBase64,
-              filename: `universities_export_${new Date().toISOString().slice(0, 10)}.pdf`,
-            };
-            responseText = `${exportMessage}You should see a download prompt.`;
-          }
-        } catch (fileError) {
-          responseText = 'Export failed. Please try again later.';
-        }
-        return {
-          response: responseText,
-          timestamp: new Date().toISOString(),
-          fileData: fileData,
-          suggestedQuestions: dynamicSuggestedQuestions,
-        };
-      }
-
-      const { universities } = await this._universityService.findAll(universitySearchParams);
-
-      if (universities.length === 0) {
-        return {
-          response: 'No matching universities found. Please try another query or submit a contact request.',
-          timestamp: new Date().toISOString(),
-          suggestedQuestions: dynamicSuggestedQuestions,
-        };
-      }
-      const universitiesDisplayDtoForResponse: UniversityDisplayDto[] = universities.map((uni) => ({
-        ...uni,
-        exchange: String(uni.exchange),
-        size: this.categorizeUniversitySize(uni.studentPopulation),
-        subjects: uni.subjectsList && uni.subjectsList !== 'NA' ? uni.subjectsList : '',
-      }));
-      responseText = await this.generateUniversityResponse(
-        message,
-        universitiesDisplayDtoForResponse,
-        conversationHistory
-      );
-
-      return {
-        response: responseText,
-        timestamp: new Date().toISOString(),
-        fileData: fileData,
-        suggestedQuestions: dynamicSuggestedQuestions,
-      };
-    } catch (error) {
-      const fallbackSuggestedQuestions = this.STANDARD_QUESTIONS;
-
-      return {
-        response: 'The chatbot is currently unavailable. Please try again later or submit a contact request.',
-        timestamp: new Date().toISOString(),
-        suggestedQuestions: fallbackSuggestedQuestions,
-      };
-    }
-  }
-
-  async exportUniversitiesAsExcel(universityIds: number[]): Promise<string> {
-    const universities = await this._universityService.findByIds(universityIds);
-    if (universities.length === 0) {
-      throw new InternalServerErrorException('No universities found for the provided IDs to export to Excel.');
-    }
-    const universitiesDisplayDto: UniversityDisplayDto[] = universities.map((uni) => ({
-      ...uni,
-      exchange: String(uni.exchange),
-      size: this.categorizeUniversitySize(uni.studentPopulation),
-      subjects:
-        uni.subjects && Array.isArray(uni.subjects) ? (uni.subjects as any[]).map((s) => s.name).join(', ') : '',
-    }));
-    return this._fileExportService.generateExcel(
-      universitiesDisplayDto,
-      `universities_export_${new Date().toISOString().slice(0, 10)}.xlsx`
-    );
-  }
-
-  async exportUniversitiesAsPdf(universityIds: number[]): Promise<string> {
-    const universities = await this._universityService.findByIds(universityIds);
-    if (universities.length === 0) {
-      throw new InternalServerErrorException('No universities found for the provided IDs to export to PDF.');
-    }
-    const universitiesDisplayDto: UniversityDisplayDto[] = universities.map((uni) => ({
-      ...uni,
-      exchange: String(uni.exchange),
-      size: this.categorizeUniversitySize(uni.studentPopulation),
-      subjects:
-        uni.subjects && Array.isArray(uni.subjects) ? (uni.subjects as any[]).map((s) => s.name).join(', ') : '',
-    }));
-    return this._fileExportService.generatePdf(
-      universitiesDisplayDto,
-      `universities_export_${new Date().toISOString().slice(0, 10)}.pdf`
-    );
-  }
-
-  private categorizeUniversitySize(
-    studentPopulation: number | null
-  ): 'small' | 'medium' | 'large' | 'extra large' | null {
-    if (studentPopulation === null || studentPopulation === undefined) {
-      return null;
-    }
-    if (studentPopulation < 5000) {
-      return 'small';
-    } else if (studentPopulation >= 5000 && studentPopulation < 15000) {
-      return 'medium';
-    } else if (studentPopulation >= 15000 && studentPopulation < 30000) {
-      return 'large';
-    } else {
-      return 'extra large';
-    }
-  }
-
-  private getCommonFieldsFromSample(universities: UniversityDisplayDto[]): string {
-    const allAcademicFieldsFound: string[] = [];
-    const subjectsFromDto: string[] = [];
-
-    universities.forEach((uni) => {
-      this.CANONICAL_UNIVERSITY_FIELDS.forEach((fieldKey) => {
-        if (uni[fieldKey as keyof UniversityDisplayDto] === 'Yes') {
-          allAcademicFieldsFound.push(this.formatFieldKeyForDisplay(fieldKey));
-        }
+                If the user's question is NOT related to universities at all (e.g., "what is the capital of France?", "tell me a joke"), you MUST ONLY reply with the exact phrase: "Please ask me a university-related question".
+                Do not provide any other information or context for non-university questions.
+                Your responses for general university questions should be concise and helpful.
+                `,
+              },
+            ],
+          },
+          {
+            role: 'model',
+            parts: [
+              {
+                text: 'Understood. I will provide university data via JSON query when appropriate, answer general university questions, and redirect non-university queries with the specified phrase.',
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          maxOutputTokens: 500,
+        },
       });
-
-      if (uni.academicFieldsCommaSeparated && uni.academicFieldsCommaSeparated !== 'NA') {
-        allAcademicFieldsFound.push(...uni.academicFieldsCommaSeparated.split(', ').map((field) => field.trim()));
-      }
-
-      if (uni.subjectsList && uni.subjectsList !== 'NA') {
-        subjectsFromDto.push(...uni.subjectsList.split(', ').map((subject) => subject.trim()));
-      }
-    });
-
-    const uniqueAcademicFields = [...new Set(allAcademicFieldsFound)].filter(Boolean);
-    const uniqueSubjects = [...new Set(subjectsFromDto)].filter(Boolean);
-
-    let commonFieldsText = '';
-    if (uniqueAcademicFields.length > 0) {
-      commonFieldsText += `academic fields like ${uniqueAcademicFields.slice(0, 3).join(', ')}`;
-      if (uniqueAcademicFields.length > 3) {
-        commonFieldsText += ` and more`;
-      }
+      this.logger.log(`[Session ${sessionId}] New chat session created. Is chatSession defined: ${!!chatSession}`);
+      this.chatSessions.set(sessionId, chatSession);
     }
-
-    if (uniqueSubjects.length > 0) {
-      if (commonFieldsText) {
-        commonFieldsText += ' and ';
-      }
-      commonFieldsText += `subjects such as ${uniqueSubjects.slice(0, 3).join(', ')}`;
-      if (uniqueSubjects.length > 3) {
-        commonFieldsText += ` and more`;
-      }
-    }
-
-    return commonFieldsText || 'various fields';
-  }
-
-  private formatFieldKeyForDisplay(fieldKey: string): string {
-    return fieldKey.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
-  }
-
-  private getUniversityFields(uni: UniversityDisplayDto): string[] {
-    const fields = [];
-    const fieldMap: { [key: string]: string } = {
-      agricultural_veterinary_sciences: 'Agricultural & Veterinary Sciences',
-      arts_design: 'Arts & Design',
-      business_management_law: 'Business Management & Law',
-      education_training: 'Education & Training',
-      engineering_technology: 'Engineering & Technology',
-      health_medicine: 'Health & Medicine',
-      humanities_languages: 'Humanities & Languages',
-      ict: 'ICT',
-      natural_sciences: 'Natural Sciences',
-      social_behavioral_sciences: 'Social & Behavioral Sciences',
-      services: 'Services',
-      transport_safety_security_military: 'Transport, Safety, Security & Military',
-    };
-
-    this.CANONICAL_UNIVERSITY_FIELDS.forEach((key) => {
-      if (uni[key as keyof UniversityDisplayDto] === 'Yes') {
-        fields.push(fieldMap[key]);
-      }
-    });
-
-    return fields;
-  }
-
-  private toUniversityTypeEnum(value: string): UniversityTypeEnum | undefined {
-    const normalized = value.trim().toUpperCase();
-    return Object.values(UniversityTypeEnum).find((enumVal) => (enumVal as string).toUpperCase() === normalized);
-  }
-
-  private normalizeCountryName(country: string): string | null {
-    const lowerInput = country.trim().toLowerCase();
-
-    const countryMap: { [key: string]: string } = {
-      usa: 'USA',
-      us: 'USA',
-      'united states': 'USA',
-      korea: 'Korea',
-      'south korea': 'Korea',
-      vietnam: 'Vietnam',
-      'viet nam': 'Vietnam',
-      japan: 'Japan',
-      india: 'India',
-      australia: 'Australia',
-    };
-
-    const mappedCountry = countryMap[lowerInput];
-    if (mappedCountry) {
-      if (this._validCountries.includes(mappedCountry)) {
-        return mappedCountry;
-      }
-    }
-
-    const foundValidCountry = this._validCountries.find(
-      (validDbCountry) => validDbCountry.toLowerCase() === lowerInput
-    );
-    if (foundValidCountry) {
-      return foundValidCountry;
-    }
-
-    this._logger.warn(`Could not normalize country "${country}" to a valid database country.`);
-    return null;
-  }
-
-  private formatConversationHistory(history: ChatMessage[]): string {
-    if (history.length === 0) return 'No previous conversation.';
-
-    return history
-      .slice(-5)
-      .map(
-        (msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${Array.isArray(msg.parts) ? msg.parts[0] : msg.parts}`
-      )
-      .join('\n');
-  }
-
-  private async isUniversityRelatedQuery(message: string, conversationHistory: ChatMessage[]): Promise<boolean> {
-    const prompt = `
-    Given the following conversation history and the latest user message, determine if the user's intent is related to querying or discussing universities. Respond with 'yes' or 'no'.
-
-    Conversation History:
-    ${this.formatConversationHistory(conversationHistory)}
-
-    User's latest message: "${message}"
-
-    Is the user's intent related to universities? (yes/no)
-    `;
 
     try {
-      const result = await this._model.generateContent(prompt);
-      const response = result.response.text().trim().toLowerCase();
-      return response.includes('yes');
-    } catch (error) {
-      this._logger.error(`Error in isUniversityRelatedQuery: ${error.message}`, error.stack);
-      return true;
-    }
-  }
-
-  private async extractUniversityQuery(message: string, conversationHistory: ChatMessage[]): Promise<UniversityQuery> {
-    const validCountriesList = this._validCountries.join(', ');
-    const validAcademicFields = this.CANONICAL_UNIVERSITY_FIELDS.map((field) =>
-      field.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-    ).join(', ');
-
-    const prompt = `
-    You are an expert at extracting university search parameters from natural language.
-    Based on the following conversation history and the latest user message, extract specific parameters for a university search.
-    If a parameter is not explicitly mentioned or clearly implied, leave it as undefined.
-    Infer boolean values (e.g., for 'exchange' or specific academic fields) as true if mentioned.
-    If the user asks for "top" universities, infer minRank: 1 and a reasonable maxRank (e.g., 100).
-    If the user asks for "all" universities or an export without a limit, infer exportLimit: null.
-    If the user asks to "export" as "pdf" or "excel", set exportFormat accordingly.
-
-    Available university types: Public, Private, For-Profit, Non-Profit.
-    Available academic fields (use these exact strings as boolean flags if inferred): ${this.CANONICAL_UNIVERSITY_FIELDS.join(
-      ', '
-    )}.
-    Available countries: ${validCountriesList}
-
-    Example of expected JSON output:
-    {
-      "search": "engineering",
-      "country": ["USA", "Canada"],
-      "minRank": 1,
-      "maxRank": 50,
-      "type": ["Public"],
-      "location": "New York",
-      "size": "medium",
-      "limit": 10,
-      "exportFormat": "pdf",
-      "exportLimit": 100,
-      "agricultural_veterinary_sciences": true,
-      "arts_design": true
-    }
-
-    Conversation History:
-    ${this.formatConversationHistory(conversationHistory)}
-
-    User's latest message: "${message}"
-
-    Extracted parameters (JSON format):
-    `;
-
-    try {
-      const result = await this._model.generateContent(prompt);
-      const jsonResponse = result.response.text().trim();
-      this._logger.log(`[DEBUG] Extracted query JSON: ${jsonResponse}`);
-      const parsed = JSON.parse(jsonResponse) as UniversityQuery;
-
-      if (parsed.country && Array.isArray(parsed.country)) {
-        parsed.country = parsed.country.map((c) => this.normalizeCountryName(c)).filter((c) => c !== null) as string[];
+      this.logger.log(`[Session ${sessionId}] User: "${message}"`);
+      if (!chatSession) {
+        throw new Error('Chat session was not initialized. This should not happen after new session creation.');
       }
 
-      if (parsed.fields && Array.isArray(parsed.fields)) {
-        (parsed.fields as string[]).some((field) => {
-          this.CANONICAL_UNIVERSITY_FIELDS.forEach((canonicalField) => {
-            if (
-              field.toLowerCase().includes(canonicalField.replace(/_/g, ' ').toLowerCase()) ||
-              canonicalField.replace(/_/g, ' ').toLowerCase().includes(field.toLowerCase())
-            ) {
-              (parsed as any)[canonicalField] = true;
-            }
-          });
-          return false;
-        });
-        delete parsed.fields;
+      const result = await chatSession.sendMessage(message);
+      const response = await result.response;
+      const text = response.text();
+      this.logger.log(`[Session ${sessionId}] Raw Gemini Response: "${text}"`);
+
+      let finalReply: string = text;
+      let action: ChatbotReply['action'] = 'query_result';
+      let data: ChatbotReply['data'] = null;
+
+      const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
+      let jsonStringFromGemini: string | null = null;
+
+      if (jsonMatch && jsonMatch[1]) {
+        jsonStringFromGemini = jsonMatch[1];
+        this.logger.debug(`[Session ${sessionId}] Extracted JSON string from Gemini: "${jsonStringFromGemini}"`);
       }
-      return parsed;
+
+      try {
+        let parsedResponse: any;
+        if (jsonStringFromGemini) {
+          parsedResponse = JSON.parse(jsonStringFromGemini);
+        }
+
+        if (parsedResponse && parsedResponse.action === 'query_university_data' && parsedResponse.query) {
+          const query: UniversityQuery = parsedResponse.query;
+          this.logger.log(`[Session ${sessionId}] Detected DB Query: ${JSON.stringify(query)}`);
+
+          switch (query.type) {
+            case 'TOP_UNIVERSITIES_BY_COUNTRY':
+              const universities: UniEntity[] = await this.universityDataService.getTopUniversitiesByCountry(
+                query.country,
+                query.limit
+              );
+
+              if (universities.length > 0) {
+                let dataSummary = `Here are the top ${universities.length} universities found:\n`;
+                universities.forEach((uni, index) => {
+                  const rankText = uni.rank !== null && uni.rank !== undefined ? `${uni.rank}. ` : '';
+                  dataSummary += `${rankText}${uni.university} in ${uni.country}\n`;
+                });
+
+                this.logger.log(`[Session ${sessionId}] DB Results for Gemini: \n${dataSummary}`);
+
+                const finalResponseResult = await chatSession.sendMessage(
+                  `Based on the user's previous query, here is the university data:\n\n${dataSummary}\n\nFormulate a helpful and concise natural language answer for the user based *only* on this data. Do not add outside information or disclaimers about data. Start directly with the answer.`
+                );
+                const finalResponse = await finalResponseResult.response;
+                finalReply = finalResponse.text();
+                action = 'query_result';
+              } else {
+                finalReply = `I couldn't find any top universities for ${query.country || 'the specified criteria'}.`;
+                action = 'query_result';
+              }
+              break;
+
+            case 'GET_UNIVERSITY_BY_NAME':
+              if (!query.universityName) {
+                finalReply = 'I need a university name to search for more details.';
+                action = 'query_result';
+                break;
+              }
+              const universityByName: UniEntity | null = await this.universityDataService.getUniversityByName(
+                query.universityName
+              );
+
+              if (universityByName) {
+                let universityDetails = `Here is some information about ${universityByName.university}:\n`;
+                universityDetails += `  Country: ${universityByName.country}\n`;
+                if (universityByName.rank) {
+                  universityDetails += `  World Rank: ${universityByName.rank}\n`;
+                }
+                if (universityByName.website) {
+                  universityDetails += `  Website: ${universityByName.website}\n`;
+                }
+                if (universityByName.studentPopulation) {
+                  universityDetails += `  Total Students: ${universityByName.studentPopulation}\n`;
+                }
+                if (universityByName.year) {
+                  universityDetails += `  Year founded: ${universityByName.year}\n`;
+                }
+                if (universityByName.type) {
+                  universityDetails += `  University Type: ${universityByName.type}\n`;
+                }
+                if (universityByName.location) {
+                  universityDetails += `  Location: ${universityByName.location}\n`;
+                }
+                if (universityByName.contact) {
+                  universityDetails += `  Contact: ${universityByName.contact}\n`;
+                }
+                if (universityByName.email) {
+                  universityDetails += `  Email: ${universityByName.email}\n`;
+                }
+                if (universityByName.strength) {
+                  universityDetails += `  University Strength: ${universityByName.strength}\n`;
+                }
+                if (universityByName.description) {
+                  universityDetails += `  University description: ${universityByName.description}\n`;
+                }
+                if (universityByName.academicFields && universityByName.academicFields.length > 0) {
+                  const fields = universityByName.academicFields.map((field) => field.name).join(', ');
+                  universityDetails += `  Academic Fields: ${fields}\n`;
+                }
+                if (universityByName.subjects && universityByName.subjects.length > 0) {
+                  const subjects = universityByName.subjects.map((subject) => subject.name).join(', ');
+                  universityDetails += `  Popular Subjects: ${subjects}\n`;
+                }
+
+                this.logger.log(
+                  `[Session ${sessionId}] DB Results for Gemini (University by Name): \n${universityDetails}`
+                );
+
+                const finalResponseResult = await chatSession.sendMessage(
+                  `Based on the user's previous query, here is the university data:\n\n${universityDetails}\n\nFormulate a helpful and concise natural language answer for the user based *only* on this data. Do not add outside information or disclaimers about data. Start directly with the answer.`
+                );
+                const finalResponse = await finalResponseResult.response;
+                finalReply = finalResponse.text();
+                action = 'query_result';
+              } else {
+                finalReply = `I couldn't find any information for a university named "${query.universityName}". Please check the spelling or try another name.`;
+                action = 'query_result';
+              }
+              break;
+
+            case 'GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY':
+              if (!query.subjectName && !query.academicFieldName) {
+                finalReply = 'I need a subject or academic field to search for universities.';
+                action = 'query_result';
+                break;
+              }
+
+              const universitiesBySubject: UniEntity[] =
+                await this.universityDataService.getUniversitiesBySubjectAndCountry(
+                  query.subjectName,
+                  query.academicFieldName,
+                  query.country
+                );
+
+              if (universitiesBySubject.length > 0) {
+                let dataSummary = `Here are some universities for ${
+                  query.subjectName || query.academicFieldName || 'your query'
+                } in ${query.country || 'various countries'}:\n`;
+                universitiesBySubject.forEach((uni, index) => {
+                  const rankText = uni.rank !== null && uni.rank !== undefined ? ` (Rank ${uni.rank})` : '';
+                  dataSummary += `- ${uni.university} in ${uni.country}${rankText}\n`;
+
+                  if (uni.academicFields && uni.academicFields.length > 0) {
+                    const fields = uni.academicFields.map((field) => field.name).join(', ');
+                    dataSummary += `  Academic Fields: ${fields}\n`;
+                  }
+                  if (uni.subjects && uni.subjects.length > 0) {
+                    const subjects = uni.subjects.map((subject) => subject.name).join(', ');
+                    dataSummary += `  Related Subjects: ${subjects}\n`;
+                  }
+                });
+
+                this.logger.log(
+                  `[Session ${sessionId}] DB Results for Gemini (Subject/Country Query): \n${dataSummary}`
+                );
+
+                const finalResponseResult = await chatSession.sendMessage(
+                  `Based on the user's previous query, here is the university data:\n\n${dataSummary}\n\nFormulate a helpful and concise natural language answer for the user based *only* on this data. Do not add outside information or disclaimers about data. Start directly with the answer.`
+                );
+                const finalResponse = await finalResponseResult.response;
+                finalReply = finalResponse.text();
+                action = 'query_result';
+              } else {
+                finalReply = `I couldn't find any universities offering "${
+                  query.subjectName || query.academicFieldName || 'that field'
+                }" ${query.country ? `in ${query.country}` : ''}.`;
+                action = 'query_result';
+              }
+              break;
+
+            case 'EXPORT_TOP_UNIVERSITIES_PDF':
+              const pdfCountry = query.country;
+              const pdfLimit = query.limit || 10;
+
+              if (!pdfCountry) {
+                finalReply = 'Please specify a country to export top universities to PDF.';
+                action = 'error';
+                break;
+              }
+
+              const universitiesForPdf: UniEntity[] = await this.universityDataService.getTopUniversitiesByCountry(
+                pdfCountry,
+                pdfLimit
+              );
+
+              if (universitiesForPdf.length > 0) {
+                try {
+                  // The PdfService.generateTopUniversitiesPdf should return a Promise<string> (filename)
+                  // based on your last provided pdf.service.ts
+                  const filename = await this.pdfService.generateTopUniversitiesPdf(
+                    universitiesForPdf,
+                    pdfCountry,
+                    pdfLimit
+                  );
+
+                  // Construct the download URL that the frontend will call
+                  const downloadUrl = `/api/chatbot/download-pdf/${filename}`;
+
+                  finalReply = `I've prepared a list of the top ${universitiesForPdf.length} universities in ${pdfCountry}. You can download the PDF here: [Download PDF](${downloadUrl})`;
+                  action = 'initiate_pdf_download';
+                  data = {
+                    country: pdfCountry,
+                    limit: pdfLimit,
+                    downloadUrl: downloadUrl,
+                    filename: filename,
+                  };
+                  this.logger.log(`[Session ${sessionId}] PDF download initiated. URL: ${downloadUrl}`);
+                } catch (pdfError) {
+                  this.logger.error(
+                    `[Session ${sessionId}] Error generating or saving PDF: ${pdfError.message}`,
+                    pdfError.stack
+                  );
+                  finalReply = `I apologize, but I encountered an error while trying to generate the PDF. Please try again later.`;
+                  action = 'error';
+                }
+              } else {
+                finalReply = `I couldn't find any top universities for ${pdfCountry} to export to PDF.`;
+                action = 'query_result';
+              }
+              break;
+
+            case 'EXPORT_TOP_UNIVERSITIES_EXCEL': // Existing case for Excel export
+              const excelCountry = query.country;
+              const excelLimit = query.limit || 10;
+
+              if (!excelCountry) {
+                finalReply = 'Please specify a country to export top universities to Excel.';
+                action = 'error';
+                break;
+              }
+
+              const universitiesForExcel: UniEntity[] = await this.universityDataService.getTopUniversitiesByCountry(
+                excelCountry,
+                excelLimit
+              );
+
+              if (universitiesForExcel.length > 0) {
+                try {
+                  const filename = await this.excelService.generateTopUniversitiesExcel(
+                    universitiesForExcel,
+                    excelCountry,
+                    excelLimit
+                  );
+
+                  const downloadUrl = `/api/chatbot/download-excel/${filename}`; // Excel download URL
+
+                  finalReply = `I've prepared a list of the top ${universitiesForExcel.length} universities in ${excelCountry}. You can download the Excel file here: [Download Excel](${downloadUrl})`;
+                  action = 'initiate_excel_download'; // Signal frontend for Excel download
+                  data = {
+                    country: excelCountry,
+                    limit: excelLimit,
+                    downloadUrl: downloadUrl,
+                    filename: filename,
+                  };
+                  this.logger.log(`[Session ${sessionId}] Excel download initiated. URL: ${downloadUrl}`);
+                } catch (excelError) {
+                  this.logger.error(
+                    `[Session ${sessionId}] Error generating or saving Excel: ${excelError.message}`,
+                    excelError.stack
+                  );
+                  finalReply = `I apologize, but I encountered an error while trying to generate the Excel file. Please try again later.`;
+                  action = 'error';
+                }
+              } else {
+                finalReply = `I couldn't find any top universities for ${excelCountry} to export to Excel.`;
+                action = 'query_result';
+              }
+              break;
+
+            case 'EXPORT_TOP_UNIVERSITIES_CSV': // NEW: Case for CSV export
+              const csvCountry = query.country;
+              const csvLimit = query.limit || 10;
+
+              if (!csvCountry) {
+                finalReply = 'Please specify a country to export top universities to CSV.';
+                action = 'error';
+                break;
+              }
+
+              const universitiesForCsv: UniEntity[] = await this.universityDataService.getTopUniversitiesByCountry(
+                csvCountry,
+                csvLimit
+              );
+
+              if (universitiesForCsv.length > 0) {
+                try {
+                  // Call the CsvService to generate the file
+                  const filename = await this.csvService.generateUniversityCsv(
+                    universitiesForCsv,
+                    csvCountry,
+                    csvLimit
+                  );
+
+                  // Construct the download URL for the frontend
+                  const downloadUrl = `/api/chatbot/download-csv/${filename}`;
+
+                  finalReply = `I've prepared a list of the top ${universitiesForCsv.length} universities in ${csvCountry}. You can download the CSV file here: [Download CSV](${downloadUrl})`;
+                  action = 'initiate_csv_download'; // Signal frontend for CSV download
+                  data = {
+                    country: csvCountry,
+                    limit: csvLimit,
+                    downloadUrl: downloadUrl,
+                    filename: filename,
+                  };
+                  this.logger.log(`[Session ${sessionId}] CSV download initiated. URL: ${downloadUrl}`);
+                } catch (csvError) {
+                  this.logger.error(
+                    `[Session ${sessionId}] Error generating or saving CSV: ${csvError.message}`,
+                    csvError.stack
+                  );
+                  finalReply = `I apologize, but I encountered an error while trying to generate the CSV file. Please try again later.`;
+                  action = 'error';
+                }
+              } else {
+                finalReply = `I couldn't find any top universities for ${csvCountry} to export to CSV.`;
+                action = 'query_result';
+              }
+              break;
+
+            default:
+              finalReply = 'I received a university data query, but the specific type of query is not yet supported.';
+              action = 'error';
+              break;
+          }
+        }
+      } catch (jsonError) {
+        this.logger.debug(
+          `[Session ${sessionId}] Failed to parse extracted JSON or process query: ${jsonError.message}`
+        );
+        action = 'error';
+        finalReply = 'I encountered an issue understanding your request. Could you please rephrase?';
+      }
+      this.logger.log(`[Session ${sessionId}] Final Bot Reply: "${finalReply}" (Action: ${action})`);
+      return { reply: finalReply, sessionId, action, data };
     } catch (error) {
-      this._logger.error(
-        `Error extracting university query: ${error.message}. Raw response: ${error.response?.text()}`,
-        error.stack
-      );
-      return {};
+      this.logger.error(`Error communicating with Gemini API or processing query for session ${sessionId}:`, error);
+      if (error.message && error.message.includes('Content was blocked')) {
+        return {
+          reply:
+            'I am unable to answer that question as it violates my safety guidelines. Please ask a university-related question.',
+          sessionId,
+          action: 'error',
+        };
+      }
+      return {
+        reply: 'Something went wrong while processing your request. Please try again.',
+        sessionId,
+        action: 'error',
+      };
     }
   }
 
-  private async generateUniversityResponse(
-    userMessage: string,
-    universities: UniversityDisplayDto[],
-    conversationHistory: ChatMessage[]
-  ): Promise<string> {
-    const formattedUniversities = universities
-      .map((uni, index) => {
-        const fields = this.getUniversityFields(uni);
-        const academicFields = fields.length > 0 ? ` - Fields: ${fields.join(', ')}` : '';
-        const rank = uni.rank ? `Rank: ${uni.rank}` : 'Rank: N/A';
-        const studentPopulation = uni.studentPopulation ? `Students: ${uni.studentPopulation.toLocaleString()}` : '';
-        const type = uni.type ? `Type: ${uni.type}` : '';
-        const location = uni.location
-          ? `Location: ${uni.location}, ${uni.country}`
-          : `Location: ${uni.country || 'N/A'}`;
-        const website = uni.website ? `Website: ${uni.website}` : '';
-
-        return `${index + 1}. **${
-          uni.university
-        }** (${rank}, ${location}, ${studentPopulation}, ${type}${academicFields}). ${website}`;
-      })
-      .join('\n\n');
-
-    const prompt = `
-    The user asked: "${userMessage}"
-    Here is the previous conversation history:
-    ${this.formatConversationHistory(conversationHistory)}
-    I found the following universities:
-    ${formattedUniversities}
-
-    Please provide a concise and helpful response summarizing the found universities.
-    Highlight key information for the user and offer a follow-up.
-    Do not just list them. Make it conversational.
-    If less than 3 universities are found, mention that.
-    Suggest to the user if they want to export the list as PDF or Excel.
-
-    Response:
-    `;
-
-    try {
-      const result = await this._model.generateContent(prompt);
-      return result.response.text().trim();
-    } catch (error) {
-      this._logger.error(`Error generating university response: ${error.message}`, error.stack);
-      return `I found ${universities.length} universities matching your criteria. Here are some details:\n\n${formattedUniversities}\n\nWould you like to export this list as a PDF or Excel file?`;
-    }
-  }
-
-  private async generateSuggestedQuestions(
-    message: string,
-    conversationHistory: ChatMessage[],
-    isFallback = false
-  ): Promise<string[]> {
-    const historyForPrompt = this.formatConversationHistory(conversationHistory);
-    let prompt: string;
-
-    if (isFallback) {
-      prompt = `
-      The user's last message was not directly related to universities. Provide 3 short and concise questions that encourage the user to ask about universities or related topics (like rankings, programs, or specific countries). Ensure they are in a numbered list format.
-
-      Example:
-      1. What are the top universities for engineering in the USA?
-      2. Can you help me find universities in Canada?
-      3. How do I search for universities by type?
-
-      Generate 3 suggested questions:
-      `;
+  resetChatSession(sessionId: string): void {
+    if (this.chatSessions.has(sessionId)) {
+      this.chatSessions.delete(sessionId);
+      this.logger.log(`Chat session ${sessionId} reset and removed.`);
     } else {
-      prompt = `
-      Based on the current user message and conversation history, suggest 3 highly relevant and concise follow-up questions that a user might ask about universities. These questions should directly relate to the ongoing university search or information retrieval. Ensure they are in a numbered list format.
-
-      Conversation History:
-      ${historyForPrompt}
-
-      User's last message: "${message}"
-
-      Generate 3 suggested questions:
-      `;
-    }
-
-    try {
-      const result = await this._model.generateContent(prompt);
-      const responseText = result.response.text().trim();
-      return responseText
-        .split('\n')
-        .map((line) => line.replace(/^\d+\.\s*/, '').trim())
-        .filter((line) => line.length > 0);
-    } catch (error) {
-      this._logger.error(`Error generating suggested questions: ${error.message}`, error.stack);
-      return this.STANDARD_QUESTIONS;
+      this.logger.warn(`Attempted to reset non-existent session: ${sessionId}`);
     }
   }
 }
