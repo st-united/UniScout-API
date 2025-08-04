@@ -1,5 +1,5 @@
 {
-  "name": "aicp",
+  "name": "uniscout",
   "version": "0.0.1",
   "description": "",
   "author": "",
@@ -48,7 +48,7 @@
     "class-validator": "^0.14.2",
     "csv-stringify": "^6.5.2",
     "exceljs": "^4.4.0",
-    "geoip-lite": "^1.4.10",
+    "json2csv": "^6.0.0-alpha.2",
     "lodash": "^4.17.21",
     "moment": "^2.30.1",
     "nodemailer": "^7.0.5",
@@ -64,7 +64,8 @@
     "socket.io": "^4.8.1",
     "swagger-ui-express": "^5.0.0",
     "tmp": "^0.2.1",
-    "typeorm": "^0.3.24"
+    "typeorm": "^0.3.24",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@commitlint/cli": "^17.3.0",

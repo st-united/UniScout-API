@@ -10,6 +10,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -32,6 +33,7 @@ import { Job, StatusEnum, UserRole } from '@Constant/enums';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserListResponseDto } from './dto/user-list-response.dto';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { ExportUsersDto } from './dto/export-user.dto';
 
 @Controller('users')
 @UseGuards(JwtAccessTokenGuard)
@@ -167,11 +169,6 @@ export class UsersController {
     return await this.usersService.getProfile(req.user.userId);
   }
 
-  // @Patch('profile')
-  // async updateProfile(@Req() req, @Body() updateUserDto: UpdateUserDto): Promise<ResponseItem<UserDto>> {
-  //   return await this.usersService.updateProfile(req.user.userId, updateUserDto);
-  // }
-
   @Delete(':id')
   async deleteUser(@Param('id', ParseIntPipe) id: number): Promise<ResponseItem<null>> {
     return await this.usersService.deleteUser(id);
@@ -224,5 +221,25 @@ export class UsersController {
   @Patch('avatar/:identityId')
   async removeAvatar(@Param('identityId', ParseIntPipe) identityId: number): Promise<ResponseItem<any>> {
     return await this.usersService.removeAvatar(identityId);
+  }
+
+  @Post('export')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SUPER)
+  @ApiOperation({ summary: 'Export admin accounts to CSV or Excel' })
+  async exportUsers(@Body() dto: ExportUsersDto, @Res() res): Promise<void> {
+    const buffer = await this.usersService.exportUsers(dto);
+
+    const format = dto.format || 'csv';
+    const now = new Date();
+    const filename = `account-data-${now.toISOString().split('T')[0].replace(/-/g, '')}.${format}`;
+
+    res.set({
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Type':
+        format === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv',
+    });
+
+    res.send(buffer);
   }
 }

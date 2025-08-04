@@ -1,6 +1,6 @@
 import * as bcrypt from 'bcrypt';
 import { Exclude } from 'class-transformer';
-import { BeforeInsert, Column, Entity, JoinTable, ManyToMany, ManyToOne, Unique } from 'typeorm';
+import { BeforeInsert, Column, Entity, Unique } from 'typeorm';
 
 import { StatusEnum, UserRole } from '@Constant/enums';
 import { AbstractEntity } from '@Entity/abstract.entity';

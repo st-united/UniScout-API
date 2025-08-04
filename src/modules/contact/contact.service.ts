@@ -6,12 +6,15 @@ import * as nodemailer from 'nodemailer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets, In } from 'typeorm';
+import { Repository, Brackets } from 'typeorm';
 import { ContactSubmissionEntity, SubmissionStatusEnum } from './entities';
 import { RequestTypeEnum } from '@Constant/enums';
 import { UpdateContactSubmissionStatusDto } from './dto/update-contact.dto';
 import { UniEntity } from '@UniversitiesModule/entities';
 import { UniversityService } from '@UniversitiesModule/university.service';
+import { ExportContactRequestDto } from './dto/export-contact.dto';
+import { parse as json2csv } from 'json2csv';
+import * as XLSX from 'xlsx';
 
 @Injectable()
 export class ContactService {
@@ -50,9 +53,17 @@ export class ContactService {
     excelTempFilePath?: string
   ): Promise<{ message: string }> {
     const senderEmail = createContactDto.representativeEmail;
-    this._logger.log(`Received contact form submission from: ${senderEmail || 'Anonymous'}`);
+    this._logger.log(`Received contact form submission`);
 
     let permanentExcelFilePath: string | undefined;
+    const finalAttachmentPaths: string[] = [];
+
+    const permanentAttachmentsDir = path.join(process.cwd(), 'uploads', 'contact_submissions_attachments');
+    if (!fs.existsSync(permanentAttachmentsDir)) {
+      fs.mkdirSync(permanentAttachmentsDir, { recursive: true });
+    }
+
+    const emailAttachments: { filename: string; path: string }[] = [];
 
     try {
       const {
@@ -83,12 +94,27 @@ export class ContactService {
 
         fs.renameSync(excelTempFilePath, permanentExcelFilePath);
         this._logger.log(`Moved Excel file from ${excelTempFilePath} to ${permanentExcelFilePath}`);
+
+        emailAttachments.push({
+          filename: path.basename(permanentExcelFilePath),
+          path: permanentExcelFilePath,
+        });
       }
 
-      const attachments = attachmentPaths.map((filePath) => ({
-        filename: path.basename(filePath),
-        path: filePath,
-      }));
+      for (const tempFilePath of attachmentPaths) {
+        if (fs.existsSync(tempFilePath)) {
+          const fileName = `${Date.now()}-${path.basename(tempFilePath)}`;
+          const permanentPath = path.join(permanentAttachmentsDir, fileName);
+          fs.renameSync(tempFilePath, permanentPath);
+          finalAttachmentPaths.push(path.relative(process.cwd(), permanentPath));
+          this._logger.log(`Moved general attachment from ${tempFilePath} to ${permanentPath}`);
+
+          emailAttachments.push({
+            filename: path.basename(permanentPath),
+            path: permanentPath,
+          });
+        }
+      }
 
       let universityDetailsHtml = '';
       let universityDetailsText = '';
@@ -108,7 +134,7 @@ export class ContactService {
           <p><strong>University Email:</strong> ${universityEmail || 'N/A'}</p>
           <p><strong>University Number:</strong> ${universityNumber || 'N/A'}</p>
           <p><strong>Website:</strong> <a href="${website}">${website}</a></p>
-          ${permanentExcelFilePath ? `<p><strong>Subjects Excel File:</strong> Available on server</p>` : ''}
+          ${permanentExcelFilePath ? `<p><strong>Subjects Excel File:</strong> Submitted </p>` : ''}
           ${
             typeof numberOfStudents === 'number'
               ? `<p><strong>Number of Students:</strong> ${numberOfStudents}</p>`
@@ -126,22 +152,12 @@ export class ContactService {
           University Email: ${universityEmail || 'N/A'}
           University Number: ${universityNumber || 'N/A'}
           Website: ${website}
-          Subjects Excel File: ${permanentExcelFilePath ? 'Available on server' : 'N/A'}
+          Subjects Excel File: ${permanentExcelFilePath ? 'Submitted' : 'N/A'}
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
           ${description ? `Description: ${description}\n` : ''}
         `;
-        contactDetailsHtml = `
-          <h3>Sender's Contact Details:</h3>
-          <p><strong>Representative Name:</strong> ${representativeName || 'N/A'}</p>
-          <p><strong>Representative Email:</strong> ${representativeEmail || 'N/A'}</p>
-          <p><strong>Representative Phone Number:</strong> ${representativeNumber || 'N/A'}</p>
-        `;
-        contactDetailsText = `
-          Sender's Contact Details:
-          Representative Name: ${representativeName || 'N/A'}
-          Representative Email: ${representativeEmail || 'N/A'}
-          Representative Phone Number: ${representativeNumber || 'N/A'}
-        `;
+        contactDetailsHtml = '';
+        contactDetailsText = '';
         messageContentHtml = '';
         messageContentText = '';
       } else {
@@ -180,26 +196,24 @@ export class ContactService {
           representativeEmail || this._configService.get<string>('EMAIL_USER')
         }>`,
         to: this._configService.get<string>('MAIL_CONTACT_FORM_RECEIVER_EMAIL'),
-        subject: `UNISCOUT - ${requestType} Request from ${representativeName || 'Anonymous'}`,
+        subject: `UNISCOUT - ${requestType} Request`,
         html: `
           <p><strong>Request Type:</strong> ${requestType}</p>
           ${universityDetailsHtml}
-          ${contactDetailsHtml}
-          ${messageContentHtml}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? contactDetailsHtml : ''}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? messageContentHtml : ''}
         `,
         text: `
           Request Type: ${requestType}
           ${universityDetailsText}
-          ${contactDetailsText}
-          ${messageContentText}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? contactDetailsText : ''}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? messageContentText : ''}
         `,
-        attachments: attachments,
+        attachments: emailAttachments,
       };
 
       await this._transporter.sendMail(mailOptions);
-      this._logger.log(
-        `Contact form email sent successfully from ${representativeEmail || 'Anonymous'} for ${requestType} request.`
-      );
+      this._logger.log(`Contact form email sent successfully' for ${requestType} request.`);
 
       let acknowledgmentUniversityDetailsHtml = '';
       let acknowledgmentUniversityDetailsText = '';
@@ -219,7 +233,7 @@ export class ContactService {
           <p><strong>University Email:</strong> ${universityEmail || 'N/A'}</p>
           <p><strong>University Number:</strong> ${universityNumber || 'N/A'}</p>
           <p><strong>Website:</strong> <a href="${website}">${website}</a></p>
-          ${permanentExcelFilePath ? `<p><strong>Subjects Excel File:</strong> Available on server</p>` : ''}
+          ${permanentExcelFilePath ? `<p><strong>Subjects Excel File:</strong> Submitted </p>` : ''}
           ${
             typeof numberOfStudents === 'number'
               ? `<p><strong>Number of Students:</strong> ${numberOfStudents}</p>`
@@ -237,22 +251,12 @@ export class ContactService {
           University Email: ${universityEmail || 'N/A'}
           University Number: ${universityNumber || 'N/A'}
           Website: ${website}
-          Subjects Excel File: ${permanentExcelFilePath ? 'Available on server' : 'N/A'}
+          Subjects Excel File: ${permanentExcelFilePath ? 'Submitted' : 'N/A'}
           ${typeof numberOfStudents === 'number' ? `Number of Students: ${numberOfStudents}\n` : ''}
           ${description ? `Description: ${description}\n` : ''}
         `;
-        acknowledgmentContactDetailsHtml = `
-          <h3>Your Contact Details:</h3>
-          <p><strong>Name:</strong> ${representativeName || 'N/A'}</p>
-          <p><strong>Email:</strong> ${representativeEmail || 'N/A'}</p>
-          <p><strong>Phone Number:</strong> ${representativeNumber || 'N/A'}</p>
-        `;
-        acknowledgmentContactDetailsText = `
-          Your Contact Details:
-          Name: ${representativeName || 'N/A'}
-          Email: ${representativeEmail || 'N/A'}
-          Phone Number: ${representativeNumber || 'N/A'}
-        `;
+        acknowledgmentContactDetailsHtml = '';
+        acknowledgmentContactDetailsText = '';
         acknowledgmentMessageContentHtml = '';
         acknowledgmentMessageContentText = '';
       } else {
@@ -291,23 +295,22 @@ export class ContactService {
         to: representativeEmail,
         subject: 'UNISCOUT - We received your message!',
         html: `
-          <p>Dear ${representativeName || 'Valued User'},</p>
           <p>Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon as possible.</p> <p>Here's a copy of your submission details:</p>
           <p><strong>Request Type:</strong> ${requestType}</p>
-          ${acknowledgmentUniversityDetailsHtml}
-          ${acknowledgmentContactDetailsHtml}
-          ${acknowledgmentMessageContentHtml} <p>If you have any urgent queries, feel free to reach out to us directly.</p>
+          ${requestType === RequestTypeEnum.NEW_UNIVERSITY ? acknowledgmentUniversityDetailsHtml : ''}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? acknowledgmentContactDetailsHtml : ''}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? acknowledgmentMessageContentHtml : ''}
+          <p>If you have any urgent queries, feel free to reach out to us directly.</p>
           <p>Best regards,<br>The UNISCOUT Team</p>
         `,
         text: `
-          Dear ${representativeName || 'Valued User'},
-
           Thank you for contacting UNISCOUT. We have received your message and will get back to you as soon as possible. Here's a copy of your submission details:
 
           Request Type: ${requestType}
-          ${acknowledgmentUniversityDetailsText}
-          ${acknowledgmentContactDetailsText}
-          ${acknowledgmentMessageContentText} If you have any urgent queries, feel free to reach out to us directly.
+          ${requestType === RequestTypeEnum.NEW_UNIVERSITY ? acknowledgmentUniversityDetailsText : ''}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? acknowledgmentContactDetailsText : ''}
+          ${requestType !== RequestTypeEnum.NEW_UNIVERSITY ? acknowledgmentMessageContentText : ''}
+          If you have any urgent queries, feel free to reach out to us directly.
 
           Best regards,
           The UNISCOUT Team
@@ -340,7 +343,8 @@ export class ContactService {
           universityEmail: universityEmail,
           universityNumber: universityNumber,
           website: website,
-          subjectsExcelFilePath: path.relative(process.cwd(), permanentExcelFilePath),
+          subjectsExcelFilePath: permanentExcelFilePath ? path.relative(process.cwd(), permanentExcelFilePath) : null,
+          attachmentFilePaths: finalAttachmentPaths,
           studentPopulation: numberOfStudents,
           description: description,
         }),
@@ -350,11 +354,34 @@ export class ContactService {
       return { message: 'Contact form submitted successfully!' };
     } catch (error) {
       this._logger.error(
-        `Failed to send contact form email from ${senderEmail || 'unknown'} (Type: ${
-          createContactDto.requestType || 'unknown'
-        }):`,
+        `Failed to send contact form email (Type: ${createContactDto.requestType || 'unknown'}):`,
         error.stack
       );
+      if (permanentExcelFilePath && fs.existsSync(permanentExcelFilePath)) {
+        fs.unlink(permanentExcelFilePath, (err) => {
+          if (err)
+            this._logger.error(
+              `Failed to delete permanent Excel file during error cleanup: ${permanentExcelFilePath}, Error: ${err.message}`
+            );
+          else
+            this._logger.log(
+              `Successfully deleted permanent Excel file during error cleanup: ${permanentExcelFilePath}`
+            );
+        });
+      }
+      finalAttachmentPaths.forEach((filePath) => {
+        const absolutePath = path.join(process.cwd(), filePath);
+        if (fs.existsSync(absolutePath)) {
+          fs.unlink(absolutePath, (err) => {
+            if (err)
+              this._logger.error(
+                `Failed to delete permanent attachment file during error cleanup: ${absolutePath}, Error: ${err.message}`
+              );
+            else
+              this._logger.log(`Successfully deleted permanent attachment file during error cleanup: ${absolutePath}`);
+          });
+        }
+      });
       throw new Error('Failed to submit contact form. Please try again later.');
     } finally {
       if (excelTempFilePath && fs.existsSync(excelTempFilePath)) {
@@ -365,10 +392,13 @@ export class ContactService {
         });
       }
       attachmentPaths.forEach((filePath) => {
-        fs.unlink(filePath, (err) => {
-          if (err) this._logger.error(`Failed to delete temporary attachment file: ${filePath}, Error: ${err.message}`);
-          else this._logger.log(`Successfully deleted temporary attachment file: ${filePath}`);
-        });
+        if (fs.existsSync(filePath)) {
+          fs.unlink(filePath, (err) => {
+            if (err)
+              this._logger.error(`Failed to delete temporary attachment file: ${filePath}, Error: ${err.message}`);
+            else this._logger.log(`Successfully deleted temporary attachment file: ${filePath}`);
+          });
+        }
       });
     }
   }
@@ -547,5 +577,61 @@ export class ContactService {
     });
 
     return finalResult;
+  }
+
+  async exportContactRequests(dto: ExportContactRequestDto): Promise<Buffer> {
+    const qb = this._contactSubmissionRepo.createQueryBuilder('submission');
+
+    if (dto.status) qb.andWhere('submission.status = :status', { status: dto.status });
+    if (dto.requestType) qb.andWhere('submission.requestType = :requestType', { requestType: dto.requestType });
+    if (dto.country) qb.andWhere('submission.country = :country', { country: dto.country });
+    if (dto.search?.trim()) {
+      const term = `%${dto.search.trim()}%`;
+      qb.andWhere('(submission.universityName ILIKE :term OR submission.abbreviation ILIKE :term)', { term });
+    }
+
+    const data = await qb.getMany();
+
+    const allFields = [
+      'id',
+      'requestType',
+      'universityName',
+      'representativeName',
+      'representativeEmail',
+      'representativeNumber',
+      'message',
+      'abbreviation',
+      'country',
+      'location',
+      'type',
+      'universityEmail',
+      'universityNumber',
+      'website',
+      'numberOfStudents',
+      'description',
+      'submittedAt',
+      'status',
+      'rejectionReason',
+    ];
+
+    const selected = dto.fields?.length ? dto.fields : allFields;
+
+    const filteredData = data.map((item) => {
+      const out = {};
+      for (const field of selected) {
+        out[field] = item[field];
+      }
+      return out;
+    });
+
+    if (dto.format === 'xlsx') {
+      const ws = XLSX.utils.json_to_sheet(filteredData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Requests');
+      return XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
+    }
+
+    const csv = json2csv(filteredData);
+    return Buffer.from(csv, 'utf-8');
   }
 }

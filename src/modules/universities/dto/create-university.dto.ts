@@ -23,10 +23,10 @@ export class CreateUniversityDto {
   @IsString()
   university: string;
 
-  @ApiProperty({ description: 'Abbreviation of university' })
-  @IsNotEmpty({ message: 'Abbreviated name is required' })
+  @ApiPropertyOptional({ description: 'Abbreviation of university' })
+  @IsOptional()
   @IsString()
-  abbreviation: string;
+  abbreviation?: string;
 
   @ApiPropertyOptional({ description: 'Geographical latitude of university' })
   @IsOptional()
