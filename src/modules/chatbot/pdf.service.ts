@@ -1,22 +1,20 @@
-// src/modules/chatbot/pdf.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import PdfPrinter from 'pdfmake';
 import { TDocumentDefinitions, Content } from 'pdfmake/interfaces';
 import * as path from 'path';
-import * as fs from 'fs'; // Import fs for file operations
+import * as fs from 'fs';
 import { UniEntity } from '@UniversitiesModule/entities';
 
 @Injectable()
 export class PdfService {
   private readonly logger = new Logger(PdfService.name);
   private printer: PdfPrinter;
-  private readonly downloadsDir: string; // Directory to save generated files
+  private readonly downloadsDir: string;
 
   constructor() {
     const fontsDirectory = path.join(process.cwd(), 'src', 'fonts', 'static');
-    this.downloadsDir = path.join(process.cwd(), 'downloads'); // Define your downloads directory
+    this.downloadsDir = path.join(process.cwd(), 'downloads');
 
-    // Create the downloads directory if it doesn't exist
     if (!fs.existsSync(this.downloadsDir)) {
       fs.mkdirSync(this.downloadsDir, { recursive: true });
       this.logger.log(`Created downloads directory at: ${this.downloadsDir}`);
@@ -35,7 +33,6 @@ export class PdfService {
     this.printer = new PdfPrinter(fonts);
   }
 
-  // CHANGE RETURN TYPE FROM Promise<Buffer> TO Promise<string> (filename)
   async generateTopUniversitiesPdf(universities: UniEntity[], country: string, limit: number): Promise<string> {
     this.logger.log(`Generating PDF for top ${limit} universities in ${country}.`);
 
@@ -87,7 +84,6 @@ export class PdfService {
       },
     };
 
-    // Generate a unique filename
     const filename = `top_universities_${country.replace(/\s+/g, '_')}_${limit}_${Date.now()}.pdf`;
     const filePath = path.join(this.downloadsDir, filename);
 
@@ -96,11 +92,11 @@ export class PdfService {
 
       const writeStream = fs.createWriteStream(filePath);
 
-      pdfDoc.pipe(writeStream); // Pipe the PDF content to a file stream
+      pdfDoc.pipe(writeStream);
 
       writeStream.on('finish', () => {
         this.logger.log(`PDF saved to: ${filePath}`);
-        resolve(filename); // Resolve with the filename
+        resolve(filename);
       });
 
       writeStream.on('error', (err) => {
@@ -113,7 +109,7 @@ export class PdfService {
         reject(err);
       });
 
-      pdfDoc.end(); // Finalize the PDF
+      pdfDoc.end();
     });
   }
 }

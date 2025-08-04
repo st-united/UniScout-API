@@ -1,4 +1,3 @@
-// src/modules/chatbot/chatbot.service.ts stop here
 import { Injectable, Logger } from '@nestjs/common';
 import {
   GoogleGenerativeAI,
@@ -11,8 +10,8 @@ import { ConfigService } from '@nestjs/config';
 import { UniversityDataService } from './university-data.service';
 import { UniEntity } from '@UniversitiesModule/entities';
 import { PdfService } from './pdf.service';
-import * as fs from 'fs'; // Add this import for file system operations
-import * as path from 'path'; // Add this import for path manipulation
+import * as fs from 'fs';
+import * as path from 'path';
 import { ExcelService } from './excel.service';
 import { CsvService } from './csv.service';
 
@@ -23,7 +22,7 @@ interface UniversityQuery {
     | 'GET_UNIVERSITIES_BY_SUBJECT_AND_COUNTRY'
     | 'EXPORT_TOP_UNIVERSITIES_PDF'
     | 'EXPORT_TOP_UNIVERSITIES_EXCEL'
-    | 'EXPORT_TOP_UNIVERSITIES_CSV'; // Add new type for Excel
+    | 'EXPORT_TOP_UNIVERSITIES_CSV';
   country?: string;
   limit?: number;
   universityName?: string;
@@ -50,7 +49,7 @@ export class ChatbotService {
     private universityDataService: UniversityDataService,
     private pdfService: PdfService,
     private excelService: ExcelService,
-    private csvService: CsvService // Inject ExcelService here
+    private csvService: CsvService
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
@@ -70,7 +69,10 @@ export class ChatbotService {
     });
     this.logger.log('Initialized ChatbotService with Gemini model: models/gemini-1.5-flash');
   }
-
+  private isVietnamese(text: string): boolean {
+    const vietnameseDiacritics = /[áàảãạăằắẳẵặâầấẩẫậéèẻẽẹêềếểễệíìỉĩịóòỏõọôồốổỗộơờớởỡợúùủũụưừứửữựýỳỷỹỵđ]/i;
+    return vietnameseDiacritics.test(text);
+  }
   async sendMessage(message: string, sessionId: string): Promise<ChatbotReply> {
     let chatSession = this.chatSessions.get(sessionId);
 
@@ -85,6 +87,12 @@ export class ChatbotService {
               {
                 text: `
                 You are UniScout Assistant, an AI designed to help users find university information.
+                You are capable of understanding and responding in both English and Vietnamese.
+                Always respond in the same language as the user's message.
+
+                Bạn là UniScout Assistant, một AI được thiết kế để giúp người dùng tìm kiếm thông tin về các trường đại học.
+                Bạn có khả năng hiểu và trả lời bằng cả tiếng Anh và tiếng Việt.
+                Luôn trả lời bằng ngôn ngữ mà người dùng đã sử dụng để gửi tin nhắn.
                 Your capabilities include:
                 1.  Answering questions about top universities in a specific country.
                 2.  Answering questions about specific universities by name.
@@ -266,12 +274,44 @@ If a user asks for instructions on how to use the website to find, filter, or so
                 - User: "How do I filter universities if i want to filter by university size?"
                   Your Response: "To filter universities by specific programs, you can scroll down to 'Discover Universities' section to find the filter section at the left hand side of the page. Under size type select the size you desire."
 
+                  If a user asks a question about DevPlus, you MUST provide the exact information specified below. Do not add any extra information or change the format of the links.
+                - What is DevPlus’s email address?
+                  Your Response: "You can contact us at hello@devplus.edu.vn"
+                - What is the hotline number to contact DevPlus?
+                  Your Response: "(+84) 931901608"
+                - Does DevPlus have a LinkedIn or Facebook page?
+                  Your Response: "linkedin: https://www.linkedin.com/company/devplusprogramme/ facebook :https://www.facebook.com/Devplusprogramme/ tiktok: https://www.tiktok.com/@devplus.edu"
+                - Where is DevPlus located?
+                  Your Response: "112-118 Mai Thuc Lan, My An Ngu Hanh Son, Da Nang"
+                - Where is the contact form on the website?
+                  Your Response: "On the top right of the page click 'Join Us' to view the contact form."
+                - I’m an enterprise; how do I send a collaboration request?
+                  Your Response: "On the top right of the page click 'Join Us' and select your request."
 
                 If the user's question is university-related but CANNOT be answered by a specific data query (e.g., "how to apply to college?", "what are student exchange programs?"), answer it using your general knowledge.
 
                 If the user's question is NOT related to universities at all (e.g., "what is the capital of France?", "tell me a joke"), you MUST ONLY reply with the exact phrase: "Please ask me a university-related question".
                 Do not provide any other information or context for non-university questions.
                 Your responses for general university questions should be concise and helpful.
+                // --- Vietnamese Translations for Hard-coded Responses ---
+                // Vietnamese instructions for website usage:
+                // - Để lọc các trường đại học theo chương trình (ví dụ: IT), hướng dẫn người dùng nhấn nút 'Show Filters' ở phía bên trái của trang.
+                // - Để sắp xếp các trường đại học theo thứ hạng, hướng dẫn người dùng sử dụng menu thả xuống 'Sort by: low to high' ở phía trên bên phải.
+                // - Để tìm các trường đại học ở một quốc gia cụ thể (ví dụ: Mỹ), hướng dẫn người dùng sử dụng thanh tìm kiếm.
+                // - Để lọc theo loại trường đại học, hướng dẫn người dùng đến phần bộ lọc dưới 'University type'
+                // - Để lọc theo quy mô trường đại học, hướng dẫn người dùng đến phần bộ lọc dưới 'University size'
+
+                // Vietnamese hard-coded DevPlus responses:
+                // - Email: "Bạn có thể liên hệ với chúng tôi tại hello@devplus.edu.vn"
+                // - Hotline: "Bạn có thể liên hệ với chúng tôi tại (+84) 931901608"
+                // - Social media: "LinkedIn: https://www.linkedin.com/company/devplusprogramme/ Facebook: https://www.facebook.com/Devplusprogramme/ TikTok: https://www.tiktok.com/@devplus.edu"
+                // - Location: "112-118 Mai Thuc Loan, My An, Ngu Hanh Son, Da Nang"
+                // - Contact form: "Trên cùng bên phải của trang, nhấp vào 'Join Us' để xem biểu mẫu liên hệ."
+                // - Enterprise request: "Trên cùng bên phải của trang, nhấp vào 'Join Us' và chọn yêu cầu của bạn."
+
+                // Vietnamese non-university question response:
+                // "Vui lòng hỏi tôi một câu hỏi liên quan đến trường đại học."
+
                 `,
               },
             ],
@@ -489,15 +529,12 @@ If a user asks for instructions on how to use the website to find, filter, or so
 
               if (universitiesForPdf.length > 0) {
                 try {
-                  // The PdfService.generateTopUniversitiesPdf should return a Promise<string> (filename)
-                  // based on your last provided pdf.service.ts
                   const filename = await this.pdfService.generateTopUniversitiesPdf(
                     universitiesForPdf,
                     pdfCountry,
                     pdfLimit
                   );
 
-                  // Construct the download URL that the frontend will call
                   const downloadUrl = `/api/chatbot/download-pdf/${filename}`;
 
                   finalReply = `I've prepared a list of the top ${universitiesForPdf.length} universities in ${pdfCountry}. You can download the PDF here: [Download PDF](${downloadUrl})`;
@@ -523,7 +560,7 @@ If a user asks for instructions on how to use the website to find, filter, or so
               }
               break;
 
-            case 'EXPORT_TOP_UNIVERSITIES_EXCEL': // Existing case for Excel export
+            case 'EXPORT_TOP_UNIVERSITIES_EXCEL':
               const excelCountry = query.country;
               const excelLimit = query.limit || 10;
 
@@ -546,10 +583,10 @@ If a user asks for instructions on how to use the website to find, filter, or so
                     excelLimit
                   );
 
-                  const downloadUrl = `/api/chatbot/download-excel/${filename}`; // Excel download URL
+                  const downloadUrl = `/api/chatbot/download-excel/${filename}`;
 
                   finalReply = `I've prepared a list of the top ${universitiesForExcel.length} universities in ${excelCountry}. You can download the Excel file here: [Download Excel](${downloadUrl})`;
-                  action = 'initiate_excel_download'; // Signal frontend for Excel download
+                  action = 'initiate_excel_download';
                   data = {
                     country: excelCountry,
                     limit: excelLimit,
@@ -571,7 +608,7 @@ If a user asks for instructions on how to use the website to find, filter, or so
               }
               break;
 
-            case 'EXPORT_TOP_UNIVERSITIES_CSV': // NEW: Case for CSV export
+            case 'EXPORT_TOP_UNIVERSITIES_CSV':
               const csvCountry = query.country;
               const csvLimit = query.limit || 10;
 
@@ -588,18 +625,16 @@ If a user asks for instructions on how to use the website to find, filter, or so
 
               if (universitiesForCsv.length > 0) {
                 try {
-                  // Call the CsvService to generate the file
                   const filename = await this.csvService.generateUniversityCsv(
                     universitiesForCsv,
                     csvCountry,
                     csvLimit
                   );
 
-                  // Construct the download URL for the frontend
                   const downloadUrl = `/api/chatbot/download-csv/${filename}`;
 
                   finalReply = `I've prepared a list of the top ${universitiesForCsv.length} universities in ${csvCountry}. You can download the CSV file here: [Download CSV](${downloadUrl})`;
-                  action = 'initiate_csv_download'; // Signal frontend for CSV download
+                  action = 'initiate_csv_download';
                   data = {
                     country: csvCountry,
                     limit: csvLimit,

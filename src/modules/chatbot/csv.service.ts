@@ -1,14 +1,12 @@
-// src/modules/chatbot/csv.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { stringify } from 'csv-stringify';
 import * as path from 'path';
-import * as fs from 'fs'; // Using 'fs' directly as seen in your provided code
-import { UniEntity } from '@UniversitiesModule/entities'; // Ensure this alias is correctly configured in tsconfig.json
+import * as fs from 'fs';
+import { UniEntity } from '@UniversitiesModule/entities';
 
 @Injectable()
 export class CsvService {
   private readonly logger = new Logger(CsvService.name);
-  // Define a directory to store temporary export files (e.g., in project root)
   private readonly tempDir = path.join(process.cwd(), 'temp_exports');
 
   constructor() {
@@ -38,19 +36,17 @@ export class CsvService {
   async generateUniversityCsv(universities: UniEntity[], country: string, limit: number): Promise<string> {
     this.logger.log(`Starting CSV generation for ${universities.length} universities.`);
 
-    // Define columns for the CSV output, matching UniEntity properties
     const columns = [
       { key: 'rank', header: 'Rank' },
       { key: 'university', header: 'University Name' },
       { key: 'country', header: 'Country' },
-      { key: 'location', header: 'Location' }, // Using 'location' from UniEntity
+      { key: 'location', header: 'Location' },
       { key: 'website', header: 'Website' },
-      { key: 'studentPopulation', header: 'Student Population' }, // Using 'studentPopulation' from UniEntity
+      { key: 'studentPopulation', header: 'Student Population' },
     ];
 
-    // Map UniEntity objects to a plain object array suitable for csv-stringify
     const data = universities.map((uni) => ({
-      rank: uni.rank || 'N/A', // Handle potential null/undefined
+      rank: uni.rank || 'N/A',
       university: uni.university || 'N/A',
       country: uni.country || 'N/A',
       location: uni.location || 'N/A',
@@ -58,13 +54,12 @@ export class CsvService {
       studentPopulation: uni.studentPopulation || 'N/A',
     }));
 
-    // Use csv-stringify to convert data to CSV string
     const csvString = await new Promise<string>((resolve, reject) => {
       stringify(
         data,
         {
-          header: true, // Include the header row
-          columns: columns, // Specify column order and headers
+          header: true,
+          columns: columns,
         },
         (err, output) => {
           if (err) {
@@ -80,7 +75,7 @@ export class CsvService {
     const filePath = path.join(this.tempDir, fullFilename);
 
     try {
-      fs.writeFileSync(filePath, csvString); // Synchronous write for simplicity, can be async with fs/promises
+      fs.writeFileSync(filePath, csvString);
       this.logger.log(`CSV file successfully saved to: ${filePath}`);
       return fullFilename;
     } catch (error) {

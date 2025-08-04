@@ -1,9 +1,7 @@
-// src/chatbot/university-data.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UniEntity } from '@UniversitiesModule/entities';
 import { Like, Repository } from 'typeorm';
-// !! IMPORTANT: Adjust this path if your UniEntity is located elsewhere !!
 
 @Injectable()
 export class UniversityDataService {
@@ -28,23 +26,17 @@ export class UniversityDataService {
 
     const qb = this.uniRepository.createQueryBuilder('uni');
 
-    // Always filter out soft-deleted universities
     qb.andWhere('uni.isDeleted = :isDeleted', { isDeleted: false });
 
-    // Apply country filter if provided and not an empty string
     if (country && country.trim() !== '') {
-      // Using ILIKE for case-insensitive country matching
       qb.andWhere('LOWER(uni.country) ILIKE LOWER(:country)', { country: country.trim() });
       this.logger.debug(`Applying country filter: ${country.trim()}`);
     } else {
       this.logger.debug('No specific country filter applied.');
     }
 
-    // Order by rank (ASC for top universities, assuming lower rank is better)
-    // NULLS LAST ensures universities without a rank appear after ranked ones.
     qb.orderBy('uni.rank', 'ASC', 'NULLS LAST');
 
-    // Apply limit to the number of results
     qb.limit(limit);
 
     try {
@@ -56,10 +48,10 @@ export class UniversityDataService {
             JSON.stringify(
               universities.slice(0, 5).map((uni) => ({
                 id: uni.id,
-                university: uni.university, // Check this!
+                university: uni.university,
                 country: uni.country,
                 rank: uni.rank,
-                studentPopulation: uni.studentPopulation, // Check this!
+                studentPopulation: uni.studentPopulation,
                 website: uni.website,
               })),
               null,
@@ -76,25 +68,21 @@ export class UniversityDataService {
     }
   }
 
-  // You can add more specific data retrieval methods here as needed for future chatbot capabilities.
-  // For example:
   async getUniversityByName(name: string): Promise<UniEntity | null> {
     this.logger.log(`Attempting to fetch university by name: "${name}" including academic fields and subjects.`);
 
     try {
       const university = await this.uniRepository.findOne({
         where: {
-          // Using ILIKE for case-insensitive partial matching
-          // Adjust this if you need an exact match: university: name.trim(),
           university: Like(`%${name.trim()}%`),
-          isDeleted: false, // Ensure it's not soft-deleted
+          isDeleted: false,
         },
-        relations: ['academicFields', 'subjects'], // <--- ADDED THIS LINE
+        relations: ['academicFields', 'subjects'],
       });
 
       if (university) {
         this.logger.log(`Successfully found university: "${university.university}"`);
-        // Log loaded relations for debugging
+
         this.logger.debug(`Loaded academic fields count: ${university.academicFields?.length || 0}`);
         this.logger.debug(`Loaded subjects count: ${university.subjects?.length || 0}`);
       } else {
@@ -128,35 +116,26 @@ export class UniversityDataService {
 
     if (!subjectName && !academicFieldName) {
       this.logger.warn('Called getUniversitiesBySubjectAndCountry without a subjectName or academicFieldName.');
-      return []; // Must have at least one filter
+      return [];
     }
 
     const qb = this.uniRepository.createQueryBuilder('uni');
 
-    // Eagerly load relations for comprehensive results
     qb.leftJoinAndSelect('uni.academicFields', 'academicField').leftJoinAndSelect('uni.subjects', 'subject');
 
-    // Always filter out soft-deleted universities
     qb.andWhere('uni.isDeleted = :isDeleted', { isDeleted: false });
 
-    // Apply country filter if provided
     if (country && country.trim() !== '') {
       qb.andWhere('LOWER(uni.country) ILIKE LOWER(:country)', { country: country.trim() });
       this.logger.debug(`Applying country filter: ${country.trim()}`);
     }
 
-    // Apply subject name filter if provided
     if (subjectName && subjectName.trim() !== '') {
-      // Check if the subject name exists in the university's subjects
       qb.andWhere('LOWER(subject.name) ILIKE LOWER(:subjectName)', { subjectName: `%${subjectName.trim()}%` });
       this.logger.debug(`Applying subject filter: ${subjectName.trim()}`);
     }
 
-    // Apply academic field name filter if provided
-    // This will act as an OR with subjectName if both are present, or standalone
     if (academicFieldName && academicFieldName.trim() !== '') {
-      // Check if the academic field name exists in the university's academic fields
-      // Use OR to combine with subjectName if subjectName is also present
       if (subjectName) {
         qb.orWhere('LOWER(academicField.name) ILIKE LOWER(:academicFieldName)', {
           academicFieldName: `%${academicFieldName.trim()}%`,
@@ -169,9 +148,8 @@ export class UniversityDataService {
       this.logger.debug(`Applying academic field filter: ${academicFieldName.trim()}`);
     }
 
-    // Optional: Add ordering, e.g., by rank, if desired
     qb.orderBy('uni.rank', 'ASC', 'NULLS LAST');
-    qb.limit(10); // Limit results to a reasonable number
+    qb.limit(10);
 
     try {
       const universities = await qb.getMany();
