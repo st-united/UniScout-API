@@ -9,6 +9,7 @@ import {
   Body,
   Patch,
   Res,
+  Post,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiBody, ApiParam } from '@nestjs/swagger';
 import { ContactService } from './contact.service';
@@ -20,6 +21,7 @@ import { Response } from 'express';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import * as path from 'path';
+import { ExportContactRequestDto } from './dto/export-contact.dto';
 
 @Controller('admin/contact')
 export class AdminContactController {
@@ -186,5 +188,21 @@ export class AdminContactController {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.sendFile(absoluteFilePath);
+  }
+
+  @Post('export')
+  @ApiOperation({ summary: 'Export contact submissions (Admin)' })
+  async exportContactRequests(@Body() dto: ExportContactRequestDto, @Res() res: Response) {
+    const buffer = await this._contactService.exportContactRequests(dto);
+    const ext = dto.format || 'csv';
+    const now = new Date();
+    const filename = `request-data-${now.toISOString().split('T')[0].replace(/-/g, '')}.${ext}`;
+
+    res.set({
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Type': ext === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv',
+    });
+
+    res.send(buffer);
   }
 }
