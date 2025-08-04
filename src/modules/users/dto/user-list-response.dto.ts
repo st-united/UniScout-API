@@ -19,7 +19,7 @@ export class UserListResponseDto {
   @Expose()
   role: UserRole;
 
-  @ApiProperty({ example: 'Software Engineer', description: 'Job title or profession of the user' }) // <--- CHANGED: removed required: false
+  @ApiProperty({ description: 'Job title' })
   @Expose()
   job: string;
 

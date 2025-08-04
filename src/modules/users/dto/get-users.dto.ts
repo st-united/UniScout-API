@@ -39,11 +39,10 @@ export class GetUsersDto extends PageOptionsDto {
   @IsArray()
   @IsEnum(UserRole, { each: true })
   @Transform(({ value }) => {
-    // <--- Add this transformation
     if (typeof value === 'string') {
-      return value.split(','); // Split comma-separated string into an array
+      return value.split(',');
     }
-    return value; // Return as is if already an array or not a string
+    return value;
   })
   role?: UserRole[];
 
@@ -57,9 +56,8 @@ export class GetUsersDto extends PageOptionsDto {
   @IsArray()
   @IsEnum(Job, { each: true })
   @Transform(({ value }) => {
-    // <--- Add this transformation
     if (typeof value === 'string') {
-      return value.split(','); // Split comma-separated string into an array
+      return value.split(',');
     }
     return value;
   })
