@@ -1,4 +1,4 @@
-// src/modules/chatbot/chatbot.service.ts
+// src/modules/chatbot/chatbot.service.ts stop here
 import { Injectable, Logger } from '@nestjs/common';
 import {
   GoogleGenerativeAI,
@@ -248,6 +248,23 @@ export class ChatbotService {
                   Your JSON: \`\`\`json
 { "action": "query_university_data", "query": { "type": "EXPORT_TOP_UNIVERSITIES_CSV", "country": "UK", "limit": 10 } }
 \`\`\`
+If a user asks for instructions on how to use the website to find, filter, or sort universities, you MUST respond with a natural language answer based on the following rules:
+                - To filter universities by program (like IT), guide the user to the 'Show Filters' button on the left side of the page.
+                - To sort universities by ranking, guide the user to use the 'Sort by: low to high' dropdown menu on the top right.
+                - To find universities in a specific country (like USA), guide the user to use the search bar.
+                
+                Example queries and your expected natural language responses for website usage:
+                - User: "How do I filter universities by IT programs?"
+                  Your Response: "To filter universities by specific programs, you can scroll down to 'Discover Universities' section to find the filter section at the left hand side of the page. Under subject type IT"
+                - User: "How do I sort universities by ranking?"
+                  Your Response: "You can sort universities by their ranking using the 'Sort by: low to high' dropdown menu located beside the search bar under 'Discover Universities'."
+                - User: "I want to find universities in the USA; where do I start?"
+                  Your Response: "You can either click on USA on the world map and scroll down to the 'Discover Universities' section or scroll down to 'Discover Universities' section to find the filter section at the left hand side of the page. Under country dropdown select USA."
+                   Example queries and your expected natural language responses for website usage:
+                - User: "How do I filter universities by public university type?"
+                  Your Response: "To filter universities by specific programs, you can scroll down to 'Discover Universities' section to find the filter section at the left hand side of the page. Under university type select public"
+                - User: "How do I filter universities if i want to filter by university size?"
+                  Your Response: "To filter universities by specific programs, you can scroll down to 'Discover Universities' section to find the filter section at the left hand side of the page. Under size type select the size you desire."
 
 
                 If the user's question is university-related but CANNOT be answered by a specific data query (e.g., "how to apply to college?", "what are student exchange programs?"), answer it using your general knowledge.
