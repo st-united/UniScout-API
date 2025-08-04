@@ -21,6 +21,9 @@ import { MailService } from './mail/mail.service';
 import { UserListResponseDto } from './dto/user-list-response.dto';
 import { AuditLogService } from '../audit/audit.service';
 import { AuditActionType } from '../audit/entities/audit-log.entity';
+import { ExportUsersDto } from './dto/export-user.dto';
+import { parse } from 'json2csv';
+import * as XLSX from 'xlsx';
 
 @Injectable()
 export class UsersService {
@@ -59,7 +62,7 @@ export class UsersService {
       }
 
       if (!/[A-Z]/.test(password)) {
-        password += chars.substring(0, 26).charAt(Math.floor(Math.random() * 26)); // Add a random capital
+        password += chars.substring(0, 26).charAt(Math.floor(Math.random() * 26));
       }
 
       if (!/[!@#$%^&*()-_+=[]{}|;:,.<>?]/.test(password)) {
@@ -187,7 +190,6 @@ export class UsersService {
       .select(['users.id', 'users.name', 'users.email', 'users.role', 'users.job', 'users.status', 'users.createdAt'])
       .andWhere('users.deletedAt IS NULL');
 
-    // 1. Search filter (name, email, phone)
     if (params.search) {
       const searchTerm = `%${params.search.toLowerCase()}%`;
       usersQuery.andWhere(
@@ -196,28 +198,22 @@ export class UsersService {
       );
     }
 
-    // 2. Status filter
     if (params.status) {
-      // If params.status is provided, filter by that single status
       usersQuery.andWhere('users.status = :status', { status: params.status });
     } else {
-      // Default: If no status is provided, get all active, inactive, pending, blocked
       usersQuery.andWhere('users.status IN (:...defaultStatuses)', {
         defaultStatuses: [StatusEnum.ACTIVE, StatusEnum.INACTIVE, StatusEnum.PENDING, StatusEnum.BLOCKED],
       });
     }
 
-    // 3. Role filter
     if (params.role && params.role.length > 0) {
       usersQuery.andWhere('users.role IN (:...roles)', { roles: params.role });
     }
 
-    // 4. Job filter
     if (params.job && params.job.length > 0) {
       usersQuery.andWhere('users.job IN (:...jobs)', { jobs: params.job });
     }
 
-    // 5. Creation Date Range filter
     if (params.createdAtStart || params.createdAtEnd) {
       const startDate = params.createdAtStart ? new Date(params.createdAtStart) : null;
       const endDate = params.createdAtEnd ? new Date(params.createdAtEnd) : null;
@@ -231,15 +227,13 @@ export class UsersService {
       } else if (startDate) {
         usersQuery.andWhere('users.createdAt >= :startDate', { startDate: startDate.toISOString() });
       } else if (endDate) {
-        endDate.setHours(23, 59, 59, 999); // Include full end day
+        endDate.setHours(23, 59, 59, 999);
         usersQuery.andWhere('users.createdAt <= :endDate', { endDate: endDate.toISOString() });
       }
     }
 
-    // Order by clause
-    usersQuery.orderBy(`users.${params.orderBy || 'createdAt'}`, params.order || 'DESC'); // Default sort by createdAt DESC
+    usersQuery.orderBy(`users.${params.orderBy || 'createdAt'}`, params.order || 'DESC');
 
-    // Pagination clause
     usersQuery.skip(params.skip);
     usersQuery.take(params.take);
 
@@ -269,9 +263,9 @@ export class UsersService {
 
   async getProfile(id: number): Promise<ResponseItem<ProfileDto>> {
     const user = await this.userRepository.findOne({
-      where: { id, deletedAt: null } as FindOptionsWhere<UserEntity>, // Ensure deletedAt is checked
+      where: { id, deletedAt: null } as FindOptionsWhere<UserEntity>,
     });
-    if (!user) throw new BadRequestException('Thông tin cá nhân không tồn tại'); // Added check
+    if (!user) throw new BadRequestException('Thông tin cá nhân không tồn tại');
 
     const result = plainToClass(
       ProfileDto,
@@ -281,54 +275,6 @@ export class UsersService {
 
     return new ResponseItem(result, 'Thành công');
   }
-
-  // async updateProfile(id: number, updateUserDto: UpdateUserDto): Promise<ResponseItem<UserDto>> {
-  //   const user = await this.userRepository.findOneBy({ id, deletedAt: null } as FindOptionsWhere<UserEntity>);
-  //   if (!user) {
-  //     throw new BadRequestException('Thông tin cá nhân không tồn tại');
-  //   }
-
-  //   if (
-  //     updateUserDto.identityId !== undefined &&
-  //     updateUserDto.identityId !== null &&
-  //     user.identityId !== updateUserDto.identityId
-  //   ) {
-  //     const identityIdExisted = await this.userRepository.findOneBy({
-  //       identityId: updateUserDto.identityId,
-  //       id: Not(id),
-  //       deletedAt: null,
-  //     } as FindOptionsWhere<UserEntity>);
-  //     if (identityIdExisted) {
-  //       throw new BadRequestException('CMND/CCCD đã tồn tại');
-  //     }
-  //   }
-
-  //   if (updateUserDto.phone !== undefined && updateUserDto.phone !== null && user.phone !== updateUserDto.phone) {
-  //     const phoneExisted = await this.userRepository.findOneBy({
-  //       phone: updateUserDto.phone,
-  //       id: Not(id),
-  //       deletedAt: null,
-  //     } as FindOptionsWhere<UserEntity>);
-  //     if (phoneExisted) {
-  //       throw new BadRequestException('Số điện thoại đã tồn tại');
-  //     }
-  //   }
-
-  //   if (updateUserDto.password) {
-  //     updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
-  //   }
-
-  //   const updatePartial = plainToClass(UpdateUserDto, updateUserDto, { excludeExtraneousValues: true });
-  //   await this.userRepository.update(id, {
-  //     ...updatePartial,
-  //     identityId: user.identityId,
-  //   });
-
-  //   const result = await this.userRepository.findOneBy({ id, deletedAt: null } as FindOptionsWhere<UserEntity>);
-  //   const resultDto = plainToClass(UserDto, result, { excludeExtraneousValues: true });
-
-  //   return new ResponseItem(resultDto, 'Cập nhật dữ liệu thành công');
-  // }
 
   async update(
     id: number,
@@ -433,5 +379,71 @@ export class UsersService {
     }
 
     return new ResponseItem(null, 'Xóa ảnh đại diện thành công');
+  }
+
+  async exportUsers(dto: ExportUsersDto): Promise<Buffer> {
+    const query = this.userRepository
+      .createQueryBuilder('user')
+      .where('user.deletedAt IS NULL')
+      .andWhere('user.role = :role', { role: UserRole.ADMIN });
+
+    if (dto.status) query.andWhere('user.status = :status', { status: dto.status });
+    if (dto.role?.length) query.andWhere('user.role IN (:...roles)', { roles: dto.role });
+    if (dto.job?.length) query.andWhere('user.job IN (:...jobs)', { jobs: dto.job });
+    if (dto.search) {
+      const search = `%${dto.search.toLowerCase()}%`;
+      query.andWhere(
+        `(LOWER(user.name) LIKE :search OR LOWER(user.email) LIKE :search OR LOWER(user.phone) LIKE :search)`,
+        { search }
+      );
+    }
+    if (dto.createdAtStart || dto.createdAtEnd) {
+      if (dto.createdAtStart && dto.createdAtEnd) {
+        query.andWhere('user.createdAt BETWEEN :start AND :end', {
+          start: new Date(dto.createdAtStart),
+          end: new Date(dto.createdAtEnd + 'T23:59:59'),
+        });
+      } else if (dto.createdAtStart) {
+        query.andWhere('user.createdAt >= :start', { start: new Date(dto.createdAtStart) });
+      } else {
+        query.andWhere('user.createdAt <= :end', { end: new Date(dto.createdAtEnd + 'T23:59:59') });
+      }
+    }
+
+    const rawData = await query.getMany();
+
+    const data = rawData.map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      status: user.status,
+      job: user.job,
+      role: user.role,
+      createdAt: user.createdAt,
+      address: user.address,
+      dateOfBirth: user.dateOfBirth,
+      identityId: user.identityId,
+    }));
+
+    const selectedFields = dto.fields?.length ? dto.fields : Object.keys(data[0] || {});
+
+    const filteredData = data.map((row) => {
+      const filtered = {};
+      for (const field of selectedFields) {
+        filtered[field] = row[field];
+      }
+      return filtered;
+    });
+
+    if (dto.format === 'xlsx') {
+      const ws = XLSX.utils.json_to_sheet(filteredData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Accounts');
+      return XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
+    } else {
+      const csv = parse(filteredData);
+      return Buffer.from(csv, 'utf-8');
+    }
   }
 }
