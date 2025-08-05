@@ -9,14 +9,12 @@ import {
   Min,
   ValidateIf,
   Validate,
-  IsOptional,
-  IsArray,
-  IsNumber,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { RequestTypeEnum } from '@Constant/enums';
 import { UniversityTypeEnum } from '@UniversitiesModule/dto/get-university.dto';
 import { IsCountryValidConstraint } from '@UniversitiesModule/validator';
+import { Type } from 'class-transformer';
 
 export class CreateContactDto {
   @ApiProperty({
@@ -116,6 +114,7 @@ export class CreateContactDto {
       o.numberOfStudents !== undefined &&
       o.numberOfStudents !== null
   )
+  @Type(() => Number)
   @IsInt({ message: 'Number of students must be an integer.' })
   @Min(0, { message: 'Number of students cannot be negative.' })
   numberOfStudents?: number;

@@ -15,6 +15,7 @@ import { UniversityService } from '@UniversitiesModule/university.service';
 import { ExportContactRequestDto } from './dto/export-contact.dto';
 import { parse as json2csv } from 'json2csv';
 import * as XLSX from 'xlsx';
+import { NotificationService } from './notification.service';
 
 @Injectable()
 export class ContactService {
@@ -27,7 +28,8 @@ export class ContactService {
     private readonly _contactSubmissionRepo: Repository<ContactSubmissionEntity>,
     @InjectRepository(UniEntity)
     private readonly _uniRepository: Repository<UniEntity>,
-    private readonly _universityService: UniversityService
+    private readonly _universityService: UniversityService,
+    private readonly _notificationService: NotificationService
   ) {
     const secure = this._configService.get<string>('MAIL_SECURE') === 'true';
 
@@ -345,11 +347,20 @@ export class ContactService {
           website: website,
           subjectsExcelFilePath: permanentExcelFilePath ? path.relative(process.cwd(), permanentExcelFilePath) : null,
           attachmentFilePaths: finalAttachmentPaths,
-          studentPopulation: numberOfStudents,
+          numberOfStudents: numberOfStudents,
           description: description,
         }),
       });
-      await this._contactSubmissionRepo.save(newSubmission);
+      const savedSubmission = await this._contactSubmissionRepo.save(newSubmission);
+
+      await this._notificationService.createNotification(
+        1,
+        savedSubmission.id,
+        'New Contact Form Submission',
+        `A new contact form has been submitted by ${savedSubmission.representativeName || 'Anonymous'} from ${
+          savedSubmission.universityName
+        }.`
+      );
 
       return { message: 'Contact form submitted successfully!' };
     } catch (error) {

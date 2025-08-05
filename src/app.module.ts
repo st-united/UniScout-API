@@ -10,6 +10,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { XMLMiddleware } from './common/middleware/xml.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { ContactModule } from '@ContactModule/contact.module';
+import { NotificationModule } from './modules/contact/notification.module';
 import { UsersModule } from '@UsersModule/users.module';
 import { DashboardModule } from '@DashboardModule/dashboard.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
@@ -50,6 +51,7 @@ import { SeedService } from './modules/seed/seed.service';
     AuthModule,
     ContactModule,
     DashboardModule,
+    NotificationModule,
     UniversitiesModule,
     UsersModule,
     ChatbotModule,

@@ -5,7 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { UniEntity, SubjectEntity, AcademicFieldEntity } from '@UniversitiesModule/entities';
 import { UserEntity } from '@UsersModule/entities';
 import { SearchLogEntity, TrackingEntity } from '@DashboardModule/entities';
-import { ContactSubmissionEntity } from '@ContactModule/entities';
+import { ContactSubmissionEntity, NotificationEntity } from '@ContactModule/entities';
 import { AuditLogEntity } from '@app/modules/audit/entities/audit-log.entity';
 
 @Module({
@@ -30,6 +30,7 @@ import { AuditLogEntity } from '@app/modules/audit/entities/audit-log.entity';
           SearchLogEntity,
           TrackingEntity,
           ContactSubmissionEntity,
+          NotificationEntity,
           AuditLogEntity,
         ],
       }),

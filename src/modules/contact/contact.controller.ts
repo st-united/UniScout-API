@@ -168,7 +168,7 @@ export class ContactController {
         universityEmail: body.universityEmail,
         universityNumber: body.universityNumber,
         website: body.website,
-        numberOfStudents: body.numberOfStudents ? parseInt(body.numberOfStudents, 10) : undefined,
+        numberOfStudents: body.numberOfStudents !== undefined ? parseInt(body.numberOfStudents, 10) : undefined,
         description: body.description,
       };
 
