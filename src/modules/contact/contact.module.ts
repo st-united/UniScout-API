@@ -8,6 +8,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ContactSubmissionEntity } from './entities';
 import { AcademicFieldEntity, SubjectEntity, UniEntity } from '@UniversitiesModule/entities';
 import { UniversitiesModule } from '@UniversitiesModule/university.module';
+import { NotificationModule } from './notification.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { UniversitiesModule } from '@UniversitiesModule/university.module';
     ConfigModule,
     TypeOrmModule.forFeature([ContactSubmissionEntity, UniEntity, SubjectEntity, AcademicFieldEntity]),
     forwardRef(() => UniversitiesModule),
+    NotificationModule,
   ],
   controllers: [ContactController, AdminContactController],
   providers: [ContactService],
