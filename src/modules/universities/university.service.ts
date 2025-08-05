@@ -924,4 +924,9 @@ export class UniversityService {
       this._handleServiceError(error, 'findByIds');
     }
   }
+
+  async createUniversity(createUniversityDto: CreateUniversityDto): Promise<UniEntity> {
+    const newUniversity = this._uniRepository.create(createUniversityDto);
+    return this._uniRepository.save(newUniversity);
+  }
 }
