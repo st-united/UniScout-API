@@ -18,6 +18,8 @@ import { parse as json2csv } from 'json2csv';
 import * as XLSX from 'xlsx';
 import { NotificationService } from './notification.service';
 import { plainToInstance } from 'class-transformer';
+import { UserEntity } from '@UsersModule/entities';
+import { StatusEnum, UserRole } from '@Constant/enums';
 
 @Injectable()
 export class ContactService {
@@ -28,6 +30,8 @@ export class ContactService {
     private readonly _configService: ConfigService,
     @InjectRepository(ContactSubmissionEntity)
     private readonly _contactSubmissionRepo: Repository<ContactSubmissionEntity>,
+    @InjectRepository(UserEntity)
+    private readonly _userRepository: Repository<UserEntity>,
     @InjectRepository(UniEntity)
     private readonly _uniRepository: Repository<UniEntity>,
     private readonly _universityService: UniversityService,
@@ -398,14 +402,21 @@ export class ContactService {
       });
       const savedSubmission = await this._contactSubmissionRepo.save(newSubmission);
 
-      await this._notificationService.createNotification(
-        1,
-        savedSubmission.id,
-        'New Contact Form Submission',
-        `A new contact form has been submitted by ${savedSubmission.representativeName || 'Anonymous'} from ${
-          savedSubmission.universityName
-        }.`
-      );
+      const admins = await this._userRepository.find({
+        where: { role: UserRole.ADMIN, status: StatusEnum.ACTIVE },
+        select: ['id'],
+      });
+
+      for (const admin of admins) {
+        await this._notificationService.createNotification(
+          admin.id,
+          savedSubmission.id,
+          'New Contact Form Submission',
+          `A new contact form has been submitted by ${savedSubmission.representativeName || 'Anonymous'} from ${
+            savedSubmission.universityName
+          }.`
+        );
+      }
 
       return { message: 'Contact form submitted successfully!' };
     } catch (error) {
