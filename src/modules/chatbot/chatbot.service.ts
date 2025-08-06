@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   GoogleGenerativeAI,
   ChatSession,
@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ExcelService } from './excel.service';
 import { CsvService } from './csv.service';
+import fetch from 'node-fetch';
 
 interface UniversityQuery {
   type:
@@ -74,6 +75,20 @@ export class ChatbotService {
     return vietnameseDiacritics.test(text);
   }
   async sendMessage(message: string, sessionId: string): Promise<ChatbotReply> {
+    if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+      this.logger.error(`Received invalid sessionId: "${sessionId}". Cannot process message.`);
+      throw new BadRequestException('Invalid session ID provided.');
+    }
+
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+      this.logger.error(`[Session ${sessionId}] Received invalid message: "${message}". Must be a non-empty string.`);
+
+      return {
+        reply: 'I received an empty message. Please type something to start our conversation!',
+        sessionId: sessionId,
+        action: 'error',
+      };
+    }
     let chatSession = this.chatSessions.get(sessionId);
 
     if (!chatSession) {
