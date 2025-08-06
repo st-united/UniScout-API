@@ -26,8 +26,8 @@ export class NotificationController {
   @ApiResponse({ status: 200, type: [NotificationEntity] })
   async getNotifications(
     @Req() req: any,
-    @Query('page', ParseIntPipe) page = 1,
-    @Query('pageSize', ParseIntPipe) pageSize = 10,
+    @Query('page', new ParseIntPipe({ optional: true })) page = 1,
+    @Query('pageSize', new ParseIntPipe({ optional: true })) pageSize = 10,
     @Query('isRead') isRead?: string
   ) {
     const adminId = req.user.id;
