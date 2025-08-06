@@ -60,7 +60,7 @@ export class ChatbotService {
     this.genAI = new GoogleGenerativeAI(apiKey);
 
     this.model = this.genAI.getGenerativeModel({
-      model: 'models/gemini-1.5-flash',
+      model: 'models/gemini-2.5-flash-lite',
       safetySettings: [
         { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
         { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
