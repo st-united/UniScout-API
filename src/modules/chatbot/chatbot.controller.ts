@@ -1,90 +1,79 @@
-import { Body, Controller, Post, Res, BadRequestException, ValidationPipe, UsePipes } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
-import { ChatbotService } from './chatbot.service';
-import { UniversityService } from '@UniversitiesModule/university.service';
-import { ChatRequestDto, ChatResponseData, ChatResponseDto, ChatMessageDto } from './dto/chat-request.dto';
-import { ChatMessage } from './dto/chatbot.dto';
+import { Controller, Post, Body, Get, Param, Res, HttpStatus, Logger } from '@nestjs/common';
+import { ChatbotService, ChatbotReply } from './chatbot.service';
+import { Response } from 'express';
+import * as path from 'path';
+import * as fs from 'fs';
+import { join } from 'path';
 
-@ApiTags('chatbot')
 @Controller('chatbot')
 export class ChatbotController {
-  constructor(
-    private readonly _chatbotService: ChatbotService,
-    private readonly _universityService: UniversityService
-  ) {}
+  private readonly logger = new Logger(ChatbotController.name);
 
-  @Post()
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  async chat(@Body() chatRequest: ChatRequestDto): Promise<ChatResponseDto> {
-    try {
-      const mappedConversationHistory: ChatMessage[] =
-        chatRequest.conversationHistory?.map((msg: ChatMessageDto) => ({
-          role: msg.role === 'model' ? 'assistant' : 'user',
-          parts: msg.parts,
-        })) || [];
+  constructor(private readonly chatbotService: ChatbotService) {}
 
-      const response: ChatResponseData = await this._chatbotService.chat(
-        chatRequest.message,
-        mappedConversationHistory
-      );
-
-      return {
-        success: true,
-        message: 'Chat response generated successfully',
-        data: response,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to generate chat response',
-        error: error.message,
-      };
-    }
+  @Post('message')
+  async sendMessage(@Body('message') message: string, @Body('userId') userId: string): Promise<ChatbotReply> {
+    return this.chatbotService.sendMessage(message, userId);
   }
 
-  @Post('countries')
-  async getValidCountries() {
-    try {
-      const countries = await this._universityService.getAllAvailableCountries();
-      return {
-        success: true,
-        message: 'Valid countries retrieved successfully',
-        data: countries,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to retrieve valid countries',
-        error: error.message,
-      };
-    }
-  }
+  @Get('download-pdf/:filename')
+  async downloadPdf(@Param('filename') filename: string, @Res() res: Response) {
+    const filePath = path.join(process.cwd(), 'downloads', filename);
+    this.logger.log(`Attempting to download PDF: ${filePath}`);
 
-  @Post('export-universities')
-  async exportUniversities(@Body() body: { universities: number[]; type: string }, @Res() res) {
-    if (!body.universities || body.universities.length === 0) {
-      throw new BadRequestException('At least one university ID is required for export.');
-    }
-    if (!body.type || (body.type !== 'excel' && body.type !== 'pdf')) {
-      throw new BadRequestException('Invalid export type. Must be "excel" or "pdf".');
-    }
-
-    if (body.type === 'excel') {
-      const fileBuffer = await this._chatbotService.exportUniversitiesAsExcel(body.universities);
-      res.set({
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="universities.xlsx"`,
-      });
-      res.send(Buffer.from(fileBuffer, 'base64'));
-    } else if (body.type === 'pdf') {
-      const fileBuffer = await this._chatbotService.exportUniversitiesAsPdf(body.universities);
-      res.set({
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="universities.pdf"`,
-      });
-      res.send(Buffer.from(fileBuffer, 'base64'));
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      fs.createReadStream(filePath).pipe(res);
     } else {
-      throw new BadRequestException('Invalid export type. Must be "excel" or "pdf".');
+      this.logger.warn(`PDF file not found: ${filePath}`);
+      res.status(HttpStatus.NOT_FOUND).send('File not found.');
     }
+  }
+
+  @Get('download-excel/:filename')
+  async downloadExcel(@Param('filename') filename: string, @Res() res: Response) {
+    const filePath = join(process.cwd(), 'temp_excels', filename);
+
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+      return res.sendFile(filePath);
+    } else {
+      res.status(404).send('File not found.');
+    }
+  }
+
+  @Get('download-csv/:filename')
+  async downloadCsv(@Param('filename') filename: string, @Res() res: Response) {
+    const tempCsvDir = join(process.cwd(), 'temp_exports');
+    const filePath = join(tempCsvDir, filename);
+
+    this.logger.log(`Attempting to serve CSV file from: ${filePath}`);
+
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+
+      fileStream.on('error', (err) => {
+        this.logger.error(`Error streaming CSV file ${filename}: ${err.message}`);
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).send('Error downloading file.');
+      });
+
+      fileStream.on('end', () => {
+        this.logger.log(`Successfully streamed CSV file: ${filename}`);
+      });
+    } else {
+      this.logger.warn(`CSV file not found at: ${filePath}`);
+      res.status(HttpStatus.NOT_FOUND).send('File not found.');
+    }
+  }
+
+  @Post('reset')
+  async resetChat(@Body('userId') userId: string) {
+    this.chatbotService.resetChatSession(userId);
+    return { message: 'Chat session reset successfully.' };
   }
 }

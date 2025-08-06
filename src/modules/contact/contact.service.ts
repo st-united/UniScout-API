@@ -12,10 +12,12 @@ import { RequestTypeEnum } from '@Constant/enums';
 import { UpdateContactSubmissionStatusDto } from './dto/update-contact.dto';
 import { UniEntity } from '@UniversitiesModule/entities';
 import { UniversityService } from '@UniversitiesModule/university.service';
+import { CreateUniversityDto } from '@UniversitiesModule/dto/create-university.dto';
 import { ExportContactRequestDto } from './dto/export-contact.dto';
 import { parse as json2csv } from 'json2csv';
 import * as XLSX from 'xlsx';
 import { NotificationService } from './notification.service';
+import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class ContactService {
@@ -47,6 +49,49 @@ export class ContactService {
         rejectUnauthorized: false,
       },
     });
+  }
+
+  private async _parseAcademicFields(
+    excelFilePath: string
+  ): Promise<{ academicFieldsCommaSeparated: string; subjectsList: string[] }> {
+    try {
+      const workbook = XLSX.readFile(excelFilePath);
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+      const headerRow = rows[0] as string[];
+      const academicFieldColIndex = headerRow.findIndex((h) => h.trim() === 'Academic Fields');
+      const subjectsColIndex = headerRow.findIndex((h) => h.trim() === 'Subjects');
+
+      if (academicFieldColIndex === -1 || subjectsColIndex === -1) {
+        this._logger.error('Academic Fields or Subjects column not found in the uploaded file.');
+        return { academicFieldsCommaSeparated: '', subjectsList: [] };
+      }
+
+      const academicFieldsSet = new Set<string>();
+      const subjectsList: string[] = [];
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i] as string[];
+        const academicField = row[academicFieldColIndex]?.trim();
+        const subject = row[subjectsColIndex]?.trim();
+
+        if (academicField) {
+          academicFieldsSet.add(academicField);
+        }
+
+        if (subject) {
+          subjectsList.push(subject);
+        }
+      }
+
+      const academicFieldsCommaSeparated = Array.from(academicFieldsSet).join(', ');
+      return { academicFieldsCommaSeparated, subjectsList };
+    } catch (error) {
+      this._logger.error(`Error parsing Excel file: ${error.message}`);
+      return { academicFieldsCommaSeparated: '', subjectsList: [] };
+    }
   }
 
   async handleSubmitContactForm(
@@ -540,6 +585,34 @@ export class ContactService {
       submission.rejectionReason = rejectionReason;
     } else {
       submission.rejectionReason = null;
+    }
+
+    if (submission.requestType === RequestTypeEnum.NEW_UNIVERSITY && newStatus === SubmissionStatusEnum.COMPLETED) {
+      this._logger.log(`Creating new university from contact request ID: ${id}`);
+
+      const createUniversityDto = plainToInstance(CreateUniversityDto, {
+        university: submission.universityName,
+        abbreviation: submission.abbreviation,
+        country: submission.country,
+        location: submission.location,
+        type: submission.type,
+        contact: submission.universityNumber,
+        email: submission.universityEmail,
+        website: submission.website,
+        studentPopulation: submission.numberOfStudents ?? 0,
+        description: submission.description,
+        subjectsExcelFilePath: submission.subjectsExcelFilePath
+          ? path.join(process.cwd(), submission.subjectsExcelFilePath)
+          : undefined,
+      });
+
+      try {
+        await this._universityService.create(createUniversityDto);
+        this._logger.log(`Successfully created new university from request ID: ${id}`);
+      } catch (error) {
+        this._logger.error(`Failed to create university from request ID: ${id}`, error.stack);
+        throw new HttpException('Failed to create new university record.', HttpStatus.INTERNAL_SERVER_ERROR);
+      }
     }
 
     submission.status = newStatus;

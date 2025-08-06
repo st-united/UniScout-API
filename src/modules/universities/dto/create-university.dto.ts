@@ -79,8 +79,8 @@ export class CreateUniversityDto {
   @Type(() => Number)
   studentPopulation: number;
 
-  @ApiProperty({ description: 'Year of establishment' })
-  @IsNotEmpty({ message: 'Year is required' })
+  @ApiPropertyOptional({ description: 'Year of establishment' })
+  @IsOptional()
   @IsInt({ message: 'Year must be an integer' })
   @Min(1000, { message: 'Year must be a valid year' })
   @Max(new Date().getFullYear(), { message: 'Year cannot be in the future' })

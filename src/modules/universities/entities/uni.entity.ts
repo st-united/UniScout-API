@@ -30,13 +30,13 @@ export class UniEntity extends AbstractEntity {
   @Column({ type: 'text' })
   abbreviation: string;
 
-  @Column({ type: 'double precision' })
+  @Column({ type: 'double precision', nullable: true })
   latitude: number;
 
-  @Column({ type: 'double precision' })
+  @Column({ type: 'double precision', nullable: true })
   longitude: number;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', nullable: true })
   logo: string;
 
   @Column({ type: 'int', nullable: true })
@@ -53,6 +53,10 @@ export class UniEntity extends AbstractEntity {
 
   @Column({ type: 'int' })
   studentPopulation: number;
+  totalFaculties: any;
+  totalStudents: any;
+  name: string;
+  students: string;
 
   get size(): 'small' | 'medium' | 'large' | 'extra large' {
     if (this.studentPopulation < 20000) {
@@ -66,7 +70,7 @@ export class UniEntity extends AbstractEntity {
     }
   }
 
-  @Column({ type: 'int' })
+  @Column({ type: 'int', nullable: true })
   year: number;
 
   @Column({ type: 'text', unique: true, nullable: true })
