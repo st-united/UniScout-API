@@ -53,6 +53,15 @@ export class NotificationController {
     }
   }
 
+  @Patch('read-all')
+  @ApiOperation({ summary: 'Mark all notifications as read for the current admin' })
+  @ApiResponse({ status: 200, description: 'All notifications marked as read' })
+  async markAllNotificationsAsRead(@Req() req: any) {
+    const adminId = req.user.id;
+    await this._notificationService.markAllAsRead(adminId);
+    return { message: 'All notifications have been marked as read.' };
+  }
+
   @Get('unread/count')
   @ApiOperation({ summary: 'Get the count of unread notifications for the current admin' })
   @ApiResponse({ status: 200, type: Number })
