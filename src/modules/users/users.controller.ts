@@ -97,67 +97,7 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.SUPER)
   @ApiOperation({ summary: 'Get a paginated and filterable list of users (SUPER only)' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
-  @ApiQuery({ name: 'take', required: false, type: Number, description: 'Items per page' })
-  @ApiQuery({
-    name: 'orderBy',
-    required: false,
-    type: String,
-    description: 'Field to order by (e.g., createdAt, name)',
-  })
-  @ApiQuery({
-    name: 'order',
-    required: false,
-    enum: ['ASC', 'DESC'],
-    description: 'Order direction (ASC or DESC)',
-    type: String,
-  })
-  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by name, email, or phone' })
-  @ApiQuery({
-    name: 'status',
-    required: false,
-    type: String,
-    enum: StatusEnum,
-    description: 'Filter by user status (e.g., ACTIVE, PENDING)',
-  })
-  @ApiQuery({
-    name: 'role',
-    required: false,
-    isArray: true,
-    schema: {
-      type: 'array',
-      items: {
-        type: 'string',
-        enum: Object.values(UserRole),
-      },
-    },
-    description: 'Filter by user role (can be multiple)',
-  })
-  @ApiQuery({
-    name: 'job',
-    required: false,
-    isArray: true,
-    schema: {
-      type: 'array',
-      items: {
-        type: 'string',
-        enum: Object.values(Job),
-      },
-    },
-    description: 'Filter by user job (can be multiple)',
-  })
-  @ApiQuery({
-    name: 'createdAtStart',
-    required: false,
-    type: String,
-    description: 'Filter by creation date from (YYYY-MM-DD)',
-  })
-  @ApiQuery({
-    name: 'createdAtEnd',
-    required: false,
-    type: String,
-    description: 'Filter by creation date to (YYYY-MM-DD)',
-  })
+  // The @ApiQuery decorators below are removed to avoid overriding the GetUsersDto schema
   @ApiResponse({ status: 200, description: 'Users retrieved successfully', type: UserListResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden (Insufficient role)' })

@@ -24,10 +24,19 @@ export class GetUsersDto extends PageOptionsDto {
   @ApiPropertyOptional({
     description: 'Filter by user status (e.g., ACTIVE, PENDING)',
     enum: StatusEnum,
+    isArray: true,
+    example: [StatusEnum.ACTIVE, StatusEnum.PENDING],
   })
   @IsOptional()
-  @IsEnum(StatusEnum)
-  status?: StatusEnum;
+  @IsArray()
+  @IsEnum(StatusEnum, { each: true })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.split(',');
+    }
+    return value;
+  })
+  status?: StatusEnum[];
 
   @ApiPropertyOptional({
     description: 'Filter by one or more user roles (e.g., USER, ADMIN)',

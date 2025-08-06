@@ -199,7 +199,11 @@ export class UsersService {
     }
 
     if (params.status) {
-      usersQuery.andWhere('users.status = :status', { status: params.status });
+      if (Array.isArray(params.status) && params.status.length > 0) {
+        usersQuery.andWhere('users.status IN (:...statuses)', { statuses: params.status });
+      } else if (typeof params.status === 'string') {
+        usersQuery.andWhere('users.status = :status', { status: params.status });
+      }
     } else {
       usersQuery.andWhere('users.status IN (:...defaultStatuses)', {
         defaultStatuses: [StatusEnum.ACTIVE, StatusEnum.INACTIVE, StatusEnum.PENDING, StatusEnum.BLOCKED],
