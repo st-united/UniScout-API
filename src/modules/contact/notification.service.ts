@@ -73,6 +73,18 @@ export class NotificationService {
     return notification;
   }
 
+  async markAllAsRead(adminId: number) {
+    const result = await this._notificationRepo
+      .createQueryBuilder()
+      .update(NotificationEntity)
+      .set({ isRead: true, readAt: new Date() })
+      .where('adminId = :adminId', { adminId })
+      .andWhere('isRead = :isRead', { isRead: false })
+      .execute();
+
+    this._logger.log(`Admin ${adminId} marked ${result.affected} notifications as read.`);
+  }
+
   async getUnreadNotificationCount(adminId: number): Promise<number> {
     return this._notificationRepo.count({
       where: {
