@@ -33,14 +33,26 @@ export class ChatbotController {
 
   @Get('download-excel/:filename')
   async downloadExcel(@Param('filename') filename: string, @Res() res: Response) {
-    const filePath = join(process.cwd(), 'temp_excels', filename);
+    const tempExcelDir = join(process.cwd(), 'temp_exports');
+    const filePath = join(tempExcelDir, filename);
 
     if (fs.existsSync(filePath)) {
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
-      return res.sendFile(filePath);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+
+      fileStream.on('error', (err) => {
+        this.logger.error(`Error streaming Excel file ${filename}: ${err.message}`);
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).send('Error downloading file.');
+      });
+
+      fileStream.on('end', () => {
+        this.logger.log(`Successfully streamed Excel file: ${filename}`);
+      });
     } else {
-      res.status(404).send('File not found.');
+      this.logger.warn(`Excel file not found at: ${filePath}`);
+      res.status(HttpStatus.NOT_FOUND).send('File not found.');
     }
   }
 
