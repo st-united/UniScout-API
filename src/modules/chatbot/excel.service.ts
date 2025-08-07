@@ -8,17 +8,20 @@ import { UniEntity } from '@UniversitiesModule/entities';
 export class ExcelService {
   private readonly logger = new Logger(ExcelService.name);
 
+  // Define the correct temporary directory here
+  private readonly tempExcelDir = path.join(process.cwd(), 'temp_exports');
+
   constructor() {
-    const tempExcelDir = path.join(process.cwd(), 'temp_excels');
-    if (!fs.existsSync(tempExcelDir)) {
-      fs.mkdirSync(tempExcelDir, { recursive: true });
-      this.logger.log(`Created directory: ${tempExcelDir}`);
+    if (!fs.existsSync(this.tempExcelDir)) {
+      fs.mkdirSync(this.tempExcelDir, { recursive: true });
+      this.logger.log(`Created directory: ${this.tempExcelDir}`);
     }
   }
 
   async generateTopUniversitiesExcel(universities: UniEntity[], country: string, limit: number): Promise<string> {
     const filename = `top_universities_${country.replace(/\s/g, '_')}_${limit}_${Date.now()}.xlsx`;
-    const outputPath = path.join(process.cwd(), 'temp_excels', filename);
+    // Use the correctly defined path for saving the file
+    const outputPath = path.join(this.tempExcelDir, filename);
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(`Top ${limit} Universities in ${country}`);
@@ -73,7 +76,7 @@ export class ExcelService {
    * @returns The absolute path to the file.
    */
   getExcelFilePath(filename: string): string {
-    const filePath = path.join(process.cwd(), 'temp_excels', filename);
+    const filePath = path.join(this.tempExcelDir, filename);
     this.logger.log(`Retrieving Excel file path: ${filePath}`);
     return filePath;
   }
