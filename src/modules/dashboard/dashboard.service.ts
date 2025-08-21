@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { groupBy } from 'lodash';
 
 import { UniEntity } from '@UniversitiesModule/entities/uni.entity';
 import { SearchLogService, TrackingService } from './services';
@@ -10,8 +9,13 @@ import { ContactSubmissionEntity, SubmissionStatusEnum } from '@ContactModule/en
 import { UserEntity } from '@UsersModule/entities';
 import { UserOverviewDto } from './dto/user-overview.dto';
 import { ResponseItem } from '@app/common/dtos';
-import { StatusEnum } from '@Constant/enums';
+import { StatusEnum, UserRole } from '@Constant/enums';
 import { plainToClass } from 'class-transformer';
+
+type StatusCountRow = { status: StatusEnum; count: string };
+type CountryCountRow = { country: string; count: string };
+
+const DASHBOARD_ALLOWED_ROLES = [UserRole.ADMIN, UserRole.USER] as const;
 
 @Injectable()
 export class DashboardService {
@@ -41,12 +45,14 @@ export class DashboardService {
   }
 
   async countByCountry() {
-    const unis = await this._uniRepo.find({ select: ['country'] });
-    const grouped = groupBy(unis, 'country');
-    return Object.keys(grouped).map((country) => ({
-      country,
-      count: grouped[country].length,
-    }));
+    const rows = await this._uniRepo
+      .createQueryBuilder('u')
+      .select('u.country', 'country')
+      .addSelect('COUNT(u.id)', 'count')
+      .groupBy('u.country')
+      .getRawMany<CountryCountRow>();
+
+    return rows.map((r) => ({ country: r.country, count: Number(r.count) || 0 }));
   }
 
   async topRankedPerCountry(limit: number) {
@@ -70,42 +76,42 @@ export class DashboardService {
   }
 
   async getUserOverview() {
-    const totalUsers = await this.userRepository.count({
-      where: { deletedAt: null },
-    });
-
     const statusCounts = await this.userRepository
       .createQueryBuilder('user')
       .select('user.status', 'status')
       .addSelect('COUNT(user.id)', 'count')
       .where('user.deletedAt IS NULL')
+      .andWhere('user.role IN (:...allowedRoles)', { allowedRoles: DASHBOARD_ALLOWED_ROLES })
       .groupBy('user.status')
-      .getRawMany();
+      .getRawMany<StatusCountRow>();
+
+    const totalUsers = statusCounts.reduce((sum, r) => sum + (Number(r.count) || 0), 0);
 
     const overview: UserOverviewDto = {
-      totalUsers: totalUsers,
+      totalUsers,
       pendingUsers: 0,
       activeUsers: 0,
       deactivatedUsers: 0,
       blockedUsers: 0,
     };
 
-    statusCounts.forEach((row) => {
-      switch (row.status) {
+    for (const { status, count } of statusCounts) {
+      const n = Number(count) || 0;
+      switch (status) {
         case StatusEnum.PENDING:
-          overview.pendingUsers = parseInt(row.count, 10);
+          overview.pendingUsers = n;
           break;
         case StatusEnum.ACTIVE:
-          overview.activeUsers = parseInt(row.count, 10);
+          overview.activeUsers = n;
           break;
         case StatusEnum.INACTIVE:
-          overview.deactivatedUsers = parseInt(row.count, 10);
+          overview.deactivatedUsers = n;
           break;
         case StatusEnum.BLOCKED:
-          overview.blockedUsers = parseInt(row.count, 10);
+          overview.blockedUsers = n;
           break;
       }
-    });
+    }
 
     const resultDto = plainToClass(UserOverviewDto, overview, { excludeExtraneousValues: true });
     return new ResponseItem(resultDto, 'User overview fetched successfully');

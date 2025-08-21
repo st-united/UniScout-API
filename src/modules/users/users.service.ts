@@ -188,7 +188,8 @@ export class UsersService {
     const usersQuery = this.userRepository
       .createQueryBuilder('users')
       .select(['users.id', 'users.name', 'users.email', 'users.role', 'users.job', 'users.status', 'users.createdAt'])
-      .andWhere('users.deletedAt IS NULL');
+      .andWhere('users.deletedAt IS NULL')
+      .andWhere('users.role IN (:...allowedRoles)', { allowedRoles: [UserRole.ADMIN, UserRole.USER] });
 
     if (params.search) {
       const searchTerm = `%${params.search.toLowerCase()}%`;
